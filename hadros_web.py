@@ -14,6 +14,7 @@ import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from hadros3.camera_preview import available_backends, launch_interactive_camera_preview, render_camera_preview
 from hadros3.config import deep_update, defaults, load_values, run_output_dir, safe_run_name, schema
@@ -105,6 +106,9 @@ def render_html(values: dict[str, dict[str, Any]], config_path: Path) -> str:
     .geometry-preview-large {{ border: 1px solid #d6dce5; border-radius: 6px; background: #101318; overflow: hidden; min-height: 640px; display: grid; place-items: stretch; }}
     .geometry-preview-large svg {{ width: 100%; height: 100%; min-height: 640px; display: block; background: #101318; }}
     .geometry-preview-empty {{ padding: 28px; color: #cbd5e1; text-align: center; }}
+    .context-figure {{ border: 1px solid #d6dce5; border-radius: 6px; background: #101318; min-height: 640px; display: grid; place-items: center; overflow: hidden; }}
+    .context-figure img {{ width: 100%; height: 100%; min-height: 640px; object-fit: contain; display: block; background: #101318; }}
+    .context-empty {{ padding: 28px; color: #cbd5e1; text-align: center; }}
     .ok {{ color: #1f6f46; font-weight: 650; }}
     .pending {{ color: #8a5a0a; font-weight: 650; }}
     .active-panel h2 {{ margin-top: 0; }}
@@ -168,6 +172,7 @@ let previewPhysicalTorus = true;
 let previewOpaqueStructures = false;
 let lastCameraMtime = 0;
 let previewPollTimer = null;
+let sourcePreviewVersion = Date.now();
 function inputFor(field, value) {{
   if (field.kind === "select") {{
     return `<select data-section="${{field.section}}" data-key="${{field.key}}">` +
@@ -197,8 +202,12 @@ function collect() {{
 }}
 async function post(path, body) {{
   const res = await fetch(path, {{method: "POST", headers: {{"Content-Type": "application/json"}}, body: JSON.stringify(body)}});
-  document.querySelector("#log").textContent = await res.text();
-  if (res.ok && (path === "/api/render" || path === "/api/render-camera-preview" || path === "/api/sample-uhe-source")) window.setTimeout(() => window.location.reload(), 500);
+  const text = await res.text();
+  document.querySelector("#log").textContent = text;
+  if (res.ok && (path === "/api/render" || path === "/api/render-camera-preview")) window.setTimeout(() => window.location.reload(), 500);
+  let data = null;
+  try {{ data = JSON.parse(text); }} catch (err) {{ data = null; }}
+  return {{ok: res.ok, text, data}};
 }}
 async function renderProducts() {{
   const button = document.querySelector("#render-button");
@@ -216,7 +225,25 @@ async function sampleUheSource() {{
   const button = document.querySelector("#uhe-source-button");
   button.disabled = true;
   try {{
-    await post("/api/sample-uhe-source", collect());
+    const values = collect();
+    const result = await post("/api/sample-uhe-source", values);
+    if (result.ok && result.data && result.data.source) {{
+      state.values = values;
+      state.values.uhe_neutrino_source.status = "sampled_position_with_proxy_direction_no_forward_kerr_geodesic";
+      state.source_summary = result.data.source;
+      state.outputs.uhe_source_samples_exists = true;
+      state.outputs.uhe_source_summary_exists = true;
+      state.outputs.uhe_source_summary_json_exists = true;
+      state.outputs.uhe_source_preview_exists = true;
+      state.outputs.provenance_exists = true;
+      state.outputs.config_exists = true;
+      activeTab = "UHE Source";
+      sourcePreviewVersion = Date.now();
+      const logText = result.text;
+      render();
+      const log = document.querySelector("#log");
+      if (log) log.textContent = logText;
+    }}
   }}
   finally {{ button.disabled = false; }}
 }}
@@ -422,7 +449,6 @@ function renderBackendTable() {{
 }}
 function renderSourcePanel() {{
   const summary = state.source_summary;
-  const image = state.outputs.uhe_source_preview_exists ? `<img src="/output/uhe_neutrino_source_preview.png" alt="UHE source sample preview">` : `<p class="note">No UHE source preview generated yet.</p>`;
   const sourceLinks = `<div class="output-link-grid">
     ${{state.outputs.uhe_source_samples_exists ? `<a href="/output/uhe_neutrino_source_samples.jsonl" target="_blank">Samples<br><code>uhe_neutrino_source_samples.jsonl</code></a>` : ""}}
     ${{state.outputs.uhe_source_summary_exists ? `<a href="/output/uhe_neutrino_source_summary.csv" target="_blank">Summary CSV<br><code>uhe_neutrino_source_summary.csv</code></a>` : ""}}
@@ -444,8 +470,19 @@ function renderSourcePanel() {{
   return `<div class="source-panel">
     <button type="button" id="uhe-source-button" class="source-action">Generate UHE Source Samples</button>
     ${{summaryHtml}}
-    ${{image}}
   </div>`;
+}}
+function renderContextPanel() {{
+  if (activeTab === "Camera") {{
+    return `<aside class="panel"><h2>Geometry Preview</h2><div class="geometry-preview-large"><svg id="geometrySvg" role="img" aria-label="Dynamic HADROS3 geometry preview"></svg></div></aside>`;
+  }}
+  if (activeTab === "UHE Source") {{
+    const figure = state.outputs.uhe_source_preview_exists
+      ? `<img src="/output/uhe_neutrino_source_preview.png?v=${{sourcePreviewVersion}}" alt="UHE source sample preview">`
+      : `<div class="context-empty">No UHE source preview generated yet.</div>`;
+    return `<aside class="panel"><h2>UHE Source Samples</h2><div class="context-figure">${{figure}}</div></aside>`;
+  }}
+  return "";
 }}
 function renderOutputsPanel() {{
   const out = state.outputs;
@@ -564,11 +601,10 @@ function render() {{
   activeTab = tabLabel(active);
   const runName = state.values.run.run_name || "HADROS3_run";
   const runStrip = `<div class="run-strip"><label><span>Run name</span><input id="runNameInput" type="text" value="${{runName}}"></label><span>Output</span><div class="output-folder">output/${{safeRunName(runName)}}</div></div>`;
-  const geometryPreview = `<div class="geometry-preview-large"><svg id="geometrySvg" role="img" aria-label="Dynamic HADROS3 geometry preview"></svg></div>`;
   const nav = `<nav>${{tabs.map(tab => `<button class="tab-button ${{tabLabel(tab) === activeTab ? "active" : ""}}" data-tab="${{tabLabel(tab)}}">${{tabLabel(tab)}}</button>`).join("")}}</nav>`;
   root.innerHTML = runStrip + nav + `<div class="panel"><p class="note">Geometry/configuration shell only. Expensive event stages are disabled.</p>${{renderFields(active)}}${{activeTab === "Camera" ? renderHadrosCameraPanel() + renderBackendTable() : ""}}${{activeTab === "UHE Source" ? renderSourcePanel() : ""}}${{activeTab === "Outputs" ? renderOutputsPanel() : ""}}` +
     `<pre id="log"></pre></div>` +
-    `<aside class="panel"><h2>Geometry Preview</h2>${{geometryPreview}}</aside>`;
+    renderContextPanel();
   bindHadrosCameraPanel();
   const uheButton = document.querySelector("#uhe-source-button");
   if (uheButton) uheButton.onclick = sampleUheSource;
@@ -649,9 +685,10 @@ class Handler(BaseHTTPRequestHandler):
         return {"values": deep_update(defaults(), raw), "previewOptions": {}}
 
     def _output_file(self, values: dict[str, dict[str, Any]]) -> Path | None:
-        if not self.path.startswith("/output/"):
+        request_path = urlparse(self.path).path
+        if not request_path.startswith("/output/"):
             return None
-        name = self.path.removeprefix("/output/")
+        name = request_path.removeprefix("/output/")
         if "/" in name or not name:
             return None
         output_dir = ROOT / run_output_dir(values)
@@ -661,9 +698,10 @@ class Handler(BaseHTTPRequestHandler):
         return path
 
     def _asset_file(self) -> Path | None:
-        if not self.path.startswith("/assets/"):
+        request_path = urlparse(self.path).path
+        if not request_path.startswith("/assets/"):
             return None
-        relative = self.path.removeprefix("/assets/")
+        relative = request_path.removeprefix("/assets/")
         if not relative or ".." in Path(relative).parts:
             return None
         path = ROOT / "assets" / relative

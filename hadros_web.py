@@ -1,0 +1,856 @@
+#!/usr/bin/env python3
+"""HADROS3 web/configuration shell.
+
+Use --serve for the H3-W0..H3-W4 web dashboard, or --render/--output-dir to
+render the geometry/configuration products and exit.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import mimetypes
+import sys
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import Any
+
+from hadros3.camera_preview import available_backends, launch_interactive_camera_preview, render_camera_preview
+from hadros3.config import deep_update, defaults, load_values, run_output_dir, safe_run_name, schema
+from hadros3.pipeline import render_hadros_web
+from hadros3.reuse import discover_original_hadros
+from hadros3.uhe_source import generate_uhe_source_products
+
+
+ROOT = Path(__file__).resolve().parent
+DEFAULT_CONFIG = ROOT / "presets" / "hadros_web" / "default_config.json"
+
+
+def write_values(path: Path, values: dict[str, dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(values, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def render_html(values: dict[str, dict[str, Any]], config_path: Path) -> str:
+    output_dir = ROOT / run_output_dir(values)
+    camera_summary_path = output_dir / "hadros3_camera_preview_summary.json"
+    interactive_summary_path = output_dir / "hadros3_camera_preview_interactive_summary.json"
+    source_summary_path = output_dir / "uhe_neutrino_source_summary.json"
+    camera_summary: dict[str, Any] | None = None
+    source_summary: dict[str, Any] | None = None
+    if camera_summary_path.exists():
+        try:
+            camera_summary = json.loads(camera_summary_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            camera_summary = {"status": "invalid_summary", "message": "Could not parse camera preview summary."}
+    if source_summary_path.exists():
+        try:
+            source_summary = json.loads(source_summary_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            source_summary = {"status": "invalid_summary", "message": "Could not parse UHE source summary."}
+    payload = json.dumps(
+        {
+            "schema": schema(),
+            "values": values,
+            "config": str(config_path),
+            "camera_backends": available_backends(),
+            "camera_summary": camera_summary,
+            "source_summary": source_summary,
+            "outputs": {
+                "output_dir": str(output_dir),
+                "preview_exists": (output_dir / "hadros3_geometry_preview.png").exists(),
+                "schematic_exists": (output_dir / "hadros3_system_schematic.png").exists(),
+                "camera_preview_exists": (output_dir / "hadros3_camera_preview.png").exists(),
+                "camera_preview_summary_exists": camera_summary_path.exists(),
+                "interactive_camera_summary_exists": interactive_summary_path.exists(),
+                "uhe_source_samples_exists": (output_dir / "uhe_neutrino_source_samples.jsonl").exists(),
+                "uhe_source_summary_exists": (output_dir / "uhe_neutrino_source_summary.csv").exists(),
+                "uhe_source_summary_json_exists": source_summary_path.exists(),
+                "uhe_source_preview_exists": (output_dir / "uhe_neutrino_source_preview.png").exists(),
+                "provenance_exists": (output_dir / "hadros3_pipeline_provenance.json").exists(),
+                "config_exists": (output_dir / "hadros3_config.json").exists(),
+            },
+        }
+    )
+    return f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>HADROS3 hadros-web</title>
+  <style>
+    body {{ font-family: system-ui, sans-serif; margin: 0; background: #eef2f6; color: #18202a; }}
+    header {{ padding: 18px 24px 16px; background: #000; color: white; display: grid; place-items: center; text-align: center; }}
+    .brand {{ display: grid; justify-items: center; gap: 8px; }}
+    .brand-logo {{ width: min(360px, 72vw); height: 110px; object-fit: contain; display: block; }}
+    header h1 {{ font-size: 18px; margin: 0; font-weight: 650; letter-spacing: 0; }}
+    header .meta {{ color: #cbd5e1; font-size: 13px; margin-top: 4px; }}
+    main {{ max-width: 1680px; margin: 0 auto; padding: 18px; display: grid; grid-template-columns: 240px minmax(420px, 560px) minmax(560px, 1fr); gap: 18px; align-items: start; }}
+    nav {{ background: white; border: 1px solid #d6dce5; border-radius: 6px; padding: 10px; position: sticky; top: 14px; }}
+    .tab-button {{ display: block; width: 100%; text-align: left; margin: 0 0 6px; border-color: #d6dce5; background: #f8fafc; color: #18202a; }}
+    .tab-button.active {{ background: #18202a; border-color: #18202a; color: white; }}
+    section {{ border-top: 1px solid #d6dce5; padding: 14px 0; }}
+    section h2 {{ font-size: 16px; margin: 0 0 10px; }}
+    label {{ display: grid; grid-template-columns: 210px 1fr; gap: 10px; align-items: center; margin: 7px 0; font-size: 14px; }}
+    input, select {{ padding: 7px 8px; border: 1px solid #9aa7b6; border-radius: 4px; background: white; min-width: 0; }}
+    button {{ margin-right: 8px; padding: 8px 12px; border: 1px solid #18202a; background: #18202a; color: white; border-radius: 4px; }}
+    button:disabled {{ opacity: 0.75; cursor: progress; }}
+    pre {{ white-space: pre-wrap; background: #101318; color: #f0f4f8; padding: 12px; min-height: 120px; border-radius: 6px; overflow: auto; }}
+    .panel {{ background: white; border: 1px solid #d6dce5; border-radius: 6px; padding: 16px; }}
+    .run-strip {{ grid-column: 1 / -1; background: white; border: 1px solid #d6dce5; border-radius: 6px; padding: 12px 16px; display: grid; grid-template-columns: 140px minmax(240px, 420px) 110px 1fr; gap: 10px; align-items: center; }}
+    .run-strip label {{ display: contents; }}
+    .run-strip input {{ width: 100%; box-sizing: border-box; }}
+    .output-folder {{ font-family: ui-monospace, monospace; font-size: 13px; color: #4d5b6b; overflow-wrap: anywhere; }}
+    .note {{ color: #4d5b6b; margin-top: 0; }}
+    .actions {{ position: sticky; bottom: 0; background: white; border-top: 1px solid #d6dce5; padding-top: 12px; }}
+    .geometry-preview-large {{ border: 1px solid #d6dce5; border-radius: 6px; background: #101318; overflow: hidden; min-height: 640px; display: grid; place-items: stretch; }}
+    .geometry-preview-large svg {{ width: 100%; height: 100%; min-height: 640px; display: block; background: #101318; }}
+    .geometry-preview-empty {{ padding: 28px; color: #cbd5e1; text-align: center; }}
+    .ok {{ color: #1f6f46; font-weight: 650; }}
+    .pending {{ color: #8a5a0a; font-weight: 650; }}
+    .active-panel h2 {{ margin-top: 0; }}
+    .backend-table {{ width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }}
+    .backend-table td, .backend-table th {{ border-top: 1px solid #d6dce5; padding: 6px; text-align: left; vertical-align: top; }}
+    .camera-preview-panel {{ border: 1px solid #c8d3df; border-radius: 6px; background: #f8fafc; padding: 12px; margin-top: 14px; }}
+    .source-action {{ background: #7c2d12; border-color: #7c2d12; font-weight: 700; }}
+    .source-panel {{ border: 1px solid #c8d3df; border-radius: 6px; background: #f8fafc; padding: 12px; margin-top: 14px; }}
+    .source-panel img, .output-link-grid img {{ width: 100%; border: 1px solid #d6dce5; border-radius: 5px; background: #101318; }}
+    .summary-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 10px 0; }}
+    .summary-item {{ border: 1px solid #d6dce5; border-radius: 5px; padding: 8px; background: white; }}
+    .summary-item strong {{ display: block; font-size: 12px; color: #627084; }}
+    .output-link-grid {{ display: grid; gap: 10px; }}
+    .output-link-grid a {{ display: block; border: 1px solid #d6dce5; border-radius: 5px; padding: 8px; background: #f8fafc; overflow-wrap: anywhere; }}
+    .camera-preview-top {{ display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }}
+    .camera-preview-button {{ font-weight: 700; background: #0f766e; border-color: #0f766e; }}
+    .camera-preview-button.blinking {{ animation: pulse 0.7s ease-in-out 4; }}
+    .camera-preview-row {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }}
+    .camera-preview-field label {{ display: block; margin: 0 0 5px; font-size: 13px; font-weight: 650; }}
+    .camera-preview-field select, .camera-preview-field input {{ width: 100%; box-sizing: border-box; }}
+    .toggle-row {{ display: flex; grid-template-columns: none; gap: 8px; align-items: flex-start; margin: 0; padding: 8px; border: 1px solid #d6dce5; border-radius: 5px; background: white; }}
+    .toggle-main {{ display: grid; gap: 3px; }}
+    .toggle-name {{ font-weight: 650; }}
+    .toggle-help {{ color: #627084; font-size: 12px; }}
+    .camera-controls-card {{ margin-top: 12px; border-top: 1px solid #d6dce5; padding-top: 12px; }}
+    .camera-controls-card h3 {{ margin: 0 0 8px; font-size: 14px; }}
+    .camera-controls-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }}
+    .camera-control-item {{ display: flex; gap: 8px; align-items: center; font-size: 12px; color: #4d5b6b; }}
+    kbd {{ min-width: 70px; text-align: center; border: 1px solid #b8c3d1; border-bottom-width: 2px; border-radius: 4px; padding: 2px 5px; background: white; color: #18202a; font-family: ui-monospace, monospace; }}
+    @keyframes pulse {{ 0% {{ transform: scale(1); }} 50% {{ transform: scale(1.04); box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.18); }} 100% {{ transform: scale(1); }} }}
+    @media (max-width: 1080px) {{ main {{ grid-template-columns: 1fr; }} nav {{ position: static; }} }}
+  </style>
+</head>
+<body>
+<header><div class="brand"><img class="brand-logo" src="/assets/logo/Hadros_logo.png" alt="HADROS logo"><h1>HADROS3 hadros-web</h1><div class="meta">Kerr + torus + polar cone configuration dashboard</div></div></header>
+<main id="app"></main>
+<script>
+const state = {payload};
+const finalPreviewResolutionsNormal = ["256x144", "512x288", "1024x576", "1920x1080"];
+const interactivePreviewResolutionsNormal = ["64x36", "96x54", "128x72", "256x144", "512x288", "1024x576", "1920x1080"];
+const previewSkyOptions = [
+  ["texture", "ESO Milky Way texture"],
+  ["interstellar_coordinate_grid", "Kip Thorne coordinate grid"],
+  ["procedural", "Procedural grid"],
+];
+const previewGeodesicModelOptions = [
+  ["kerr_like", "Kerr-like CUDA"],
+  ["full_kerr", "Full Kerr CUDA"],
+];
+const previewNavModeNormal = [
+  ["celestial_plus_torus_volume", "físico"],
+  ["paint_swatch_disk", "Paint-swatch thin disk"],
+];
+let previewResolution = state.values.observer_camera.resolution || "512x288";
+let previewInteractiveResolution = state.values.observer_camera.preview_resolution || "256x144";
+let previewSkyMode = "texture";
+let previewGeodesicModel = state.values.observer_camera.camera_preview_mode === "full_kerr" ? "full_kerr" : "kerr_like";
+let previewNavMode = "celestial_plus_torus_volume";
+let previewCelestialRadiusRs = "40";
+let previewPhysicalTorus = true;
+let previewOpaqueStructures = false;
+let lastCameraMtime = 0;
+let previewPollTimer = null;
+function inputFor(field, value) {{
+  if (field.kind === "select") {{
+    return `<select data-section="${{field.section}}" data-key="${{field.key}}">` +
+      field.options.map(o => `<option value="${{o}}" ${{String(value) === String(o) ? "selected" : ""}}>${{o}}</option>`).join("") +
+      `</select>`;
+  }}
+  if (field.kind === "checkbox") {{
+    return `<input type="checkbox" data-section="${{field.section}}" data-key="${{field.key}}" ${{value ? "checked" : ""}}>`;
+  }}
+  return `<input type="${{field.kind === "number" ? "number" : "text"}}" data-section="${{field.section}}" data-key="${{field.key}}" value="${{value}}">`;
+}}
+function coerce(field, raw, checked) {{
+  if (field.kind === "checkbox") return checked;
+  if (field.kind === "number") return Number(raw);
+  return raw;
+}}
+function collect() {{
+  const values = JSON.parse(JSON.stringify(state.values));
+  const fields = Object.fromEntries(state.schema.flatMap(tab => tab.fields).map(f => [`${{f.section}}.${{f.key}}`, f]));
+  const runName = document.querySelector("#runNameInput");
+  if (runName) values.run.run_name = runName.value;
+  document.querySelectorAll("[data-section]").forEach(el => {{
+    const section = el.dataset.section, key = el.dataset.key;
+    values[section][key] = coerce(fields[`${{section}}.${{key}}`], el.value, el.checked);
+  }});
+  return values;
+}}
+async function post(path, body) {{
+  const res = await fetch(path, {{method: "POST", headers: {{"Content-Type": "application/json"}}, body: JSON.stringify(body)}});
+  document.querySelector("#log").textContent = await res.text();
+  if (res.ok && (path === "/api/render" || path === "/api/render-camera-preview" || path === "/api/sample-uhe-source")) window.setTimeout(() => window.location.reload(), 500);
+}}
+async function renderProducts() {{
+  const button = document.querySelector("#render-button");
+  button.disabled = true;
+  try {{ await post("/api/render", collect()); }}
+  finally {{ button.disabled = false; }}
+}}
+async function renderCameraPreview() {{
+  const button = document.querySelector("#camera-preview-button");
+  button.disabled = true;
+  try {{ await post("/api/render-camera-preview", collect()); }}
+  finally {{ button.disabled = false; }}
+}}
+async function sampleUheSource() {{
+  const button = document.querySelector("#uhe-source-button");
+  button.disabled = true;
+  try {{
+    await post("/api/sample-uhe-source", collect());
+  }}
+  finally {{ button.disabled = false; }}
+}}
+async function launchInteractiveCameraPreview() {{
+  const button = document.querySelector("#interactive-camera-button");
+  button.disabled = true;
+  try {{ await post("/api/launch-interactive-camera-preview", collect()); }}
+  finally {{ button.disabled = false; }}
+}}
+function previewOptions() {{
+  return {{
+    previewResolution,
+    previewInteractiveResolution,
+    previewSkyMode,
+    previewGeodesicModel,
+    previewNavMode,
+    previewCelestialRadiusRs,
+    previewTorusMode: previewPhysicalTorus ? "physical" : "generic",
+    previewOpaqueStructures: previewOpaqueStructures ? "1" : "0",
+  }};
+}}
+async function postCameraPreview(path, valuesOverride = null) {{
+  const res = await fetch(path, {{
+    method: "POST",
+    headers: {{"Content-Type": "application/json"}},
+    body: JSON.stringify({{values: valuesOverride || collect(), previewOptions: previewOptions()}}),
+  }});
+  document.querySelector("#log").textContent = await res.text();
+}}
+async function getLastCamera() {{
+  const res = await fetch("/api/last-camera", {{cache: "no-store"}});
+  if (!res.ok) return {{exists: false, mtime: 0}};
+  return await res.json();
+}}
+function startPreviewCameraPolling(baselineMtime = lastCameraMtime) {{
+  lastCameraMtime = baselineMtime || 0;
+  if (previewPollTimer) clearInterval(previewPollTimer);
+  previewPollTimer = setInterval(async () => {{
+    try {{
+      const current = await getLastCamera();
+      if (current.exists && current.mtime && current.mtime > lastCameraMtime) {{
+        await loadSavedCameraPreview(false);
+      }}
+    }} catch (err) {{
+      // Keep polling unobtrusive while the native preview window is open.
+    }}
+  }}, 1200);
+  setTimeout(() => {{
+    if (previewPollTimer) {{
+      clearInterval(previewPollTimer);
+      previewPollTimer = null;
+    }}
+  }}, 10 * 60 * 1000);
+}}
+async function launchHadrosCameraPreview() {{
+  const button = document.querySelector("#cameraPreview");
+  if (button) {{
+    button.classList.remove("blinking");
+    void button.offsetWidth;
+    button.classList.add("blinking");
+    setTimeout(() => button.classList.remove("blinking"), 2800);
+  }}
+  try {{
+    const current = await getLastCamera();
+    lastCameraMtime = current.mtime || 0;
+  }} catch (err) {{
+    lastCameraMtime = 0;
+  }}
+  const previewRMaxRg = Number(previewCelestialRadiusRs || 40) * 2;
+  document.querySelector("#log").textContent =
+    "Launching geodesic camera preview at " + previewResolution + " final / " + previewInteractiveResolution +
+    " interactive with " + (previewGeodesicModel === "full_kerr" ? "Full Kerr CUDA" : "Kerr-like CUDA") +
+    ", " + previewNavMode + ", " + previewSkyMode + " sky, " +
+    (previewPhysicalTorus ? "physical preset torus/funnel" : "generic torus") + ", " +
+    (previewOpaqueStructures ? "opaque structures" : "translucent structures") +
+    ", and celestial sphere radius " + previewCelestialRadiusRs + " R_S.\\n\\n" +
+    "If no native window appears, run the command shown in the launch summary/log. PREVIEW_R_MAX_RG=" + previewRMaxRg;
+  await postCameraPreview("/api/launch-interactive-camera-preview");
+  startPreviewCameraPolling(lastCameraMtime);
+}}
+async function launchCpuCameraPreview() {{
+  try {{
+    const current = await getLastCamera();
+    lastCameraMtime = current.mtime || 0;
+  }} catch (err) {{
+    lastCameraMtime = 0;
+  }}
+  const values = collect();
+  values.observer_camera.camera_preview_mode = "analytic_geometry_only";
+  state.values = values;
+  previewGeodesicModel = "kerr_like";
+  document.querySelector("#log").textContent =
+    "Launching original HADROS CPU/OpenGL geodesic preview. This uses the same camera controls but forces PREVIEW_BACKEND=cpu.\\n" +
+    "Use R to rerender, arrows/mouse to orbit, +/- for distance, [] for FOV, S to save, Q to quit.";
+  await postCameraPreview("/api/launch-interactive-camera-preview", values);
+  startPreviewCameraPolling(lastCameraMtime);
+}}
+async function loadSavedCameraPreview(manual = true) {{
+  const camera = await getLastCamera();
+  if (manual) document.querySelector("#log").textContent = JSON.stringify(camera, null, 2);
+  if (!camera.exists || !camera.camera) return;
+  const values = collect();
+  values.black_hole.spin_a = Number(camera.camera.requested_spin ?? camera.camera.spin ?? values.black_hole.spin_a);
+  values.observer_camera.observer_distance_rg = Number(camera.camera.observer_distance_rg ?? values.observer_camera.observer_distance_rg);
+  values.observer_camera.inclination_deg = Number(camera.camera.inclination_deg ?? values.observer_camera.inclination_deg);
+  values.observer_camera.azimuth_deg = Number(camera.camera.azimuth_deg ?? values.observer_camera.azimuth_deg);
+  values.observer_camera.field_of_view_deg = Number(camera.camera.fov_deg ?? values.observer_camera.field_of_view_deg);
+  state.values = values;
+  lastCameraMtime = camera.mtime || lastCameraMtime;
+  render();
+  const log = document.querySelector("#log");
+  if (log) {{
+    log.textContent =
+      "Loaded saved interactive camera into the Camera fields.\\n" +
+      "observer_distance_rg=" + values.observer_camera.observer_distance_rg + "\\n" +
+      "inclination_deg=" + values.observer_camera.inclination_deg + "\\n" +
+      "azimuth_deg=" + values.observer_camera.azimuth_deg + "\\n" +
+      "FOV=" + values.observer_camera.field_of_view_deg + "\\n" +
+      "spin_a=" + values.black_hole.spin_a + "\\n" +
+      "source=" + camera.path;
+  }}
+}}
+function renderHadrosCameraPanel() {{
+  const options = (items, selected, recommended) => items.map(item => {{
+    const value = Array.isArray(item) ? item[0] : item;
+    const label = Array.isArray(item) ? item[1] : item;
+    const suffix = value === recommended ? " [Recommended]" : "";
+    return `<option value="${{value}}" ${{String(selected) === String(value) ? "selected" : ""}}>${{label}}${{suffix}}</option>`;
+  }}).join("");
+  const controls = [
+    ["Left / Right", "azimuth"],
+    ["Up / Down", "inclination"],
+    ["mouse drag", "azimuth + inclination"],
+    ["+ / -", "observer distance"],
+    ["[ / ]", "FOV"],
+    ["mouse wheel", "FOV"],
+    ["A / D", "spin"],
+    ["< / >", "integration step"],
+    ["R", "rerender"],
+    ["S", "save camera to fields"],
+    ["Q", "quit"],
+  ].map(([key, description]) => `<div class="camera-control-item"><kbd>${{key}}</kbd><span>${{description}}</span></div>`).join("");
+  return `<div class="camera-preview-panel">
+    <div class="camera-preview-top"><button type="button" id="cameraPreview" class="camera-preview-button">Camera Preview</button><button type="button" id="cpuCameraPreview">CPU/OpenGL Preview</button><button type="button" id="loadCameraPreview">Load Saved Preview</button></div>
+    <div class="camera-preview-row">
+      <div class="camera-preview-field"><label for="cameraPreviewResolution">Preview resolution</label><select id="cameraPreviewResolution">${{options(finalPreviewResolutionsNormal, previewResolution, "512x288")}}</select></div>
+      <div class="camera-preview-field"><label for="cameraPreviewInteractiveResolution">Interactive resolution</label><select id="cameraPreviewInteractiveResolution">${{options(interactivePreviewResolutionsNormal, previewInteractiveResolution, "256x144")}}</select></div>
+      <div class="camera-preview-field"><label for="cameraPreviewSky">Sky background</label><select id="cameraPreviewSky">${{options(previewSkyOptions, previewSkyMode, "texture")}}</select></div>
+      <div class="camera-preview-field"><label for="cameraPreviewGeodesicModel">Geodesic model</label><select id="cameraPreviewGeodesicModel">${{options(previewGeodesicModelOptions, previewGeodesicModel, "kerr_like")}}</select></div>
+      <div class="camera-preview-field"><label for="cameraPreviewNavMode">Preview mode</label><select id="cameraPreviewNavMode">${{options(previewNavModeNormal, previewNavMode, "celestial_plus_torus_volume")}}</select></div>
+      <div class="camera-preview-field"><label for="cameraPreviewCelestialRadius">Celestial sphere radius (R_S)</label><input id="cameraPreviewCelestialRadius" type="number" min="5" max="5000" step="1" value="${{previewCelestialRadiusRs}}"></div>
+      <label class="toggle-row"><input id="previewPhysicalTorus" type="checkbox" ${{previewPhysicalTorus ? "checked" : ""}}><span class="toggle-main"><span class="toggle-name">Physical preset torus/funnel</span><span class="toggle-help">Use current geometry instead of generic proxy.</span></span></label>
+      <label class="toggle-row"><input id="previewOpaqueStructures" type="checkbox" ${{previewOpaqueStructures ? "checked" : ""}}><span class="toggle-main"><span class="toggle-name">Solid opaque structures</span><span class="toggle-help">Display-only solid geometry mode.</span></span></label>
+    </div>
+    <div class="camera-controls-card"><h3>Camera Preview Controls</h3><div class="camera-controls-grid">${{controls}}</div></div>
+  </div>`;
+}}
+function bindHadrosCameraPanel() {{
+  const get = id => document.querySelector("#" + id);
+  if (!get("cameraPreview")) return;
+  get("cameraPreviewResolution").onchange = event => previewResolution = event.target.value;
+  get("cameraPreviewInteractiveResolution").onchange = event => previewInteractiveResolution = event.target.value;
+  get("cameraPreviewSky").onchange = event => previewSkyMode = event.target.value;
+  get("cameraPreviewGeodesicModel").onchange = event => {{
+    previewGeodesicModel = event.target.value;
+    const values = collect();
+    values.observer_camera.camera_preview_mode = previewGeodesicModel === "full_kerr" ? "full_kerr" : "kerr_like_cuda";
+    state.values = values;
+  }};
+  get("cameraPreviewNavMode").onchange = event => previewNavMode = event.target.value;
+  get("cameraPreviewCelestialRadius").oninput = event => previewCelestialRadiusRs = event.target.value || "40";
+  get("previewPhysicalTorus").oninput = event => previewPhysicalTorus = event.target.checked;
+  get("previewOpaqueStructures").oninput = event => previewOpaqueStructures = event.target.checked;
+  get("cameraPreview").onclick = launchHadrosCameraPreview;
+  get("cpuCameraPreview").onclick = launchCpuCameraPreview;
+  get("loadCameraPreview").onclick = loadSavedCameraPreview;
+}}
+let activeTab = "Camera";
+function safeRunName(name) {{
+  const cleaned = String(name || "").trim().replace(/[^A-Za-z0-9_.-]+/g, "_").replace(/^[._-]+|[._-]+$/g, "");
+  return cleaned || "HADROS3_run";
+}}
+function tabLabel(tab) {{
+  const aliases = {{"Analytic Torus": "Torus / Medium", "Polar Cone": "Funnel / Cone"}};
+  return aliases[tab.tab] || tab.tab;
+}}
+function orderedTabs() {{
+  const order = ["Camera", "Black Hole", "Torus / Medium", "Funnel / Cone", "UHE Source", "Interaction Sampler", "Observer Bridge", "Outputs", "Provenance"];
+  return [...state.schema].sort((a, b) => order.indexOf(tabLabel(a)) - order.indexOf(tabLabel(b)));
+}}
+function renderFields(tab) {{
+  return `<section class="active-panel"><h2>${{tabLabel(tab)}}</h2>` +
+    tab.fields.map(f => `<label><span>${{f.label}}${{f.visibility === "EXPERT" ? " (Expert)" : ""}}</span>${{inputFor(f, state.values[f.section][f.key])}}</label>`).join("") +
+    `</section>`;
+}}
+function renderBackendTable() {{
+  const rows = Object.entries(state.camera_backends).map(([mode, info]) =>
+    `<tr><td>${{mode}}</td><td class="${{info.available ? "ok" : "pending"}}">${{info.available ? "available" : "unavailable"}}</td><td>${{info.backend || ""}}</td></tr>`
+  ).join("");
+  const summary = state.camera_summary;
+  const summaryHtml = summary ? `<p class="note">Camera preview: <strong>${{summary.status}}</strong> / mode <code>${{summary.requested_mode}}</code><br>${{summary.message || ""}}</p>` : `<p class="note">No camera preview summary yet.</p>`;
+  return `${{summaryHtml}}<table class="backend-table"><thead><tr><th>Mode</th><th>Status</th><th>Backend</th></tr></thead><tbody>${{rows}}</tbody></table>`;
+}}
+function renderSourcePanel() {{
+  const summary = state.source_summary;
+  const image = state.outputs.uhe_source_preview_exists ? `<img src="/output/uhe_neutrino_source_preview.png" alt="UHE source sample preview">` : `<p class="note">No UHE source preview generated yet.</p>`;
+  const sourceLinks = `<div class="output-link-grid">
+    ${{state.outputs.uhe_source_samples_exists ? `<a href="/output/uhe_neutrino_source_samples.jsonl" target="_blank">Samples<br><code>uhe_neutrino_source_samples.jsonl</code></a>` : ""}}
+    ${{state.outputs.uhe_source_summary_exists ? `<a href="/output/uhe_neutrino_source_summary.csv" target="_blank">Summary CSV<br><code>uhe_neutrino_source_summary.csv</code></a>` : ""}}
+    ${{state.outputs.uhe_source_summary_json_exists ? `<a href="/output/uhe_neutrino_source_summary.json" target="_blank">Summary JSON<br><code>uhe_neutrino_source_summary.json</code></a>` : ""}}
+  </div>`;
+  const summaryHtml = summary ? `<div class="summary-grid">
+    <div class="summary-item"><strong>Status</strong>${{summary.status}}</div>
+    <div class="summary-item"><strong>Samples</strong>${{summary.n_samples}}</div>
+    <div class="summary-item"><strong>Energy</strong>${{summary.energy_gev}} GeV</div>
+    <div class="summary-item"><strong>Seed</strong>${{summary.random_seed}}</div>
+    <div class="summary-item"><strong>Model</strong>${{summary.source_model}}</div>
+    <div class="summary-item"><strong>Volume</strong>${{summary.source_volume_model}}</div>
+    <div class="summary-item"><strong>source_sampling_pdf</strong>${{Number(summary.source_sampling_pdf).toExponential(4)}}</div>
+    <div class="summary-item"><strong>source_physical_pdf</strong>${{Number(summary.source_physical_pdf).toExponential(4)}}</div>
+    <div class="summary-item"><strong>source_weight</strong>${{summary.source_weight_mean}}</div>
+    <div class="summary-item"><strong>Momentum</strong>${{summary.momentum_generator}}</div>
+    <div class="summary-item"><strong>Kerr physical?</strong>${{summary.momentum_is_physical_kerr}}</div>
+  </div><p class="note"><strong>Sampler status:</strong> ${{summary.source_status}}</p>${{sourceLinks}}` : `<p class="note">Sampler inactive. Configure this tab and generate source samples through hadros-web.</p>`;
+  return `<div class="source-panel">
+    <button type="button" id="uhe-source-button" class="source-action">Generate UHE Source Samples</button>
+    ${{summaryHtml}}
+    ${{image}}
+  </div>`;
+}}
+function renderOutputsPanel() {{
+  const out = state.outputs;
+  const link = (exists, name, label) => exists ? `<a href="/output/${{name}}" target="_blank">${{label}}<br><code>${{name}}</code></a>` : `<div class="summary-item"><strong>${{label}}</strong>pending</div>`;
+  return `<div class="output-link-grid">
+    ${{link(out.config_exists, "hadros3_config.json", "Config")}}
+    ${{link(out.preview_exists, "hadros3_geometry_preview.png", "Geometry preview")}}
+    ${{link(out.schematic_exists, "hadros3_system_schematic.png", "System schematic")}}
+    ${{link(out.camera_preview_exists, "hadros3_camera_preview.png", "Camera preview")}}
+    ${{link(out.uhe_source_samples_exists, "uhe_neutrino_source_samples.jsonl", "UHE source samples")}}
+    ${{link(out.uhe_source_summary_exists, "uhe_neutrino_source_summary.csv", "UHE source summary")}}
+    ${{link(out.uhe_source_summary_json_exists, "uhe_neutrino_source_summary.json", "UHE source summary JSON")}}
+    ${{link(out.uhe_source_preview_exists, "uhe_neutrino_source_preview.png", "UHE source preview")}}
+    ${{out.uhe_source_preview_exists ? `<img src="/output/uhe_neutrino_source_preview.png" alt="UHE source preview">` : ""}}
+    ${{link(out.provenance_exists, "hadros3_pipeline_provenance.json", "Provenance")}}
+  </div>`;
+}}
+function fnum(values, section, key, fallback) {{
+  const value = Number(values?.[section]?.[key]);
+  return Number.isFinite(value) ? value : fallback;
+}}
+function fmt(value, digits = 2) {{
+  if (!Number.isFinite(value)) return "-";
+  return value.toFixed(digits).replace(/\\.?0+$/, "");
+}}
+function drawGeometrySvg() {{
+  const svg = document.querySelector("#geometrySvg");
+  if (!svg) return;
+  const values = collect();
+  const spin = Math.max(-0.999, Math.min(0.999, fnum(values, "black_hole", "spin_a", 0.8)));
+  const rH = 1 + Math.sqrt(Math.max(0, 1 - spin * spin));
+  const torusIn = fnum(values, "analytic_torus", "r_inner_rg", 6) / rH;
+  const torusOut = fnum(values, "analytic_torus", "r_outer_rg", 18) / rH;
+  const torusPeak = fnum(values, "analytic_torus", "r_peak_rg", 10) / rH;
+  const coneDeg = fnum(values, "polar_cone", "opening_angle_deg", 22);
+  const cone = coneDeg * Math.PI / 180;
+  const coneMin = fnum(values, "polar_cone", "r_min_rg", 2.2) / rH;
+  const coneMax = fnum(values, "polar_cone", "r_max_rg", 40) / rH;
+  const srcMin = fnum(values, "uhe_neutrino_source", "r_min_rg", 3) / rH;
+  const srcMax = fnum(values, "uhe_neutrino_source", "r_max_rg", 12) / rH;
+  const obsR = fnum(values, "observer_camera", "observer_distance_rg", 60) / rH;
+  const inc = fnum(values, "observer_camera", "inclination_deg", 80) * Math.PI / 180;
+  const fov = fnum(values, "observer_camera", "field_of_view_deg", 25) * Math.PI / 180;
+  const lim = Math.max(torusOut * 1.35, coneMax * 1.1, obsR * 0.22, 16);
+  const vb = [-lim, -lim, 2 * lim, 2 * lim].join(" ");
+  svg.setAttribute("viewBox", vb);
+  const y = value => -value;
+  const p = (x, z) => `${{x}},${{y(z)}}`;
+  const circle = (r, extra) => `<circle cx="0" cy="0" r="${{r}}" ${{extra}}/>`;
+  const wedgePath = (r1, r2, a1, a2) => {{
+    const x1 = r2 * Math.sin(a1), z1 = r2 * Math.cos(a1);
+    const x2 = r2 * Math.sin(a2), z2 = r2 * Math.cos(a2);
+    const x3 = r1 * Math.sin(a2), z3 = r1 * Math.cos(a2);
+    const x4 = r1 * Math.sin(a1), z4 = r1 * Math.cos(a1);
+    const large = Math.abs(a2 - a1) > Math.PI ? 1 : 0;
+    return `M ${{p(x1,z1)}} A ${{r2}} ${{r2}} 0 ${{large}} 0 ${{p(x2,z2)}} L ${{p(x3,z3)}} A ${{r1}} ${{r1}} 0 ${{large}} 1 ${{p(x4,z4)}} Z`;
+  }};
+  const conePoly = sign => {{
+    const pts = [
+      [sign * coneMin * Math.sin(cone), sign * coneMin * Math.cos(cone)],
+      [sign * coneMax * Math.sin(cone), sign * coneMax * Math.cos(cone)],
+      [-sign * coneMax * Math.sin(cone), sign * coneMax * Math.cos(cone)],
+      [-sign * coneMin * Math.sin(cone), sign * coneMin * Math.cos(cone)],
+    ].map(([x,z]) => p(x,z)).join(" ");
+    return `<polygon points="${{pts}}" fill="#f0c84b" fill-opacity="0.18" stroke="#ffec99" stroke-width="${{0.08 * lim / 25}}"/>`;
+  }};
+  const obsScale = Math.min(lim * 0.92, obsR);
+  const ox = obsScale * Math.sin(inc), oz = obsScale * Math.cos(inc);
+  const len = Math.hypot(ox, oz) || 1;
+  const dx = -ox / len, dz = -oz / len;
+  const nx = -dz, nz = dx;
+  const flen = Math.min(lim * 0.48, len * 0.88);
+  const cx = ox + dx * flen, cz = oz + dz * flen;
+  const hw = Math.tan(0.5 * fov) * flen;
+  const lx = cx + nx * hw, lz = cz + nz * hw;
+  const rx = cx - nx * hw, rz = cz - nz * hw;
+  const gridStep = Math.max(5, Math.round(lim / 5));
+  let grid = "";
+  for (let g = -Math.ceil(lim / gridStep) * gridStep; g <= lim; g += gridStep) {{
+    grid += `<line x1="${{g}}" y1="${{-lim}}" x2="${{g}}" y2="${{lim}}" stroke="#354052" stroke-width="0.035" stroke-dasharray="0.25 0.25"/>`;
+    grid += `<line x1="${{-lim}}" y1="${{g}}" x2="${{lim}}" y2="${{g}}" stroke="#354052" stroke-width="0.035" stroke-dasharray="0.25 0.25"/>`;
+  }}
+  const bipolar = values.polar_cone.draw_mode === "bipolar_funnel";
+  svg.innerHTML = `
+    <rect x="${{-lim}}" y="${{-lim}}" width="${{2*lim}}" height="${{2*lim}}" fill="#101318"/>
+    ${{grid}}
+    ${{values.analytic_torus.show_in_preview ? circle(torusOut, 'fill="#2372a3" fill-opacity="0.34" stroke="#95d9ff" stroke-width="0.08"') + circle(torusIn, 'fill="#101318" stroke="#95d9ff" stroke-opacity="0.65" stroke-width="0.05"') + circle(torusPeak, 'fill="none" stroke="#d7f1ff" stroke-width="0.05" stroke-dasharray="0.35 0.25"') : ""}}
+    ${{values.polar_cone.enabled ? conePoly(1) + (bipolar ? conePoly(-1) : "") : ""}}
+    <path d="${{wedgePath(srcMin, srcMax, -cone, cone)}}" fill="#ff6f59" fill-opacity="0.72" stroke="#ffd1c9" stroke-width="0.06"/>
+    ${{circle(1, 'fill="black" stroke="#f4f4f4" stroke-width="0.08"')}}
+    ${{circle(2/rH, 'fill="none" stroke="#bbbbbb" stroke-opacity="0.65" stroke-width="0.04" stroke-dasharray="0.2 0.15"')}}
+    <line x1="${{ox}}" y1="${{y(oz)}}" x2="${{lx}}" y2="${{y(lz)}}" stroke="#d6ff6b" stroke-width="0.06" stroke-dasharray="0.18 0.16"/>
+    <line x1="${{ox}}" y1="${{y(oz)}}" x2="${{rx}}" y2="${{y(rz)}}" stroke="#d6ff6b" stroke-width="0.06" stroke-dasharray="0.18 0.16"/>
+    <line x1="${{ox}}" y1="${{y(oz)}}" x2="0" y2="0" stroke="#d6ff6b" stroke-opacity="0.45" stroke-width="0.04" stroke-dasharray="0.25 0.2"/>
+    <circle cx="${{ox}}" cy="${{y(oz)}}" r="${{0.32 * lim / 25}}" fill="#d6ff6b" stroke="#0c0f14" stroke-width="0.07"/>
+    <text x="0" y="0.33" fill="white" font-size="${{0.8 * lim / 25}}" text-anchor="middle">BH</text>
+    <text x="${{-0.96*lim}}" y="${{-0.84*lim}}" fill="#bfeaff" font-size="${{0.8 * lim / 25}}">torus: Rin=${{fmt(torusIn)}} rH, Rpeak=${{fmt(torusPeak)}} rH, Rout=${{fmt(torusOut)}} rH</text>
+    <text x="${{0.15*lim}}" y="${{-0.30*lim}}" fill="#ffd5cd" font-size="${{0.68 * lim / 25}}">source ${{fmt(srcMin)}}-${{fmt(srcMax)}} rH</text>
+    <text x="${{-0.05*lim}}" y="${{-0.15*lim}}" fill="#ffe680" font-size="${{0.68 * lim / 25}}">cone ${{fmt(coneDeg,1)}} deg</text>
+    <text x="${{ox + 0.45}}" y="${{y(oz)}}" fill="#d6ff6b" font-size="${{0.75 * lim / 25}}">observer</text>
+    <text x="${{ox + dx*flen*0.36}}" y="${{y(oz + dz*flen*0.36)}}" fill="#d6ff6b" font-size="${{0.68 * lim / 25}}">FOV ${{fmt(fov*180/Math.PI,1)}} deg</text>
+    <text x="${{0.97*lim}}" y="${{0.77*lim}}" fill="#e7ebf2" font-size="${{0.75 * lim / 25}}" text-anchor="end">
+      <tspan x="${{0.97*lim}}" dy="0">a=${{fmt(spin)}}; rH=${{fmt(rH,3)}} rg</tspan>
+      <tspan x="${{0.97*lim}}" dy="${{0.9 * lim / 25}}">camera r=${{fmt(obsR*rH)}} rg = ${{fmt(obsR)}} rH</tspan>
+      <tspan x="${{0.97*lim}}" dy="${{0.9 * lim / 25}}">inclination=${{fmt(inc*180/Math.PI,1)}} deg</tspan>
+    </text>
+    <line x1="${{-0.96*lim}}" y1="${{0.88*lim}}" x2="${{-0.96*lim + gridStep}}" y2="${{0.88*lim}}" stroke="#e7ebf2" stroke-width="0.12"/>
+    <text x="${{-0.96*lim + gridStep/2}}" y="${{0.84*lim}}" fill="#e7ebf2" font-size="${{0.68 * lim / 25}}" text-anchor="middle">${{gridStep}} rH</text>
+  `;
+}}
+function render() {{
+  const root = document.querySelector("#app");
+  const status = state.outputs;
+  const tabs = orderedTabs();
+  const active = tabs.find(t => tabLabel(t) === activeTab) || tabs[0];
+  activeTab = tabLabel(active);
+  const runName = state.values.run.run_name || "HADROS3_run";
+  const runStrip = `<div class="run-strip"><label><span>Run name</span><input id="runNameInput" type="text" value="${{runName}}"></label><span>Output</span><div class="output-folder">output/${{safeRunName(runName)}}</div></div>`;
+  const geometryPreview = `<div class="geometry-preview-large"><svg id="geometrySvg" role="img" aria-label="Dynamic HADROS3 geometry preview"></svg></div>`;
+  const nav = `<nav>${{tabs.map(tab => `<button class="tab-button ${{tabLabel(tab) === activeTab ? "active" : ""}}" data-tab="${{tabLabel(tab)}}">${{tabLabel(tab)}}</button>`).join("")}}</nav>`;
+  root.innerHTML = runStrip + nav + `<div class="panel"><p class="note">Geometry/configuration shell only. Expensive event stages are disabled.</p>${{renderFields(active)}}${{activeTab === "Camera" ? renderHadrosCameraPanel() + renderBackendTable() : ""}}${{activeTab === "UHE Source" ? renderSourcePanel() : ""}}${{activeTab === "Outputs" ? renderOutputsPanel() : ""}}` +
+    `<pre id="log"></pre></div>` +
+    `<aside class="panel"><h2>Geometry Preview</h2>${{geometryPreview}}</aside>`;
+  bindHadrosCameraPanel();
+  const uheButton = document.querySelector("#uhe-source-button");
+  if (uheButton) uheButton.onclick = sampleUheSource;
+  drawGeometrySvg();
+  document.querySelector("#runNameInput").addEventListener("input", event => {{
+    state.values = collect();
+    document.querySelector(".output-folder").textContent = "output/" + safeRunName(event.target.value);
+  }});
+  document.querySelectorAll("[data-section]").forEach(el => el.addEventListener("input", drawGeometrySvg));
+  document.querySelectorAll("[data-section]").forEach(el => el.addEventListener("change", drawGeometrySvg));
+  document.querySelectorAll(".tab-button").forEach(btn => btn.addEventListener("click", () => {{
+    state.values = collect();
+    activeTab = btn.dataset.tab;
+    render();
+  }}));
+}}
+render();
+</script>
+</main>
+</body>
+</html>
+"""
+
+
+def state_payload(values: dict[str, dict[str, Any]], config_path: Path | None = None) -> dict[str, Any]:
+    output_dir = ROOT / run_output_dir(values)
+    source_summary_path = output_dir / "uhe_neutrino_source_summary.json"
+    source_summary: dict[str, Any] | None = None
+    if source_summary_path.exists():
+        try:
+            source_summary = json.loads(source_summary_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            source_summary = {"status": "invalid_summary", "message": "Could not parse UHE source summary."}
+    return {
+        "schema": schema(),
+        "values": values,
+        "config": str(config_path) if config_path is not None else None,
+        "camera_backends": available_backends(),
+        "source_summary": source_summary,
+        "outputs": {
+            "output_dir": str(output_dir),
+            "uhe_source_samples_exists": (output_dir / "uhe_neutrino_source_samples.jsonl").exists(),
+            "uhe_source_summary_exists": (output_dir / "uhe_neutrino_source_summary.csv").exists(),
+            "uhe_source_summary_json_exists": source_summary_path.exists(),
+            "uhe_source_preview_exists": (output_dir / "uhe_neutrino_source_preview.png").exists(),
+            "provenance_exists": (output_dir / "hadros3_pipeline_provenance.json").exists(),
+            "config_exists": (output_dir / "hadros3_config.json").exists(),
+        },
+    }
+
+
+class Handler(BaseHTTPRequestHandler):
+    config_path = DEFAULT_CONFIG
+
+    def _send(self, code: int, text: str, content_type: str = "text/plain") -> None:
+        payload = text.encode("utf-8")
+        self._send_bytes(code, payload, content_type)
+
+    def _send_bytes(self, code: int, payload: bytes, content_type: str = "application/octet-stream") -> None:
+        self.send_response(code)
+        self.send_header("Content-Type", content_type if "charset" in content_type else f"{content_type}; charset=utf-8")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def _read_values(self) -> dict[str, dict[str, Any]]:
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        return deep_update(defaults(), json.loads(self.rfile.read(length) or b"{}"))
+
+    def _read_payload(self) -> dict[str, Any]:
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        raw = json.loads(self.rfile.read(length) or b"{}")
+        if "values" in raw:
+            return {
+                "values": deep_update(defaults(), raw.get("values", {})),
+                "previewOptions": raw.get("previewOptions", {}),
+            }
+        return {"values": deep_update(defaults(), raw), "previewOptions": {}}
+
+    def _output_file(self, values: dict[str, dict[str, Any]]) -> Path | None:
+        if not self.path.startswith("/output/"):
+            return None
+        name = self.path.removeprefix("/output/")
+        if "/" in name or not name:
+            return None
+        output_dir = ROOT / run_output_dir(values)
+        path = output_dir / name
+        if not path.exists() or not path.is_file():
+            return None
+        return path
+
+    def _asset_file(self) -> Path | None:
+        if not self.path.startswith("/assets/"):
+            return None
+        relative = self.path.removeprefix("/assets/")
+        if not relative or ".." in Path(relative).parts:
+            return None
+        path = ROOT / "assets" / relative
+        if not path.exists() or not path.is_file():
+            return None
+        return path
+
+    def do_HEAD(self) -> None:  # noqa: N802
+        values = load_values(self.config_path)
+        if self.path == "/":
+            payload = render_html(values, self.config_path).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            return
+        if self.path == "/api/state":
+            payload = json.dumps(
+                state_payload(values, self.config_path),
+                indent=2,
+            ).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            return
+        asset = self._asset_file()
+        if asset is not None:
+            content_type = mimetypes.guess_type(asset.name)[0] or "application/octet-stream"
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(asset.stat().st_size))
+            self.end_headers()
+            return
+        path = self._output_file(values)
+        if path is not None:
+            content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(path.stat().st_size))
+            self.end_headers()
+            return
+        self.send_response(404)
+        self.end_headers()
+
+    def do_GET(self) -> None:  # noqa: N802
+        values = load_values(self.config_path)
+        if self.path == "/":
+            self._send(200, render_html(values, self.config_path), "text/html")
+            return
+        if self.path == "/api/state":
+            self._send(
+                200,
+                json.dumps(state_payload(values, self.config_path), indent=2),
+                "application/json",
+            )
+            return
+        if self.path == "/api/last-camera":
+            info = discover_original_hadros()
+            raw = info.get("components", {}).get("last_camera_config")
+            path = Path(raw) if raw else None
+            if path is None or not path.exists():
+                self._send(200, json.dumps({"exists": False, "path": str(path) if path else None}, indent=2), "application/json")
+                return
+            camera = json.loads(path.read_text(encoding="utf-8"))
+            self._send(
+                200,
+                json.dumps({"exists": True, "path": str(path), "mtime": path.stat().st_mtime, "camera": camera}, indent=2),
+                "application/json",
+            )
+            return
+        if self.path == "/outputs":
+            output_dir = ROOT / run_output_dir(values)
+            index = output_dir / "index.html"
+            self._send(200, index.read_text(encoding="utf-8") if index.exists() else "No outputs rendered yet.", "text/html")
+            return
+        asset = self._asset_file()
+        if asset is not None:
+            content_type = mimetypes.guess_type(asset.name)[0] or "application/octet-stream"
+            self._send_bytes(200, asset.read_bytes(), content_type)
+            return
+        path = self._output_file(values)
+        if path is not None:
+            content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+            self._send_bytes(200, path.read_bytes(), content_type)
+            return
+        self._send(404, "not found")
+
+    def do_POST(self) -> None:  # noqa: N802
+        payload = self._read_payload()
+        values = payload["values"]
+        preview_options = payload["previewOptions"]
+        write_values(self.config_path, values)
+        if self.path == "/api/save":
+            self._send(200, f"wrote {self.config_path}\n")
+            return
+        if self.path == "/api/render":
+            summary = render_hadros_web(values, root=ROOT)
+            self._send(200, json.dumps(summary, indent=2, sort_keys=True) + "\n", "application/json")
+            return
+        if self.path == "/api/render-camera-preview":
+            output_dir = ROOT / run_output_dir(values)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            write_values(self.config_path, values)
+            summary = render_camera_preview(values, root=ROOT, output_dir=output_dir)
+            self._send(200, json.dumps(summary, indent=2, sort_keys=True) + "\n", "application/json")
+            return
+        if self.path == "/api/sample-uhe-source":
+            output_dir = ROOT / run_output_dir(values)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            values["uhe_neutrino_source"]["status"] = "sampled_position_with_proxy_direction_no_forward_kerr_geodesic"
+            write_values(self.config_path, values)
+            source_summary = generate_uhe_source_products(values, output_dir=output_dir)
+            render_summary = render_hadros_web(values, root=ROOT, source_summary=source_summary)
+            summary = {"status": "ok", "source": source_summary, "render": render_summary}
+            self._send(200, json.dumps(summary, indent=2, sort_keys=True) + "\n", "application/json")
+            return
+        if self.path == "/api/launch-interactive-camera-preview":
+            output_dir = ROOT / run_output_dir(values)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            write_values(self.config_path, values)
+            summary = launch_interactive_camera_preview(values, root=ROOT, output_dir=output_dir, preview_options=preview_options)
+            self._send(200, json.dumps(summary, indent=2, sort_keys=True) + "\n", "application/json")
+            return
+        self._send(404, "not found")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
+    parser.add_argument("--output-dir", type=Path)
+    parser.add_argument("--print-schema", action="store_true")
+    parser.add_argument("--write-default-config", type=Path)
+    parser.add_argument("--render", action="store_true", help="Render products and exit. This is also the default action.")
+    parser.add_argument("--camera-preview-only", action="store_true", help="Render only the HADROS3 camera preview and exit.")
+    parser.add_argument("--launch-interactive-camera", action="store_true", help="Launch the original HADROS interactive camera preview and exit.")
+    parser.add_argument("--sample-uhe-source", action="store_true", help="Generate H3-W5 UHE source samples through hadros-web orchestration and exit.")
+    parser.add_argument("--serve", action="store_true", help="Serve the web control surface.")
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8877)
+    args = parser.parse_args()
+
+    if args.print_schema:
+        print(json.dumps(schema(), indent=2, sort_keys=True))
+        return 0
+    if args.write_default_config is not None:
+        write_values(args.write_default_config, defaults())
+        print(f"wrote {args.write_default_config}")
+        return 0
+    if args.serve:
+        Handler.config_path = args.config
+        server = ThreadingHTTPServer((args.host, args.port), Handler)
+        print(f"Serving HADROS3 hadros-web at http://{args.host}:{args.port}")
+        server.serve_forever()
+        return 0
+
+    values = load_values(args.config)
+    if not args.config.exists():
+        write_values(args.config, values)
+    if args.camera_preview_only:
+        output_dir = args.output_dir if args.output_dir is not None else ROOT / run_output_dir(values)
+        if not output_dir.is_absolute():
+            output_dir = ROOT / output_dir
+        summary = render_camera_preview(values, root=ROOT, output_dir=output_dir)
+        print(json.dumps(summary, indent=2, sort_keys=True))
+        return 0
+    if args.launch_interactive_camera:
+        output_dir = args.output_dir if args.output_dir is not None else ROOT / run_output_dir(values)
+        if not output_dir.is_absolute():
+            output_dir = ROOT / output_dir
+        summary = launch_interactive_camera_preview(values, root=ROOT, output_dir=output_dir)
+        print(json.dumps(summary, indent=2, sort_keys=True))
+        return 0
+    if args.sample_uhe_source:
+        output_dir = args.output_dir if args.output_dir is not None else ROOT / run_output_dir(values)
+        if not output_dir.is_absolute():
+            output_dir = ROOT / output_dir
+        values["uhe_neutrino_source"]["status"] = "sampled_position_with_proxy_direction_no_forward_kerr_geodesic"
+        write_values(args.config, values)
+        source_summary = generate_uhe_source_products(values, output_dir=output_dir)
+        render_summary = render_hadros_web(values, root=ROOT, output_dir=output_dir, source_summary=source_summary)
+        print(json.dumps({"status": "ok", "source": source_summary, "render": render_summary}, indent=2, sort_keys=True))
+        return 0
+    summary = render_hadros_web(values, root=ROOT, output_dir=args.output_dir)
+    print(json.dumps(summary, indent=2, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

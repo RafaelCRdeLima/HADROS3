@@ -1,0 +1,75 @@
+{
+  "analytic_torus": {
+    "density_norm_g_cm3": 10000000000,
+    "half_opening_angle_deg": 10,
+    "model": "analytic_torus",
+    "r_inner_rg": 6,
+    "r_outer_rg": 14,
+    "r_peak_rg": 10,
+    "show_in_preview": true
+  },
+  "black_hole": {
+    "mass_msun": 3,
+    "metric": "kerr",
+    "spin_a": 0.9,
+    "spin_convention": "Boyer-Lindquist a/M"
+  },
+  "interaction_sampler": {
+    "mode": "placeholder_disabled",
+    "planned_model": "optical_depth_DIS"
+  },
+  "observer_bridge": {
+    "mode": "placeholder_diagnostic_disabled",
+    "planned_model": "distance_to_observer_bundle"
+  },
+  "observer_camera": {
+    "azimuth_deg": -5.25,
+    "camera_model": "reused_hadros_kerr_camera",
+    "camera_preview_mode": "kerr_like_cuda",
+    "field_of_view_deg": 61,
+    "inclination_deg": 81,
+    "observer_distance_rg": 60,
+    "preview_backend": "hadros_geodesic_preview_headless",
+    "preview_quality": "high",
+    "preview_resolution": "256x144",
+    "resolution": "512x288"
+  },
+  "outputs": {
+    "write_camera_preview": true,
+    "write_config": true,
+    "write_geometry_preview": true,
+    "write_html_summary": true,
+    "write_provenance": true,
+    "write_schematic": true
+  },
+  "polar_cone": {
+    "draw_mode": "bipolar_funnel",
+    "enabled": true,
+    "opening_angle_deg": 12,
+    "r_max_rg": 40,
+    "r_min_rg": 5.2
+  },
+  "provenance": {
+    "record_disabled_stages": true,
+    "record_reused_hadros_components": true,
+    "trust_boundary": "H3-W0_W4_geometry_preview_only"
+  },
+  "run": {
+    "run_name": "HADROS3_hadros_web_preview"
+  },
+  "uhe_neutrino_source": {
+    "energy_gev": "10^{9}",
+    "energy_model": "monoenergetic",
+    "momentum_generator": "ProxyRadialMomentumGenerator",
+    "n_samples": 1000,
+    "phi_mode": "uniform_0_2pi",
+    "r_max_rg": 12,
+    "r_min_rg": 3,
+    "random_seed": 12345,
+    "sampling_mode": "uniform_coordinate_volume",
+    "source_model": "polar_cone",
+    "status": "sampled_position_with_proxy_direction_no_forward_kerr_geodesic",
+    "theta_max_deg": 22,
+    "theta_min_deg": 0
+  }
+}

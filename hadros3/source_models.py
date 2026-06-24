@@ -1,0 +1,151 @@
+"""UHE neutrino source models for HADROS3 H3-W5."""
+
+from __future__ import annotations
+
+import math
+import random
+from dataclasses import dataclass
+from typing import Any
+
+from .config import parse_latex_number
+
+
+SOURCE_STATUS_PROXY = "sampled_position_with_proxy_direction_no_forward_kerr_geodesic"
+
+
+@dataclass(frozen=True)
+class SourceConfig:
+    source_model: str
+    energy_model: str
+    energy_gev: float
+    r_min_rg: float
+    r_max_rg: float
+    theta_min_rad: float
+    theta_max_rad: float
+    phi_mode: str
+    n_samples: int
+    random_seed: int
+    sampling_mode: str
+    momentum_generator: str
+
+
+class InitialMomentumGenerator:
+    """Interface for initial momentum metadata attached to source samples."""
+
+    name = "InitialMomentumGenerator"
+    momentum_is_physical_kerr = False
+
+    def describe(self, position: dict[str, float], energy_gev: float) -> dict[str, Any]:
+        raise NotImplementedError
+
+
+class ProxyRadialMomentumGenerator(InitialMomentumGenerator):
+    """H3-W5 proxy direction marker; it deliberately does not emit a Kerr four-momentum."""
+
+    name = "ProxyRadialMomentumGenerator"
+    momentum_is_physical_kerr = False
+
+    def describe(self, position: dict[str, float], energy_gev: float) -> dict[str, Any]:
+        return {
+            "generator": self.name,
+            "momentum_is_physical_kerr": False,
+            "direction_model": "outward_coordinate_radial_proxy",
+            "four_momentum": None,
+            "energy_gev": energy_gev,
+            "status": "proxy_direction_only_pending_H3_W6_forward_kerr_geodesics",
+        }
+
+
+class KerrNullMomentumGenerator(InitialMomentumGenerator):
+    """Future H3-W6 interface placeholder."""
+
+    name = "KerrNullMomentumGenerator"
+    momentum_is_physical_kerr = True
+
+
+def source_config_from_values(values: dict[str, dict[str, Any]]) -> SourceConfig:
+    source = values["uhe_neutrino_source"]
+    return SourceConfig(
+        source_model=str(source["source_model"]),
+        energy_model=str(source["energy_model"]),
+        energy_gev=parse_latex_number(source["energy_gev"]),
+        r_min_rg=float(source["r_min_rg"]),
+        r_max_rg=float(source["r_max_rg"]),
+        theta_min_rad=math.radians(float(source["theta_min_deg"])),
+        theta_max_rad=math.radians(float(source["theta_max_deg"])),
+        phi_mode=str(source["phi_mode"]),
+        n_samples=int(float(source["n_samples"])),
+        random_seed=int(float(source["random_seed"])),
+        sampling_mode=str(source["sampling_mode"]),
+        momentum_generator=str(source["momentum_generator"]),
+    )
+
+
+def coordinate_cone_volume(config: SourceConfig) -> float:
+    return (
+        (2.0 * math.pi / 3.0)
+        * (config.r_max_rg**3 - config.r_min_rg**3)
+        * (math.cos(config.theta_min_rad) - math.cos(config.theta_max_rad))
+    )
+
+
+def _momentum_generator(config: SourceConfig) -> InitialMomentumGenerator:
+    if config.momentum_generator == "ProxyRadialMomentumGenerator":
+        return ProxyRadialMomentumGenerator()
+    raise ValueError(f"unsupported H3-W5 momentum generator: {config.momentum_generator}")
+
+
+def sample_polar_cone(values: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    config = source_config_from_values(values)
+    if config.source_model != "polar_cone":
+        raise ValueError("H3-W5 implements only uhe_neutrino_source.source_model=polar_cone")
+    if config.energy_model != "monoenergetic":
+        raise ValueError("H3-W5 implements only monoenergetic source energy")
+    if config.sampling_mode != "uniform_coordinate_volume":
+        raise ValueError("H3-W5 implements only uniform_coordinate_volume")
+
+    volume = coordinate_cone_volume(config)
+    if volume <= 0.0 or not math.isfinite(volume):
+        raise ValueError("polar_cone coordinate volume is not finite and positive")
+    sampling_pdf = 1.0 / volume
+    rng = random.Random(config.random_seed)
+    momentum = _momentum_generator(config)
+    cos_min = math.cos(config.theta_min_rad)
+    cos_max = math.cos(config.theta_max_rad)
+    records: list[dict[str, Any]] = []
+    for sample_id in range(config.n_samples):
+        u_r = rng.random()
+        u_theta = rng.random()
+        u_phi = rng.random()
+        r_emit = (config.r_min_rg**3 + u_r * (config.r_max_rg**3 - config.r_min_rg**3)) ** (1.0 / 3.0)
+        cos_theta = cos_min - u_theta * (cos_min - cos_max)
+        theta_emit = math.acos(max(-1.0, min(1.0, cos_theta)))
+        phi_emit = 2.0 * math.pi * u_phi
+        position = {
+            "t": 0.0,
+            "r_rg": r_emit,
+            "theta_rad": theta_emit,
+            "theta_deg": math.degrees(theta_emit),
+            "phi_rad": phi_emit,
+            "phi_deg": math.degrees(phi_emit),
+        }
+        physical_pdf = sampling_pdf
+        records.append(
+            {
+                "source_sample_id": sample_id,
+                "event_id": f"H3SRC-{sample_id:06d}",
+                "source_model": config.source_model,
+                "source_volume_model": "coordinate_volume",
+                "position": position,
+                "E_nu_emit_gev": config.energy_gev,
+                "E_nu_inf_gev": None,
+                "initial_momentum": momentum.describe(position, config.energy_gev),
+                "momentum_generator": momentum.name,
+                "momentum_is_physical_kerr": momentum.momentum_is_physical_kerr,
+                "source_physical_pdf": physical_pdf,
+                "source_sampling_pdf": sampling_pdf,
+                "source_weight": physical_pdf / sampling_pdf,
+                "source_status": SOURCE_STATUS_PROXY,
+            }
+        )
+    return records

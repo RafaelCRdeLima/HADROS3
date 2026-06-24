@@ -1,0 +1,61 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from hadros3.config import defaults, parse_latex_number, schema, validate_values
+from hadros3.pipeline import render_hadros_web
+
+
+def test_schema_exposes_hadros3_first_stage_controls() -> None:
+    keys = {(field["section"], field["key"]) for tab in schema() for field in tab["fields"]}
+    expected = {
+        ("black_hole", "mass_msun"),
+        ("black_hole", "spin_a"),
+        ("observer_camera", "observer_distance_rg"),
+        ("observer_camera", "camera_preview_mode"),
+        ("observer_camera", "inclination_deg"),
+        ("observer_camera", "field_of_view_deg"),
+        ("analytic_torus", "r_inner_rg"),
+        ("polar_cone", "opening_angle_deg"),
+        ("uhe_neutrino_source", "energy_gev"),
+        ("interaction_sampler", "mode"),
+        ("observer_bridge", "mode"),
+        ("provenance", "trust_boundary"),
+    }
+    assert expected <= keys
+
+
+def test_default_config_is_valid() -> None:
+    assert validate_values(defaults()) == []
+
+
+def test_uhe_energy_accepts_latex_power_notation() -> None:
+    assert parse_latex_number("10^{12}") == 1.0e12
+    assert parse_latex_number("3\\times10^{12}") == 3.0e12
+    values = defaults()
+    values["uhe_neutrino_source"]["energy_gev"] = "10^{12}"
+    assert validate_values(values) == []
+
+
+def test_render_hadros_web_writes_first_stage_products(tmp_path: Path) -> None:
+    values = defaults()
+    summary = render_hadros_web(values, root=Path.cwd(), output_dir=tmp_path)
+    assert summary["validation"]["expensive_event_generation_invoked"] is False
+    for key in [
+        "config",
+        "geometry_preview",
+        "system_schematic",
+        "camera_preview",
+        "camera_preview_summary",
+        "provenance",
+        "html_summary",
+        "render_summary",
+    ]:
+        assert key in summary["products"]
+        assert Path(summary["products"][key]).exists()
+
+    provenance = json.loads(Path(summary["products"]["provenance"]).read_text(encoding="utf-8"))
+    assert provenance["status"] == "geometry_configured_no_expensive_events"
+    assert provenance["disabled_expensive_or_future_stages"]["powheg"] == "disabled"
+    assert provenance["camera_preview"]["requested_mode"] in {"analytic_geometry_only", "kerr_like_cuda", "full_kerr"}

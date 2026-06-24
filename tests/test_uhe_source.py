@@ -68,7 +68,7 @@ def test_generate_uhe_source_products_and_provenance(tmp_path: Path) -> None:
         "uhe_neutrino_source_summary.json",
         "uhe_neutrino_source_preview.png",
     ]:
-        assert (tmp_path / filename).exists()
+        assert (tmp_path / "UHEsource" / filename).exists()
 
     render_summary = render_hadros_web(values, root=Path.cwd(), output_dir=tmp_path, source_summary=summary)
     provenance = json.loads(Path(render_summary["products"]["provenance"]).read_text(encoding="utf-8"))

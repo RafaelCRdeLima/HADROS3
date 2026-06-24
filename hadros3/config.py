@@ -266,6 +266,9 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
     theta_max = float(source["theta_max_deg"])
     if not (0.0 <= theta_min < theta_max <= 180.0):
         problems.append("uhe_neutrino_source requires 0 <= theta_min_deg < theta_max_deg <= 180")
+    cone_opening = float(cone["opening_angle_deg"])
+    if theta_max > cone_opening:
+        problems.append("uhe_neutrino_source.theta_max_deg must be <= polar_cone.opening_angle_deg")
     if int(float(source.get("n_samples", 0))) <= 0:
         problems.append("uhe_neutrino_source.n_samples must be positive")
     if str(source.get("source_model")) != "polar_cone":

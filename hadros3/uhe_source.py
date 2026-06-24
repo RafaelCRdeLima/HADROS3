@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import validate_values
+from .paths import UHE_SOURCE_DIR
 from .source_models import sample_polar_cone
 from .source_outputs import (
     draw_source_preview,
@@ -57,6 +58,8 @@ def generate_uhe_source_products(
     config_problems = validate_values(values)
     if config_problems:
         raise ValueError("Invalid HADROS3 configuration:\n- " + "\n- ".join(config_problems))
+    if output_dir.name != UHE_SOURCE_DIR:
+        output_dir = output_dir / UHE_SOURCE_DIR
     output_dir.mkdir(parents=True, exist_ok=True)
     records = sample_polar_cone(values)
     record_problems = validate_source_records(records, values)

@@ -30,12 +30,34 @@ def test_default_config_is_valid() -> None:
     assert validate_values(defaults()) == []
 
 
+def test_versioned_hadros_web_preset_is_valid() -> None:
+    values = json.loads(Path("presets/hadros_web/default_config.json").read_text(encoding="utf-8"))
+    assert validate_values(values) == []
+
+
 def test_uhe_energy_accepts_latex_power_notation() -> None:
     assert parse_latex_number("10^{12}") == 1.0e12
     assert parse_latex_number("3\\times10^{12}") == 3.0e12
     values = defaults()
     values["uhe_neutrino_source"]["energy_gev"] = "10^{12}"
     assert validate_values(values) == []
+
+
+def test_uhe_source_theta_range_must_be_ordered() -> None:
+    values = defaults()
+    values["uhe_neutrino_source"]["theta_min_deg"] = 10.0
+    values["uhe_neutrino_source"]["theta_max_deg"] = 9.0
+    problems = validate_values(values)
+    assert any("theta_min_deg < theta_max_deg" in problem for problem in problems)
+
+
+def test_uhe_source_theta_max_must_fit_inside_funnel() -> None:
+    values = defaults()
+    values["polar_cone"]["opening_angle_deg"] = 20.0
+    values["uhe_neutrino_source"]["theta_min_deg"] = 0.0
+    values["uhe_neutrino_source"]["theta_max_deg"] = 25.0
+    problems = validate_values(values)
+    assert "uhe_neutrino_source.theta_max_deg must be <= polar_cone.opening_angle_deg" in problems
 
 
 def test_render_hadros_web_writes_first_stage_products(tmp_path: Path) -> None:

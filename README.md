@@ -63,7 +63,8 @@ make sample-uhe-source
 ```
 
 The same action is available in the dashboard under the **UHE Source** tab as
-`Generate UHE Source Samples`. It writes:
+`Generate UHE Source Samples`. It writes the source products under
+`output/<run-name>/UHEsource/`:
 
 ```text
 uhe_neutrino_source_samples.jsonl

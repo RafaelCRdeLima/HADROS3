@@ -17,7 +17,8 @@ from typing import Any
 from urllib.parse import urlparse
 
 from hadros3.camera_preview import available_backends, launch_interactive_camera_preview, render_camera_preview
-from hadros3.config import deep_update, defaults, load_values, run_output_dir, safe_run_name, schema
+from hadros3.config import deep_update, defaults, load_values, run_output_dir, safe_run_name, schema, validate_values
+from hadros3.paths import camera_preview_dir, dashboard_dir, ensure_output_layout, geometry_dir, rel, run_metadata_dir, uhe_source_dir
 from hadros3.pipeline import render_hadros_web
 from hadros3.reuse import discover_original_hadros
 from hadros3.uhe_source import generate_uhe_source_products
@@ -32,11 +33,28 @@ def write_values(path: Path, values: dict[str, dict[str, Any]]) -> None:
     path.write_text(json.dumps(values, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def render_html(values: dict[str, dict[str, Any]], config_path: Path) -> str:
+def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | None = None) -> dict[str, Any]:
     output_dir = ROOT / run_output_dir(values)
-    camera_summary_path = output_dir / "hadros3_camera_preview_summary.json"
-    interactive_summary_path = output_dir / "hadros3_camera_preview_interactive_summary.json"
-    source_summary_path = output_dir / "uhe_neutrino_source_summary.json"
+    camera_dir = camera_preview_dir(output_dir)
+    geom_dir = geometry_dir(output_dir)
+    metadata_dir = run_metadata_dir(output_dir)
+    source_dir = uhe_source_dir(output_dir)
+    web_dir = dashboard_dir(output_dir)
+
+    camera_preview_path = camera_dir / "hadros3_camera_preview.png"
+    camera_summary_path = camera_dir / "hadros3_camera_preview_summary.json"
+    interactive_summary_path = camera_dir / "hadros3_camera_preview_interactive_summary.json"
+    geometry_preview_path = geom_dir / "hadros3_geometry_preview.png"
+    schematic_path = geom_dir / "hadros3_system_schematic.png"
+    config_output_path = metadata_dir / "hadros3_config.json"
+    provenance_path = metadata_dir / "hadros3_pipeline_provenance.json"
+    render_summary_path = metadata_dir / "hadros_web_render_summary.json"
+    source_samples_path = source_dir / "uhe_neutrino_source_samples.jsonl"
+    source_csv_path = source_dir / "uhe_neutrino_source_summary.csv"
+    source_summary_path = source_dir / "uhe_neutrino_source_summary.json"
+    source_preview_path = source_dir / "uhe_neutrino_source_preview.png"
+    html_path = web_dir / "index.html"
+
     camera_summary: dict[str, Any] | None = None
     source_summary: dict[str, Any] | None = None
     if camera_summary_path.exists():
@@ -49,30 +67,49 @@ def render_html(values: dict[str, dict[str, Any]], config_path: Path) -> str:
             source_summary = json.loads(source_summary_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             source_summary = {"status": "invalid_summary", "message": "Could not parse UHE source summary."}
-    payload = json.dumps(
-        {
-            "schema": schema(),
-            "values": values,
-            "config": str(config_path),
-            "camera_backends": available_backends(),
-            "camera_summary": camera_summary,
-            "source_summary": source_summary,
-            "outputs": {
-                "output_dir": str(output_dir),
-                "preview_exists": (output_dir / "hadros3_geometry_preview.png").exists(),
-                "schematic_exists": (output_dir / "hadros3_system_schematic.png").exists(),
-                "camera_preview_exists": (output_dir / "hadros3_camera_preview.png").exists(),
-                "camera_preview_summary_exists": camera_summary_path.exists(),
-                "interactive_camera_summary_exists": interactive_summary_path.exists(),
-                "uhe_source_samples_exists": (output_dir / "uhe_neutrino_source_samples.jsonl").exists(),
-                "uhe_source_summary_exists": (output_dir / "uhe_neutrino_source_summary.csv").exists(),
-                "uhe_source_summary_json_exists": source_summary_path.exists(),
-                "uhe_source_preview_exists": (output_dir / "uhe_neutrino_source_preview.png").exists(),
-                "provenance_exists": (output_dir / "hadros3_pipeline_provenance.json").exists(),
-                "config_exists": (output_dir / "hadros3_config.json").exists(),
+    return {
+        "schema": schema(),
+        "values": values,
+        "config": str(config_path) if config_path is not None else None,
+        "camera_backends": available_backends(),
+        "camera_summary": camera_summary,
+        "source_summary": source_summary,
+        "outputs": {
+            "output_dir": str(output_dir),
+            "preview_exists": geometry_preview_path.exists(),
+            "schematic_exists": schematic_path.exists(),
+            "camera_preview_exists": camera_preview_path.exists(),
+            "camera_preview_summary_exists": camera_summary_path.exists(),
+            "interactive_camera_summary_exists": interactive_summary_path.exists(),
+            "uhe_source_samples_exists": source_samples_path.exists(),
+            "uhe_source_summary_exists": source_csv_path.exists(),
+            "uhe_source_summary_json_exists": source_summary_path.exists(),
+            "uhe_source_preview_exists": source_preview_path.exists(),
+            "provenance_exists": provenance_path.exists(),
+            "config_exists": config_output_path.exists(),
+            "render_summary_exists": render_summary_path.exists(),
+            "html_summary_exists": html_path.exists(),
+            "paths": {
+                "config": rel(config_output_path, output_dir),
+                "geometry_preview": rel(geometry_preview_path, output_dir),
+                "system_schematic": rel(schematic_path, output_dir),
+                "camera_preview": rel(camera_preview_path, output_dir),
+                "camera_preview_summary": rel(camera_summary_path, output_dir),
+                "interactive_camera_summary": rel(interactive_summary_path, output_dir),
+                "uhe_source_samples": rel(source_samples_path, output_dir),
+                "uhe_source_summary": rel(source_csv_path, output_dir),
+                "uhe_source_summary_json": rel(source_summary_path, output_dir),
+                "uhe_source_preview": rel(source_preview_path, output_dir),
+                "provenance": rel(provenance_path, output_dir),
+                "render_summary": rel(render_summary_path, output_dir),
+                "html_summary": rel(html_path, output_dir),
             },
-        }
-    )
+        },
+    }
+
+
+def render_html(values: dict[str, dict[str, Any]], config_path: Path) -> str:
+    payload = json.dumps(dashboard_payload(values, config_path))
     return f"""<!doctype html>
 <html>
 <head>
@@ -83,8 +120,6 @@ def render_html(values: dict[str, dict[str, Any]], config_path: Path) -> str:
     header {{ padding: 18px 24px 16px; background: #000; color: white; display: grid; place-items: center; text-align: center; }}
     .brand {{ display: grid; justify-items: center; gap: 8px; }}
     .brand-logo {{ width: min(360px, 72vw); height: 110px; object-fit: contain; display: block; }}
-    header h1 {{ font-size: 18px; margin: 0; font-weight: 650; letter-spacing: 0; }}
-    header .meta {{ color: #cbd5e1; font-size: 13px; margin-top: 4px; }}
     main {{ max-width: 1680px; margin: 0 auto; padding: 18px; display: grid; grid-template-columns: 240px minmax(420px, 560px) minmax(560px, 1fr); gap: 18px; align-items: start; }}
     nav {{ background: white; border: 1px solid #d6dce5; border-radius: 6px; padding: 10px; position: sticky; top: 14px; }}
     .tab-button {{ display: block; width: 100%; text-align: left; margin: 0 0 6px; border-color: #d6dce5; background: #f8fafc; color: #18202a; }}
@@ -143,7 +178,7 @@ def render_html(values: dict[str, dict[str, Any]], config_path: Path) -> str:
   </style>
 </head>
 <body>
-<header><div class="brand"><img class="brand-logo" src="/assets/logo/Hadros_logo.png" alt="HADROS logo"><h1>HADROS3 hadros-web</h1><div class="meta">Kerr + torus + polar cone configuration dashboard</div></div></header>
+<header><div class="brand"><img class="brand-logo" src="/assets/logo/Hadros_logo.png" alt="HADROS logo"></div></header>
 <main id="app"></main>
 <script>
 const state = {payload};
@@ -173,6 +208,12 @@ let previewOpaqueStructures = false;
 let lastCameraMtime = 0;
 let previewPollTimer = null;
 let sourcePreviewVersion = Date.now();
+function outPath(key) {{
+  return state.outputs.paths && state.outputs.paths[key] ? state.outputs.paths[key] : key;
+}}
+function outUrl(key) {{
+  return "/output/" + outPath(key);
+}}
 function inputFor(field, value) {{
   if (field.kind === "select") {{
     return `<select data-section="${{field.section}}" data-key="${{field.key}}">` +
@@ -450,9 +491,9 @@ function renderBackendTable() {{
 function renderSourcePanel() {{
   const summary = state.source_summary;
   const sourceLinks = `<div class="output-link-grid">
-    ${{state.outputs.uhe_source_samples_exists ? `<a href="/output/uhe_neutrino_source_samples.jsonl" target="_blank">Samples<br><code>uhe_neutrino_source_samples.jsonl</code></a>` : ""}}
-    ${{state.outputs.uhe_source_summary_exists ? `<a href="/output/uhe_neutrino_source_summary.csv" target="_blank">Summary CSV<br><code>uhe_neutrino_source_summary.csv</code></a>` : ""}}
-    ${{state.outputs.uhe_source_summary_json_exists ? `<a href="/output/uhe_neutrino_source_summary.json" target="_blank">Summary JSON<br><code>uhe_neutrino_source_summary.json</code></a>` : ""}}
+    ${{state.outputs.uhe_source_samples_exists ? `<a href="${{outUrl("uhe_source_samples")}}" target="_blank">Samples<br><code>${{outPath("uhe_source_samples")}}</code></a>` : ""}}
+    ${{state.outputs.uhe_source_summary_exists ? `<a href="${{outUrl("uhe_source_summary")}}" target="_blank">Summary CSV<br><code>${{outPath("uhe_source_summary")}}</code></a>` : ""}}
+    ${{state.outputs.uhe_source_summary_json_exists ? `<a href="${{outUrl("uhe_source_summary_json")}}" target="_blank">Summary JSON<br><code>${{outPath("uhe_source_summary_json")}}</code></a>` : ""}}
   </div>`;
   const summaryHtml = summary ? `<div class="summary-grid">
     <div class="summary-item"><strong>Status</strong>${{summary.status}}</div>
@@ -478,7 +519,7 @@ function renderContextPanel() {{
   }}
   if (activeTab === "UHE Source") {{
     const figure = state.outputs.uhe_source_preview_exists
-      ? `<img src="/output/uhe_neutrino_source_preview.png?v=${{sourcePreviewVersion}}" alt="UHE source sample preview">`
+      ? `<img src="${{outUrl("uhe_source_preview")}}?v=${{sourcePreviewVersion}}" alt="UHE source sample preview">`
       : `<div class="context-empty">No UHE source preview generated yet.</div>`;
     return `<aside class="panel"><h2>UHE Source Samples</h2><div class="context-figure">${{figure}}</div></aside>`;
   }}
@@ -486,18 +527,20 @@ function renderContextPanel() {{
 }}
 function renderOutputsPanel() {{
   const out = state.outputs;
-  const link = (exists, name, label) => exists ? `<a href="/output/${{name}}" target="_blank">${{label}}<br><code>${{name}}</code></a>` : `<div class="summary-item"><strong>${{label}}</strong>pending</div>`;
+  const link = (exists, key, label) => exists ? `<a href="${{outUrl(key)}}" target="_blank">${{label}}<br><code>${{outPath(key)}}</code></a>` : `<div class="summary-item"><strong>${{label}}</strong>pending</div>`;
   return `<div class="output-link-grid">
-    ${{link(out.config_exists, "hadros3_config.json", "Config")}}
-    ${{link(out.preview_exists, "hadros3_geometry_preview.png", "Geometry preview")}}
-    ${{link(out.schematic_exists, "hadros3_system_schematic.png", "System schematic")}}
-    ${{link(out.camera_preview_exists, "hadros3_camera_preview.png", "Camera preview")}}
-    ${{link(out.uhe_source_samples_exists, "uhe_neutrino_source_samples.jsonl", "UHE source samples")}}
-    ${{link(out.uhe_source_summary_exists, "uhe_neutrino_source_summary.csv", "UHE source summary")}}
-    ${{link(out.uhe_source_summary_json_exists, "uhe_neutrino_source_summary.json", "UHE source summary JSON")}}
-    ${{link(out.uhe_source_preview_exists, "uhe_neutrino_source_preview.png", "UHE source preview")}}
-    ${{out.uhe_source_preview_exists ? `<img src="/output/uhe_neutrino_source_preview.png" alt="UHE source preview">` : ""}}
-    ${{link(out.provenance_exists, "hadros3_pipeline_provenance.json", "Provenance")}}
+    ${{link(out.config_exists, "config", "Config")}}
+    ${{link(out.preview_exists, "geometry_preview", "Geometry preview")}}
+    ${{link(out.schematic_exists, "system_schematic", "System schematic")}}
+    ${{link(out.camera_preview_exists, "camera_preview", "Camera preview")}}
+    ${{link(out.uhe_source_samples_exists, "uhe_source_samples", "UHE source samples")}}
+    ${{link(out.uhe_source_summary_exists, "uhe_source_summary", "UHE source summary")}}
+    ${{link(out.uhe_source_summary_json_exists, "uhe_source_summary_json", "UHE source summary JSON")}}
+    ${{link(out.uhe_source_preview_exists, "uhe_source_preview", "UHE source preview")}}
+    ${{out.uhe_source_preview_exists ? `<img src="${{outUrl("uhe_source_preview")}}" alt="UHE source preview">` : ""}}
+    ${{link(out.provenance_exists, "provenance", "Provenance")}}
+    ${{link(out.render_summary_exists, "render_summary", "Render summary")}}
+    ${{link(out.html_summary_exists, "html_summary", "Dashboard HTML")}}
   </div>`;
 }}
 function fnum(values, section, key, fallback) {{
@@ -630,30 +673,7 @@ render();
 
 
 def state_payload(values: dict[str, dict[str, Any]], config_path: Path | None = None) -> dict[str, Any]:
-    output_dir = ROOT / run_output_dir(values)
-    source_summary_path = output_dir / "uhe_neutrino_source_summary.json"
-    source_summary: dict[str, Any] | None = None
-    if source_summary_path.exists():
-        try:
-            source_summary = json.loads(source_summary_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            source_summary = {"status": "invalid_summary", "message": "Could not parse UHE source summary."}
-    return {
-        "schema": schema(),
-        "values": values,
-        "config": str(config_path) if config_path is not None else None,
-        "camera_backends": available_backends(),
-        "source_summary": source_summary,
-        "outputs": {
-            "output_dir": str(output_dir),
-            "uhe_source_samples_exists": (output_dir / "uhe_neutrino_source_samples.jsonl").exists(),
-            "uhe_source_summary_exists": (output_dir / "uhe_neutrino_source_summary.csv").exists(),
-            "uhe_source_summary_json_exists": source_summary_path.exists(),
-            "uhe_source_preview_exists": (output_dir / "uhe_neutrino_source_preview.png").exists(),
-            "provenance_exists": (output_dir / "hadros3_pipeline_provenance.json").exists(),
-            "config_exists": (output_dir / "hadros3_config.json").exists(),
-        },
-    }
+    return dashboard_payload(values, config_path)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -688,11 +708,11 @@ class Handler(BaseHTTPRequestHandler):
         request_path = urlparse(self.path).path
         if not request_path.startswith("/output/"):
             return None
-        name = request_path.removeprefix("/output/")
-        if "/" in name or not name:
+        relative = request_path.removeprefix("/output/")
+        if not relative or ".." in Path(relative).parts:
             return None
         output_dir = ROOT / run_output_dir(values)
-        path = output_dir / name
+        path = output_dir / relative
         if not path.exists() or not path.is_file():
             return None
         return path
@@ -775,7 +795,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if self.path == "/outputs":
             output_dir = ROOT / run_output_dir(values)
-            index = output_dir / "index.html"
+            index = dashboard_dir(output_dir) / "index.html"
             self._send(200, index.read_text(encoding="utf-8") if index.exists() else "No outputs rendered yet.", "text/html")
             return
         asset = self._asset_file()
@@ -794,24 +814,36 @@ class Handler(BaseHTTPRequestHandler):
         payload = self._read_payload()
         values = payload["values"]
         preview_options = payload["previewOptions"]
-        write_values(self.config_path, values)
         if self.path == "/api/save":
+            write_values(self.config_path, values)
             self._send(200, f"wrote {self.config_path}\n")
             return
         if self.path == "/api/render":
+            write_values(self.config_path, values)
             summary = render_hadros_web(values, root=ROOT)
             self._send(200, json.dumps(summary, indent=2, sort_keys=True) + "\n", "application/json")
             return
         if self.path == "/api/render-camera-preview":
-            output_dir = ROOT / run_output_dir(values)
+            run_dir = ROOT / run_output_dir(values)
+            ensure_output_layout(run_dir)
+            output_dir = camera_preview_dir(run_dir)
             output_dir.mkdir(parents=True, exist_ok=True)
             write_values(self.config_path, values)
             summary = render_camera_preview(values, root=ROOT, output_dir=output_dir)
             self._send(200, json.dumps(summary, indent=2, sort_keys=True) + "\n", "application/json")
             return
         if self.path == "/api/sample-uhe-source":
+            problems = validate_values(values)
+            if problems:
+                self._send(
+                    400,
+                    json.dumps({"status": "error", "validation_errors": problems}, indent=2, sort_keys=True) + "\n",
+                    "application/json",
+                )
+                return
             output_dir = ROOT / run_output_dir(values)
             output_dir.mkdir(parents=True, exist_ok=True)
+            ensure_output_layout(output_dir)
             values["uhe_neutrino_source"]["status"] = "sampled_position_with_proxy_direction_no_forward_kerr_geodesic"
             write_values(self.config_path, values)
             source_summary = generate_uhe_source_products(values, output_dir=output_dir)
@@ -820,7 +852,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, json.dumps(summary, indent=2, sort_keys=True) + "\n", "application/json")
             return
         if self.path == "/api/launch-interactive-camera-preview":
-            output_dir = ROOT / run_output_dir(values)
+            run_dir = ROOT / run_output_dir(values)
+            ensure_output_layout(run_dir)
+            output_dir = camera_preview_dir(run_dir)
             output_dir.mkdir(parents=True, exist_ok=True)
             write_values(self.config_path, values)
             summary = launch_interactive_camera_preview(values, root=ROOT, output_dir=output_dir, preview_options=preview_options)
@@ -865,6 +899,8 @@ def main() -> int:
         output_dir = args.output_dir if args.output_dir is not None else ROOT / run_output_dir(values)
         if not output_dir.is_absolute():
             output_dir = ROOT / output_dir
+        ensure_output_layout(output_dir)
+        output_dir = camera_preview_dir(output_dir)
         summary = render_camera_preview(values, root=ROOT, output_dir=output_dir)
         print(json.dumps(summary, indent=2, sort_keys=True))
         return 0
@@ -872,6 +908,8 @@ def main() -> int:
         output_dir = args.output_dir if args.output_dir is not None else ROOT / run_output_dir(values)
         if not output_dir.is_absolute():
             output_dir = ROOT / output_dir
+        ensure_output_layout(output_dir)
+        output_dir = camera_preview_dir(output_dir)
         summary = launch_interactive_camera_preview(values, root=ROOT, output_dir=output_dir)
         print(json.dumps(summary, indent=2, sort_keys=True))
         return 0
@@ -879,6 +917,7 @@ def main() -> int:
         output_dir = args.output_dir if args.output_dir is not None else ROOT / run_output_dir(values)
         if not output_dir.is_absolute():
             output_dir = ROOT / output_dir
+        ensure_output_layout(output_dir)
         values["uhe_neutrino_source"]["status"] = "sampled_position_with_proxy_direction_no_forward_kerr_geodesic"
         write_values(args.config, values)
         source_summary = generate_uhe_source_products(values, output_dir=output_dir)

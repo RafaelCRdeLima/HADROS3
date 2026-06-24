@@ -272,11 +272,22 @@ def draw_system_schematic(values: dict[str, dict[str, Any]], path: Path) -> None
 
 def write_html_summary(values: dict[str, dict[str, Any]], products: dict[str, str], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    preview = Path(products.get("geometry_preview", "")).name
-    schematic = Path(products.get("system_schematic", "")).name
-    camera_preview = Path(products.get("camera_preview", "")).name
-    config = Path(products.get("config", "")).name
-    provenance = Path(products.get("provenance", "")).name
+    def href(key: str) -> str:
+        product = products.get(key)
+        if not product:
+            return ""
+        return Path(os.path.relpath(product, path.parent)).as_posix()
+
+    preview = href("geometry_preview")
+    schematic = href("system_schematic")
+    camera_preview = href("camera_preview")
+    config = href("config")
+    provenance = href("provenance")
+    product_links = "\n".join(
+        f'<li><a href="{href(key)}">{key}</a>: <code>{href(key)}</code></li>'
+        for key in sorted(products)
+        if href(key)
+    )
     params = json.dumps(values, indent=2, sort_keys=True)
     path.write_text(
         f"""<!doctype html>
@@ -301,13 +312,14 @@ def write_html_summary(values: dict[str, dict[str, Any]], products: dict[str, st
 <main>
   <section>
     <p>Geometry/configuration shell only. POWHEG, PYTHIA, GEANT4, forward neutrino geodesics, optical-depth DIS, and active observer bridge are disabled.</p>
-    <p>Config: <code>{config}</code> Provenance: <code>{provenance}</code></p>
+    <p>Config: <a href="{config}"><code>{config}</code></a> Provenance: <a href="{provenance}"><code>{provenance}</code></a></p>
   </section>
   <section class="grid">
     <figure><img src="{preview}" alt="HADROS3 geometry preview"><figcaption>Geometry preview</figcaption></figure>
     <figure><img src="{schematic}" alt="HADROS3 schematic"><figcaption>System schematic</figcaption></figure>
     <figure><img src="{camera_preview}" alt="HADROS3 camera preview"><figcaption>Camera preview</figcaption></figure>
   </section>
+  <section><h2>Products</h2><ul>{product_links}</ul></section>
   <section><h2>Parameters</h2><pre>{params}</pre></section>
 </main>
 </body>

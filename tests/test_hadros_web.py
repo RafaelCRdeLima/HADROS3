@@ -114,13 +114,13 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source() -
     assert payload["outputs"]["paths"]["uhe_source_direction_uniformity"] == "UHEsource/uhe_source_direction_uniformity.png"
     assert payload["outputs"]["paths"]["uhe_source_direction_uniformity_report"] == "UHEsource/uhe_source_direction_uniformity_report.json"
     assert payload["outputs"]["paths"]["uhe_source_direction_sphere"] == "UHEsource/uhe_source_direction_sphere.png"
-    assert payload["values"]["forward_geodesics"]["geodesic_backend"] == "full_kerr_geodesic"
+    assert payload["values"]["forward_geodesics"]["geodesic_backend"] == "cpp_hadros_original_port"
 
     assert "Forward Geodesics" in html
     assert "DIS Interaction Sampler" in html
     assert "Propagate Forward Geodesics" in html
     assert "Compute DIS Optical Depth / Sample Interactions" in html
-    assert "full_kerr_geodesic" in html
+    assert "cpp_hadros_original_port" in html
     assert "Full Kerr null geodesic propagation" in html
     assert "Initial Direction" in html
     assert "Isotropic local" in html

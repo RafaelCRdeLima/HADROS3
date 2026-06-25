@@ -46,7 +46,12 @@ def test_forward_geodesics_consume_h3_w5_source_and_write_outputs(tmp_path: Path
     assert summary["forward_neutrino_geodesics_invoked"] is True
     assert summary["momentum_generator"] == "KerrNullMomentumGenerator"
     assert summary["momentum_is_physical_kerr"] is True
-    assert summary["geodesic_backend"] == "full_kerr_geodesic"
+    assert summary["forward_backend"] == "cpp_hadros_original_port"
+    assert summary["geodesic_backend"] == "cpp_hadros_original_port"
+    assert summary["backend_kind"] == "ported_hadros_kerr_engine"
+    assert summary["uses_hadros_original_runtime_path"] is False
+    assert summary["uses_hamiltonian"] is True
+    assert summary["uses_zamo_tetrad"] is True
     assert summary["full_kerr_geodesic"] is True
     assert summary["theta_phi_evolution"] is True
     assert summary["uses_kerr_metric"] is True
@@ -139,7 +144,7 @@ def test_forward_geodesic_validation_report_and_stop_statistics(tmp_path: Path) 
     summary_path = tmp_path / "ForwardGeodesics" / "uhe_neutrino_forward_summary.json"
     summary_json = json.loads(summary_path.read_text(encoding="utf-8"))
     assert summary_json["direction_model"] == "coordinate_radial_outward"
-    assert summary_json["geodesic_backend"] == "full_kerr_geodesic"
+    assert summary_json["geodesic_backend"] == "cpp_hadros_original_port"
     assert summary_json["coordinate_radial_preview"] is False
     stop_csv = (tmp_path / "ForwardGeodesics" / "stop_condition_statistics.csv").read_text(encoding="utf-8")
     assert "stop_condition,count,fraction" in stop_csv

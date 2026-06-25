@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,10 @@ from .geodesic_outputs import (
 from .geodesic_validation import validate_forward_products
 from .paths import FORWARD_GEODESICS_DIR, forward_geodesics_dir, uhe_source_dir
 from .source_models import IsotropicLocalDirectionGenerator, KerrNullMomentumGenerator
+
+
+ROOT = Path(__file__).resolve().parents[1]
+FORWARD_CPP_EXECUTABLE = ROOT / "bin" / "hadros3_forward_geodesics"
 
 
 @dataclass(frozen=True)
@@ -776,6 +781,11 @@ def generate_forward_geodesic_products(values: dict[str, dict[str, Any]], *, run
     config_problems = validate_values(values)
     if config_problems:
         raise ValueError("Invalid HADROS3 configuration:\n- " + "\n- ".join(config_problems))
+    backend = str(values.get("forward_geodesics", {}).get("forward_backend", "cpp_hadros_original_port"))
+    if backend == "cpp_hadros_original_port":
+        return generate_forward_geodesic_products_cpp(values, run_output_dir=run_output_dir)
+    if backend != "python_prototype":
+        raise ValueError(f"unsupported forward_geodesics.forward_backend: {backend}")
     config = config_from_values(values)
     source_path = uhe_source_dir(run_output_dir) / "uhe_neutrino_source_samples.jsonl"
     output_dir = forward_geodesics_dir(run_output_dir)
@@ -816,6 +826,13 @@ def generate_forward_geodesic_products(values: dict[str, dict[str, Any]], *, run
     diagnostic_path = output_dir / "forward_geodesics_diagnostic_report.md"
     summary = {
         "status": "ok" if not validation_errors else "validation_failed",
+        "backend_language": "Python",
+        "backend_executable": "hadros3.forward_geodesics",
+        "backend_version_or_git_commit": "python-prototype",
+        "forward_backend": "python_prototype",
+        "cpp_backend_used": False,
+        "cuda_backend_used": False,
+        "python_prototype_used": True,
         "forward_neutrino_geodesics_invoked": True,
         "momentum_generator": KerrNullMomentumGenerator.name,
         "momentum_is_physical_kerr": True,
@@ -894,6 +911,165 @@ def generate_forward_geodesic_products(values: dict[str, dict[str, Any]], *, run
     draw_forward_geometry_3d(values, paths, segments, geometry_3d_path, geometry_3d_json_path, geometry_3d_html_path)
     strong_diagnostic = generate_strong_field_diagnostic(values, output_dir)
     summary["strong_field_diagnostic"] = strong_diagnostic
+    write_json(summary_json_path, summary)
+    write_diagnostic_report(summary, generated_files, diagnostic_path)
+    return summary
+
+
+def _runtime_config_path(values: dict[str, dict[str, Any]], run_output_dir: Path) -> Path:
+    metadata_dir = run_output_dir / "RunMetadata"
+    metadata_dir.mkdir(parents=True, exist_ok=True)
+    path = metadata_dir / "hadros3_config.json"
+    path.write_text(json.dumps({"hadros3_values": values}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return path
+
+
+def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        raise FileNotFoundError(path)
+    records: list[dict[str, Any]] = []
+    with path.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if line:
+                records.append(json.loads(line))
+    return records
+
+
+def generate_forward_geodesic_products_cpp(values: dict[str, dict[str, Any]], *, run_output_dir: Path) -> dict[str, Any]:
+    if not FORWARD_CPP_EXECUTABLE.exists():
+        raise FileNotFoundError(
+            f"H3-W6 C++ backend not built: {FORWARD_CPP_EXECUTABLE}. Run `make cpp`, or set forward_backend=python_prototype."
+        )
+    config = config_from_values(values)
+    source_path = uhe_source_dir(run_output_dir) / "uhe_neutrino_source_samples.jsonl"
+    output_dir = forward_geodesics_dir(run_output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    _runtime_config_path(values, run_output_dir)
+    subprocess.run(
+        [str(FORWARD_CPP_EXECUTABLE), "--run-output", str(run_output_dir)],
+        cwd=ROOT,
+        check=True,
+    )
+    paths_path = output_dir / "uhe_neutrino_forward_paths.jsonl"
+    segments_path = output_dir / "uhe_neutrino_forward_path_segments.jsonl"
+    summary_csv_path = output_dir / "uhe_neutrino_forward_summary.csv"
+    summary_json_path = output_dir / "uhe_neutrino_forward_summary.json"
+    preview_path = output_dir / "uhe_neutrino_forward_preview.png"
+    geometry_3d_path = output_dir / "uhe_neutrino_forward_geometry_3d.png"
+    geometry_3d_json_path = output_dir / "uhe_neutrino_forward_geometry_3d.json"
+    geometry_3d_html_path = output_dir / "uhe_neutrino_forward_geometry_3d.html"
+    strong_diagnostic_png_path = output_dir / "isotropic_kerr_strong_field_diagnostic.png"
+    strong_diagnostic_json_path = output_dir / "isotropic_kerr_strong_field_diagnostic.json"
+    validation_path = output_dir / "geodesic_validation_report.json"
+    stop_path = output_dir / "stop_condition_statistics.csv"
+    diagnostic_path = output_dir / "forward_geodesics_diagnostic_report.md"
+
+    paths = _read_jsonl(paths_path)
+    segments = _read_jsonl(segments_path)
+    source_samples = load_source_samples(source_path)
+    samples = _sample_subset(source_samples, config.n_samples_to_propagate)
+    validation_errors, validation_report, stop_counts = validate_forward_products(
+        paths,
+        segments,
+        expected_paths=len(samples),
+        null_tolerance=config.null_invariant_tolerance,
+        killing_energy_tolerance=config.killing_energy_tolerance,
+        lz_tolerance=config.lz_tolerance,
+    )
+    max_delta_theta = max((float(path.get("max_delta_theta_rad", 0.0)) for path in paths), default=0.0)
+    max_delta_phi = max((float(path.get("max_delta_phi_rad", 0.0)) for path in paths), default=0.0)
+    curvature_indicator_max = max((float(path.get("curvature_indicator_max", 0.0)) for path in paths), default=0.0)
+    summary = json.loads(summary_json_path.read_text(encoding="utf-8")) if summary_json_path.exists() else {}
+    summary.update(
+        {
+            "status": "ok" if not validation_errors else "validation_failed",
+            "backend_language": "C++17",
+            "backend_executable": "bin/hadros3_forward_geodesics",
+            "backend_version_or_git_commit": "local-build",
+            "backend_kind": "ported_hadros_kerr_engine",
+            "forward_backend": "cpp_hadros_original_port",
+            "cpp_backend_used": True,
+            "cuda_backend_used": False,
+            "python_prototype_used": False,
+            "uses_hadros_original_runtime_path": False,
+            "uses_hamiltonian": True,
+            "uses_zamo_tetrad": True,
+            "forward_neutrino_geodesics_invoked": True,
+            "momentum_generator": KerrNullMomentumGenerator.name,
+            "momentum_is_physical_kerr": True,
+            "input_source_samples": str(source_path),
+            "n_input_samples": len(source_samples),
+            "geodesic_backend": config.geodesic_backend,
+            "n_samples_requested": config.n_samples_to_propagate,
+            "n_samples_propagated": len(samples),
+            "n_paths": len(paths),
+            "n_segments": len(segments),
+            "max_steps": config.max_steps,
+            "initial_step_rg": config.initial_step_rg,
+            "outer_radius_rg": config.outer_radius_rg,
+            "horizon_tolerance_rg": config.horizon_tolerance_rg,
+            "null_invariant_tolerance": config.null_invariant_tolerance,
+            "killing_energy_tolerance": config.killing_energy_tolerance,
+            "lz_tolerance": config.lz_tolerance,
+            "stop_condition_counts": stop_counts,
+            "max_delta_theta_rad": max_delta_theta,
+            "max_delta_phi_rad": max_delta_phi,
+            "curvature_indicator_max": curvature_indicator_max,
+            "full_kerr_geodesic": True,
+            "theta_phi_evolution": True,
+            "uses_kerr_metric": True,
+            "uses_christoffel_or_hamiltonian": True,
+            "coordinate_radial_preview": False,
+            "validation_errors": validation_errors,
+            **validation_report,
+            "optical_depth_dis_sampler_invoked": False,
+            "observer_bridge_active_filter_invoked": False,
+            "expensive_event_generation_invoked": False,
+            "forward_geodesics_consumes_source_direction": True,
+            "four_momentum_constructed_from_source_direction": True,
+            "four_momentum_sampled_in_source": False,
+            "products": {
+                "forward_paths": str(paths_path),
+                "forward_path_segments": str(segments_path),
+                "forward_summary": str(summary_csv_path),
+                "forward_summary_json": str(summary_json_path),
+                "forward_preview": str(preview_path),
+                "forward_geometry_3d": str(geometry_3d_path),
+                "forward_geometry_3d_json": str(geometry_3d_json_path),
+                "forward_geometry_3d_html": str(geometry_3d_html_path),
+                "isotropic_kerr_strong_field_diagnostic_png": str(strong_diagnostic_png_path),
+                "isotropic_kerr_strong_field_diagnostic_json": str(strong_diagnostic_json_path),
+                "geodesic_validation_report": str(validation_path),
+                "stop_condition_statistics": str(stop_path),
+                "diagnostic_report": str(diagnostic_path),
+            },
+        }
+    )
+    write_summary_csv(summary, summary_csv_path)
+    write_json(summary_json_path, summary)
+    write_json(validation_path, validation_report)
+    write_stop_condition_csv(stop_counts, len(paths), stop_path)
+    generated_files = [
+        paths_path,
+        segments_path,
+        summary_csv_path,
+        summary_json_path,
+        preview_path,
+        geometry_3d_path,
+        geometry_3d_json_path,
+        geometry_3d_html_path,
+        strong_diagnostic_png_path,
+        strong_diagnostic_json_path,
+        validation_path,
+        stop_path,
+        diagnostic_path,
+    ]
+    draw_forward_preview(paths, segments, preview_path, outer_radius_rg=config.outer_radius_rg)
+    draw_forward_geometry_3d(values, paths, segments, geometry_3d_path, geometry_3d_json_path, geometry_3d_html_path)
+    strong_diagnostic = generate_strong_field_diagnostic(values, output_dir)
+    summary["strong_field_diagnostic"] = strong_diagnostic
+    summary["python_prototype_used_for_auxiliary_strong_field_diagnostic"] = True
     write_json(summary_json_path, summary)
     write_diagnostic_report(summary, generated_files, diagnostic_path)
     return summary

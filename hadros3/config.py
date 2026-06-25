@@ -152,11 +152,19 @@ def schema() -> list[dict[str, Any]]:
             "fields": [
                 field(
                     "forward_geodesics",
+                    "forward_backend",
+                    "Forward backend",
+                    "cpp_hadros_original_port",
+                    kind="select",
+                    options=["cpp_hadros_original_port", "python_prototype"],
+                ),
+                field(
+                    "forward_geodesics",
                     "geodesic_backend",
                     "Geodesic backend",
-                    "full_kerr_geodesic",
+                    "cpp_hadros_original_port",
                     kind="select",
-                    options=["full_kerr_geodesic"],
+                    options=["cpp_hadros_original_port"],
                 ),
                 field("forward_geodesics", "n_samples_to_propagate", "Neutrinos to propagate", 64, kind="number"),
                 field("forward_geodesics", "initial_step_rg", "Initial step", 1.0, kind="number"),
@@ -409,7 +417,7 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
             problems.append("uhe_neutrino_source.energy_gev must be positive")
     except ValueError as exc:
         problems.append(f"uhe_neutrino_source.energy_gev is invalid: {exc}")
-    if str(forward.get("geodesic_backend")) != "full_kerr_geodesic":
+    if str(forward.get("geodesic_backend")) != "cpp_hadros_original_port":
         problems.append("forward_geodesics.geodesic_backend is unsupported in H3-W6")
     if int(float(forward.get("n_samples_to_propagate", 0))) <= 0:
         problems.append("forward_geodesics.n_samples_to_propagate must be positive")

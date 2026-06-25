@@ -907,6 +907,7 @@ function renderForwardPanel() {{
     <div class="summary-item"><strong>Uses</strong>position + energy + emission_direction</div>
     <div class="summary-item"><strong>Builds</strong>Kerr null four-momentum <code>p_mu</code></div>
     <div class="summary-item"><strong>Propagation</strong>Full Kerr null geodesic propagation</div>
+    <div class="summary-item"><strong>Physics backend</strong><code>${{summary ? (summary.forward_backend || "pending") : (state.values.forward_geodesics.forward_backend || "pending")}}</code></div>
   </div>`;
   const forwardLinks = `<div class="output-link-grid">
     ${{state.outputs.forward_geometry_3d_html_exists ? `<a href="${{outUrl("forward_geometry_3d_html")}}" target="_blank">Interactive 3D geometry<br><code>${{outPath("forward_geometry_3d_html")}}</code></a>` : ""}}
@@ -939,6 +940,13 @@ function renderForwardPanel() {{
     <div class="summary-item"><strong>Validation</strong>${{summary.validation_pass}}</div>
     <div class="summary-item"><strong>Momentum</strong>${{summary.momentum_generator}}</div>
     <div class="summary-item"><strong>Kerr physical?</strong>${{summary.momentum_is_physical_kerr}}</div>
+    <div class="summary-item"><strong>Backend language</strong>${{summary.backend_language || "pending"}}</div>
+    <div class="summary-item"><strong>Backend kind</strong>${{summary.backend_kind || "pending"}}</div>
+    <div class="summary-item"><strong>Backend executable</strong><code>${{summary.backend_executable || "pending"}}</code></div>
+    <div class="summary-item"><strong>Runtime ../HADROS</strong>${{String(summary.uses_hadros_original_runtime_path)}}</div>
+    <div class="summary-item"><strong>Hamiltonian</strong>${{String(summary.uses_hamiltonian)}}</div>
+    <div class="summary-item"><strong>ZAMO tetrad</strong>${{String(summary.uses_zamo_tetrad)}}</div>
+    <div class="summary-item"><strong>Python prototype used</strong>${{String(summary.python_prototype_used)}}</div>
   </div><p class="note"><strong>Stop conditions:</strong> ${{stops}}</p>${{forwardLinks}}` : `${{inputStatus}}<p class="note">Forward geodesics inactive. Generate UHE Source samples first, then propagate here.</p>`;
   return `<div class="source-panel">
     <button type="button" id="forward-geodesics-button" class="source-action">Propagate Forward Geodesics</button>
@@ -967,6 +975,7 @@ function renderDisPanel() {{
   </div></section>`;
   const configHtml = `<section><h2>Configuration</h2>
     <div class="camera-controls-card"><h3>Medium</h3>
+      ${{disInput("dis_backend")}}
       ${{disInput("medium_model")}}
       ${{disInput("medium_velocity_model")}}
       ${{disInput("density_floor_g_cm3")}}
@@ -989,6 +998,10 @@ function renderDisPanel() {{
     <div class="summary-item"><strong>Maximum density</strong>${{Number(summary.max_density_g_cm3 || 0).toExponential(4)}}</div>
     <div class="summary-item"><strong>Maximum sigma</strong>${{Number(summary.max_sigma_cm2 || 0).toExponential(4)}}</div>
     <div class="summary-item"><strong>Maximum d_tau</strong>${{Number(summary.max_d_tau || 0).toExponential(4)}}</div>
+    <div class="summary-item"><strong>DIS backend</strong><code>${{summary.dis_backend || "pending"}}</code></div>
+    <div class="summary-item"><strong>Backend language</strong>${{summary.backend_language || "pending"}}</div>
+    <div class="summary-item"><strong>Backend executable</strong><code>${{summary.backend_executable || "pending"}}</code></div>
+    <div class="summary-item"><strong>Python prototype used</strong>${{String(summary.python_prototype_used)}}</div>
     <div class="summary-item"><strong>sigma_table_path</strong><code>${{summary.sigma_table_path || "pending"}}</code></div>
     <div class="summary-item"><strong>sigma_table_rows</strong>${{summary.sigma_table_rows ?? "pending"}}</div>
     <div class="summary-item"><strong>sigma_table_is_compact_builtin_adapter</strong>${{String(summary.sigma_table_is_compact_builtin_adapter)}}</div>

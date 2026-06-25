@@ -29,7 +29,8 @@
     "planned_model": "POWHEG_PYTHIA_future"
   },
   "forward_geodesics": {
-    "geodesic_backend": "full_kerr_geodesic",
+    "forward_backend": "cpp_hadros_original_port",
+    "geodesic_backend": "cpp_hadros_original_port",
     "horizon_tolerance_rg": 0.001,
     "initial_step_rg": 1.0,
     "killing_energy_tolerance": 1e-10,

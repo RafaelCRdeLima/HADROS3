@@ -75,6 +75,11 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
     geodesic_validation_path = forward_dir / "geodesic_validation_report.json"
     stop_statistics_path = forward_dir / "stop_condition_statistics.csv"
     diagnostic_report_path = forward_dir / "forward_geodesics_diagnostic_report.md"
+    validation_invariants_path = forward_dir / "validation_invariants.png"
+    bending_vs_impact_path = forward_dir / "kerr_bending_vs_impact_parameter.png"
+    stop_distribution_path = forward_dir / "stop_condition_distribution.png"
+    geodesic_density_map_path = forward_dir / "geodesic_density_map.png"
+    forward_diagnostics_report_path = forward_dir / "forward_geodesics_diagnostics_report.json"
     dis_path_depths_path = dis_output_dir / "dis_path_optical_depths.jsonl"
     dis_candidates_path = dis_output_dir / "dis_interaction_candidates.jsonl"
     dis_accepted_path = dis_output_dir / "dis_accepted_interactions.jsonl"
@@ -145,6 +150,11 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             "geodesic_validation_report_exists": geodesic_validation_path.exists(),
             "stop_condition_statistics_exists": stop_statistics_path.exists(),
             "forward_diagnostic_report_exists": diagnostic_report_path.exists(),
+            "validation_invariants_exists": validation_invariants_path.exists(),
+            "kerr_bending_vs_impact_parameter_exists": bending_vs_impact_path.exists(),
+            "stop_condition_distribution_exists": stop_distribution_path.exists(),
+            "geodesic_density_map_exists": geodesic_density_map_path.exists(),
+            "forward_geodesics_diagnostics_report_exists": forward_diagnostics_report_path.exists(),
         },
         "dis_interaction_sampler": {
             "configured_status": values.get("dis_interaction_sampler", {}).get("status"),
@@ -219,6 +229,11 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             "geodesic_validation_report_exists": geodesic_validation_path.exists(),
             "stop_condition_statistics_exists": stop_statistics_path.exists(),
             "forward_diagnostic_report_exists": diagnostic_report_path.exists(),
+            "validation_invariants_exists": validation_invariants_path.exists(),
+            "kerr_bending_vs_impact_parameter_exists": bending_vs_impact_path.exists(),
+            "stop_condition_distribution_exists": stop_distribution_path.exists(),
+            "geodesic_density_map_exists": geodesic_density_map_path.exists(),
+            "forward_geodesics_diagnostics_report_exists": forward_diagnostics_report_path.exists(),
             "dis_path_optical_depths_exists": dis_path_depths_path.exists(),
             "dis_interaction_candidates_exists": dis_candidates_path.exists(),
             "dis_accepted_interactions_exists": dis_accepted_path.exists(),
@@ -261,6 +276,11 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "geodesic_validation_report": rel(geodesic_validation_path, output_dir),
                 "stop_condition_statistics": rel(stop_statistics_path, output_dir),
                 "forward_diagnostic_report": rel(diagnostic_report_path, output_dir),
+                "validation_invariants": rel(validation_invariants_path, output_dir),
+                "kerr_bending_vs_impact_parameter": rel(bending_vs_impact_path, output_dir),
+                "stop_condition_distribution": rel(stop_distribution_path, output_dir),
+                "geodesic_density_map": rel(geodesic_density_map_path, output_dir),
+                "forward_geodesics_diagnostics_report": rel(forward_diagnostics_report_path, output_dir),
                 "dis_path_optical_depths": rel(dis_path_depths_path, output_dir),
                 "dis_interaction_candidates": rel(dis_candidates_path, output_dir),
                 "dis_accepted_interactions": rel(dis_accepted_path, output_dir),
@@ -957,6 +977,14 @@ function renderForwardPanel() {{
     ${{state.outputs.stop_condition_statistics_exists ? `<a href="${{outUrl("stop_condition_statistics")}}" target="_blank">Stops<br><code>${{outPath("stop_condition_statistics")}}</code></a>` : ""}}
     ${{state.outputs.forward_diagnostic_report_exists ? `<a href="${{outUrl("forward_diagnostic_report")}}" target="_blank">Diagnostic report<br><code>${{outPath("forward_diagnostic_report")}}</code></a>` : ""}}
   </div>`;
+  const diagnosticsReady = state.outputs.validation_invariants_exists || state.outputs.kerr_bending_vs_impact_parameter_exists || state.outputs.stop_condition_distribution_exists || state.outputs.geodesic_density_map_exists || state.outputs.forward_geodesics_diagnostics_report_exists;
+  const diagnosticsHtml = diagnosticsReady ? `<section><h2>Diagnostics</h2><div class="output-link-grid">
+    ${{state.outputs.validation_invariants_exists ? `<a href="${{outUrl("validation_invariants")}}" target="_blank">Invariant conservation<br><code>${{outPath("validation_invariants")}}</code></a><img src="${{outUrl("validation_invariants")}}" alt="Forward geodesic invariant conservation">` : ""}}
+    ${{state.outputs.kerr_bending_vs_impact_parameter_exists ? `<a href="${{outUrl("kerr_bending_vs_impact_parameter")}}" target="_blank">Kerr bending vs impact parameter<br><code>${{outPath("kerr_bending_vs_impact_parameter")}}</code></a><img src="${{outUrl("kerr_bending_vs_impact_parameter")}}" alt="Kerr bending vs impact parameter">` : ""}}
+    ${{state.outputs.stop_condition_distribution_exists ? `<a href="${{outUrl("stop_condition_distribution")}}" target="_blank">Stop condition distribution<br><code>${{outPath("stop_condition_distribution")}}</code></a><img src="${{outUrl("stop_condition_distribution")}}" alt="Forward geodesic stop condition distribution">` : ""}}
+    ${{state.outputs.geodesic_density_map_exists ? `<a href="${{outUrl("geodesic_density_map")}}" target="_blank">Geodesic density map<br><code>${{outPath("geodesic_density_map")}}</code></a><img src="${{outUrl("geodesic_density_map")}}" alt="Forward geodesic density map">` : ""}}
+    ${{state.outputs.forward_geodesics_diagnostics_report_exists ? `<a href="${{outUrl("forward_geodesics_diagnostics_report")}}" target="_blank">Diagnostics JSON report<br><code>${{outPath("forward_geodesics_diagnostics_report")}}</code></a>` : ""}}
+  </div></section>` : `<section><h2>Diagnostics</h2><p class="note">Diagnostics will be generated automatically with forward geodesic propagation.</p></section>`;
   const stops = summary && summary.stop_condition_counts ? Object.entries(summary.stop_condition_counts).map(([k, v]) => `${{k}}=${{v}}`).join(", ") : "none";
   const summaryHtml = summary ? `${{inputStatus}}<div class="summary-grid">
     <div class="summary-item"><strong>Status</strong>${{summary.status}}</div>
@@ -980,7 +1008,7 @@ function renderForwardPanel() {{
     <div class="summary-item"><strong>Hamiltonian</strong>${{String(summary.uses_hamiltonian)}}</div>
     <div class="summary-item"><strong>ZAMO tetrad</strong>${{String(summary.uses_zamo_tetrad)}}</div>
     <div class="summary-item"><strong>Python prototype used</strong>${{String(summary.python_prototype_used)}}</div>
-  </div><p class="note"><strong>Stop conditions:</strong> ${{stops}}</p>${{forwardLinks}}` : `${{inputStatus}}<p class="note">Forward geodesics inactive. Generate UHE Source samples first, then propagate here.</p>`;
+  </div><p class="note"><strong>Stop conditions:</strong> ${{stops}}</p>${{forwardLinks}}${{diagnosticsHtml}}` : `${{inputStatus}}<p class="note">Forward geodesics inactive. Generate UHE Source samples first, then propagate here.</p>${{diagnosticsHtml}}`;
   return `<div class="source-panel">
     <button type="button" id="forward-geodesics-button" class="source-action">Propagate Forward Geodesics</button>
     ${{summaryHtml}}
@@ -1147,6 +1175,15 @@ function renderOutputsPanel() {{
     ${{link(out.geodesic_validation_report_exists, "geodesic_validation_report", "Geodesic validation")}}
     ${{link(out.stop_condition_statistics_exists, "stop_condition_statistics", "Stop conditions")}}
     ${{link(out.forward_diagnostic_report_exists, "forward_diagnostic_report", "Forward diagnostic report")}}
+    ${{link(out.validation_invariants_exists, "validation_invariants", "Validation invariants")}}
+    ${{out.validation_invariants_exists ? `<img src="${{outUrl("validation_invariants")}}" alt="Forward geodesic invariant conservation">` : ""}}
+    ${{link(out.kerr_bending_vs_impact_parameter_exists, "kerr_bending_vs_impact_parameter", "Kerr bending vs impact parameter")}}
+    ${{out.kerr_bending_vs_impact_parameter_exists ? `<img src="${{outUrl("kerr_bending_vs_impact_parameter")}}" alt="Kerr bending vs impact parameter">` : ""}}
+    ${{link(out.stop_condition_distribution_exists, "stop_condition_distribution", "Stop condition distribution")}}
+    ${{out.stop_condition_distribution_exists ? `<img src="${{outUrl("stop_condition_distribution")}}" alt="Forward geodesic stop condition distribution">` : ""}}
+    ${{link(out.geodesic_density_map_exists, "geodesic_density_map", "Geodesic density map")}}
+    ${{out.geodesic_density_map_exists ? `<img src="${{outUrl("geodesic_density_map")}}" alt="Forward geodesic density map">` : ""}}
+    ${{link(out.forward_geodesics_diagnostics_report_exists, "forward_geodesics_diagnostics_report", "Forward diagnostics JSON")}}
   `) + group("DIS/", `
     ${{link(out.dis_tau_preview_exists, "dis_tau_preview", "DIS tau preview")}}
     ${{out.dis_tau_preview_exists ? `<img src="${{outUrl("dis_tau_preview")}}" alt="DIS tau preview">` : ""}}

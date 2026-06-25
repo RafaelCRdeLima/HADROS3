@@ -104,6 +104,11 @@ def ensure_output_layout(run_output: Path) -> None:
             "geodesic_validation_report.json",
             "stop_condition_statistics.csv",
             "forward_geodesics_diagnostic_report.md",
+            "validation_invariants.png",
+            "kerr_bending_vs_impact_parameter.png",
+            "stop_condition_distribution.png",
+            "geodesic_density_map.png",
+            "forward_geodesics_diagnostics_report.json",
         ],
         DIS_DIR: [
             "dis_path_optical_depths.jsonl",

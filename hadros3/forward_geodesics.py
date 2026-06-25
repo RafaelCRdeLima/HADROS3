@@ -777,6 +777,181 @@ def generate_strong_field_diagnostic(values: dict[str, dict[str, Any]], output_d
     return payload
 
 
+def _finite_float(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _abs_finite_values(records: list[dict[str, Any]], key: str) -> list[float]:
+    values: list[float] = []
+    for record in records:
+        number = _finite_float(record.get(key))
+        if number is not None:
+            values.append(abs(number))
+    return values
+
+
+def _mean(values: list[float]) -> float:
+    return sum(values) / len(values) if values else math.inf
+
+
+def _path_impact_parameter(path: dict[str, Any]) -> float | None:
+    momentum = path.get("initial_momentum")
+    if not isinstance(momentum, dict):
+        return None
+    energy = _finite_float(momentum.get("killing_energy_gev"))
+    lz = _finite_float(momentum.get("lz"))
+    if energy is not None and lz is not None and abs(energy) > 0.0:
+        return abs(lz / energy)
+    four_momentum = momentum.get("four_momentum")
+    if isinstance(four_momentum, dict):
+        p_t = _finite_float(four_momentum.get("p_t"))
+        p_phi = _finite_float(four_momentum.get("p_phi"))
+        if p_t is not None and p_phi is not None and abs(p_t) > 0.0:
+            return abs(p_phi / p_t)
+    return None
+
+
+def _write_forward_diagnostics(
+    paths: list[dict[str, Any]],
+    segments: list[dict[str, Any]],
+    stop_counts: dict[str, int],
+    output_dir: Path,
+) -> dict[str, Any]:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    validation_png = output_dir / "validation_invariants.png"
+    bending_png = output_dir / "kerr_bending_vs_impact_parameter.png"
+    stop_png = output_dir / "stop_condition_distribution.png"
+    density_png = output_dir / "geodesic_density_map.png"
+    report_json = output_dir / "forward_geodesics_diagnostics_report.json"
+
+    null_errors = _abs_finite_values(paths, "null_norm_max_abs")
+    energy_errors = _abs_finite_values(paths, "killing_energy_max_error")
+    lz_errors = _abs_finite_values(paths, "lz_max_error")
+
+    fig, ax = plt.subplots(figsize=(10, 5.4), facecolor="white")
+    if null_errors:
+        ax.semilogy(range(1, len(null_errors) + 1), null_errors, marker="o", markersize=3, linewidth=1.0, label="null norm max abs")
+    if energy_errors:
+        ax.semilogy(range(1, len(energy_errors) + 1), energy_errors, marker="s", markersize=3, linewidth=1.0, label="Killing energy relative error")
+    if lz_errors:
+        ax.semilogy(range(1, len(lz_errors) + 1), lz_errors, marker="^", markersize=3, linewidth=1.0, label="L_z absolute error")
+    if not (null_errors or energy_errors or lz_errors):
+        ax.text(0.5, 0.5, "No invariant data available", ha="center", va="center", transform=ax.transAxes)
+    ax.set_xlabel("geodesic path")
+    ax.set_ylabel("absolute error")
+    ax.set_title("Forward geodesic invariant conservation")
+    ax.grid(True, which="both", linestyle="--", alpha=0.35)
+    ax.legend(loc="best")
+    fig.tight_layout()
+    fig.savefig(validation_png, dpi=170)
+    plt.close(fig)
+
+    impact_values: list[float] = []
+    bending_values: list[float] = []
+    for path in paths:
+        impact = _path_impact_parameter(path)
+        bending = _finite_float(path.get("max_delta_phi_rad"))
+        if impact is not None and bending is not None:
+            impact_values.append(impact)
+            bending_values.append(abs(bending))
+    fig, ax = plt.subplots(figsize=(8.5, 5.4), facecolor="white")
+    if impact_values:
+        ax.scatter(impact_values, bending_values, s=28, alpha=0.75, color="#2563eb", edgecolor="#0f172a", linewidth=0.35)
+    else:
+        ax.text(0.5, 0.5, "No impact/bending data available", ha="center", va="center", transform=ax.transAxes)
+    ax.set_xlabel("impact parameter |L_z / E|")
+    ax.set_ylabel("bending max_delta_phi_rad")
+    ax.set_title("Kerr bending vs impact parameter")
+    ax.grid(True, linestyle="--", alpha=0.35)
+    fig.tight_layout()
+    fig.savefig(bending_png, dpi=170)
+    plt.close(fig)
+
+    ordered_conditions = ["horizon_crossing", "outer_escape_radius", "max_steps", "invalid_invariant"]
+    extra_conditions = sorted(condition for condition in stop_counts if condition not in ordered_conditions)
+    conditions = ordered_conditions + extra_conditions
+    counts = [int(stop_counts.get(condition, 0)) for condition in conditions]
+    fig, ax = plt.subplots(figsize=(8.5, 5.0), facecolor="white")
+    ax.bar(conditions, counts, color="#0f766e")
+    ax.set_ylabel("count")
+    ax.set_title("Forward geodesic stop condition distribution")
+    ax.tick_params(axis="x", rotation=24)
+    ax.grid(True, axis="y", linestyle="--", alpha=0.35)
+    fig.tight_layout()
+    fig.savefig(stop_png, dpi=170)
+    plt.close(fig)
+
+    density_r: list[float] = []
+    density_z: list[float] = []
+    for segment in segments:
+        r_mid = _finite_float(segment.get("r_mid_rg"))
+        theta_mid = _finite_float(segment.get("theta_mid_rad"))
+        if r_mid is None or theta_mid is None:
+            r_start = _finite_float(segment.get("r_start_rg"))
+            r_end = _finite_float(segment.get("r_end_rg"))
+            theta_start = _finite_float(segment.get("theta_start_rad"))
+            theta_end = _finite_float(segment.get("theta_end_rad"))
+            if None in (r_start, r_end, theta_start, theta_end):
+                continue
+            r_mid = 0.5 * (float(r_start) + float(r_end))
+            theta_mid = 0.5 * (float(theta_start) + float(theta_end))
+        density_r.append(r_mid * math.sin(theta_mid))
+        density_z.append(r_mid * math.cos(theta_mid))
+    fig, ax = plt.subplots(figsize=(8.0, 7.0), facecolor="white")
+    if density_r:
+        image = ax.hist2d(density_r, density_z, bins=80, cmap="magma")
+        fig.colorbar(image[3], ax=ax, label="segment midpoint count")
+    else:
+        ax.text(0.5, 0.5, "No segment data available", ha="center", va="center", transform=ax.transAxes)
+    ax.set_aspect("equal", adjustable="box")
+    ax.set_xlabel("R = r sin(theta) / r_g")
+    ax.set_ylabel("z = r cos(theta) / r_g")
+    ax.set_title("Forward geodesic density map")
+    ax.grid(True, linestyle="--", alpha=0.25)
+    fig.tight_layout()
+    fig.savefig(density_png, dpi=170)
+    plt.close(fig)
+
+    report = {
+        "n_paths": len(paths),
+        "n_segments": len(segments),
+        "null_norm_max": max(null_errors) if null_errors else math.inf,
+        "null_norm_mean": _mean(null_errors),
+        "killing_energy_error_max": max(energy_errors) if energy_errors else math.inf,
+        "killing_energy_error_mean": _mean(energy_errors),
+        "lz_error_max": max(lz_errors) if lz_errors else math.inf,
+        "lz_error_mean": _mean(lz_errors),
+        "impact_parameter_definition": "impact_parameter = |L_z / E| from initial Kerr null momentum",
+        "bending_definition": "bending = max_delta_phi_rad (max absolute wrapped Boyer-Lindquist azimuthal deflection along path)",
+        "bending_min": min(bending_values) if bending_values else math.inf,
+        "bending_mean": _mean(bending_values),
+        "bending_max": max(bending_values) if bending_values else math.inf,
+        "stop_condition_counts": stop_counts,
+        "density_map_projection": "meridional plane: R = r sin(theta), z = r cos(theta), using segment midpoints",
+        "diagnostics_generated": True,
+    }
+    write_json(report_json, report)
+    return {
+        "report": report,
+        "products": {
+            "validation_invariants": str(validation_png),
+            "kerr_bending_vs_impact_parameter": str(bending_png),
+            "stop_condition_distribution": str(stop_png),
+            "geodesic_density_map": str(density_png),
+            "forward_geodesics_diagnostics_report": str(report_json),
+        },
+        "files": [validation_png, bending_png, stop_png, density_png, report_json],
+    }
+
+
 def generate_forward_geodesic_products(values: dict[str, dict[str, Any]], *, run_output_dir: Path) -> dict[str, Any]:
     config_problems = validate_values(values)
     if config_problems:
@@ -824,6 +999,7 @@ def generate_forward_geodesic_products(values: dict[str, dict[str, Any]], *, run
     validation_path = output_dir / "geodesic_validation_report.json"
     stop_path = output_dir / "stop_condition_statistics.csv"
     diagnostic_path = output_dir / "forward_geodesics_diagnostic_report.md"
+    diagnostics = _write_forward_diagnostics(paths, segments, stop_counts, output_dir)
     summary = {
         "status": "ok" if not validation_errors else "validation_failed",
         "backend_language": "Python",
@@ -870,6 +1046,7 @@ def generate_forward_geodesic_products(values: dict[str, dict[str, Any]], *, run
         "forward_geodesics_consumes_source_direction": True,
         "four_momentum_constructed_from_source_direction": True,
         "four_momentum_sampled_in_source": False,
+        "forward_geodesics_diagnostics": diagnostics["report"],
         "products": {
             "forward_paths": str(paths_path),
             "forward_path_segments": str(segments_path),
@@ -884,6 +1061,7 @@ def generate_forward_geodesic_products(values: dict[str, dict[str, Any]], *, run
             "geodesic_validation_report": str(validation_path),
             "stop_condition_statistics": str(stop_path),
             "diagnostic_report": str(diagnostic_path),
+            **diagnostics["products"],
         },
     }
     write_jsonl(paths, paths_path)
@@ -906,6 +1084,7 @@ def generate_forward_geodesic_products(values: dict[str, dict[str, Any]], *, run
         validation_path,
         stop_path,
         diagnostic_path,
+        *diagnostics["files"],
     ]
     draw_forward_preview(paths, segments, preview_path, outer_radius_rg=config.outer_radius_rg)
     draw_forward_geometry_3d(values, paths, segments, geometry_3d_path, geometry_3d_json_path, geometry_3d_html_path)
@@ -980,6 +1159,7 @@ def generate_forward_geodesic_products_cpp(values: dict[str, dict[str, Any]], *,
     max_delta_theta = max((float(path.get("max_delta_theta_rad", 0.0)) for path in paths), default=0.0)
     max_delta_phi = max((float(path.get("max_delta_phi_rad", 0.0)) for path in paths), default=0.0)
     curvature_indicator_max = max((float(path.get("curvature_indicator_max", 0.0)) for path in paths), default=0.0)
+    diagnostics = _write_forward_diagnostics(paths, segments, stop_counts, output_dir)
     summary = json.loads(summary_json_path.read_text(encoding="utf-8")) if summary_json_path.exists() else {}
     summary.update(
         {
@@ -1029,6 +1209,7 @@ def generate_forward_geodesic_products_cpp(values: dict[str, dict[str, Any]], *,
             "forward_geodesics_consumes_source_direction": True,
             "four_momentum_constructed_from_source_direction": True,
             "four_momentum_sampled_in_source": False,
+            "forward_geodesics_diagnostics": diagnostics["report"],
             "products": {
                 "forward_paths": str(paths_path),
                 "forward_path_segments": str(segments_path),
@@ -1043,6 +1224,7 @@ def generate_forward_geodesic_products_cpp(values: dict[str, dict[str, Any]], *,
                 "geodesic_validation_report": str(validation_path),
                 "stop_condition_statistics": str(stop_path),
                 "diagnostic_report": str(diagnostic_path),
+                **diagnostics["products"],
             },
         }
     )
@@ -1064,6 +1246,7 @@ def generate_forward_geodesic_products_cpp(values: dict[str, dict[str, Any]], *,
         validation_path,
         stop_path,
         diagnostic_path,
+        *diagnostics["files"],
     ]
     draw_forward_preview(paths, segments, preview_path, outer_radius_rg=config.outer_radius_rg)
     draw_forward_geometry_3d(values, paths, segments, geometry_3d_path, geometry_3d_json_path, geometry_3d_html_path)

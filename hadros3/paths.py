@@ -72,6 +72,11 @@ def ensure_output_layout(run_output: Path) -> None:
             "uhe_neutrino_source_summary.csv",
             "uhe_neutrino_source_summary.json",
             "uhe_neutrino_source_preview.png",
+            "uhe_source_sampling_uniformity.png",
+            "uhe_source_sampling_uniformity_report.json",
+            "uhe_source_direction_uniformity.png",
+            "uhe_source_direction_uniformity_report.json",
+            "uhe_source_direction_sphere.png",
         ],
         FORWARD_GEODESICS_DIR: [
             "uhe_neutrino_forward_paths.jsonl",

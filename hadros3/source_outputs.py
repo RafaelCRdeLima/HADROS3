@@ -126,7 +126,7 @@ def draw_source_preview(records: list[dict[str, Any]], values: dict[str, dict[st
     ax.add_patch(Circle((0.0, 0.0), 1.0, facecolor="black", edgecolor="white", linewidth=1.1, zorder=5))
     ax.text(0.0, 0.0, "BH", color="white", ha="center", va="center", fontsize=9, zorder=6)
     ax.text(-0.96 * lim, 0.88 * lim, f"UHE source samples: {len(records)}", color="#ffdf7e", fontsize=11, ha="left")
-    ax.text(-0.96 * lim, 0.82 * lim, "coordinate-volume polar_cone; coordinate radial outward direction", color="#cbd5e1", fontsize=9, ha="left")
+    ax.text(-0.96 * lim, 0.82 * lim, f"coordinate-volume polar_cone; direction={values['uhe_neutrino_source']['direction_model']}", color="#cbd5e1", fontsize=9, ha="left")
     ax.set_xlim(-lim, lim)
     ax.set_ylim(-lim, lim)
     ax.set_aspect("equal", adjustable="box")

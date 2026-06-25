@@ -55,6 +55,11 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
     source_csv_path = source_dir / "uhe_neutrino_source_summary.csv"
     source_summary_path = source_dir / "uhe_neutrino_source_summary.json"
     source_preview_path = source_dir / "uhe_neutrino_source_preview.png"
+    source_uniformity_path = source_dir / "uhe_source_sampling_uniformity.png"
+    source_uniformity_report_path = source_dir / "uhe_source_sampling_uniformity_report.json"
+    source_direction_uniformity_path = source_dir / "uhe_source_direction_uniformity.png"
+    source_direction_uniformity_report_path = source_dir / "uhe_source_direction_uniformity_report.json"
+    source_direction_sphere_path = source_dir / "uhe_source_direction_sphere.png"
     forward_paths_path = forward_dir / "uhe_neutrino_forward_paths.jsonl"
     forward_segments_path = forward_dir / "uhe_neutrino_forward_path_segments.jsonl"
     forward_summary_csv_path = forward_dir / "uhe_neutrino_forward_summary.csv"
@@ -134,6 +139,11 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             "uhe_source_summary_exists": source_csv_path.exists(),
             "uhe_source_summary_json_exists": source_summary_path.exists(),
             "uhe_source_preview_exists": source_preview_path.exists(),
+            "uhe_source_sampling_uniformity_exists": source_uniformity_path.exists(),
+            "uhe_source_sampling_uniformity_report_exists": source_uniformity_report_path.exists(),
+            "uhe_source_direction_uniformity_exists": source_direction_uniformity_path.exists(),
+            "uhe_source_direction_uniformity_report_exists": source_direction_uniformity_report_path.exists(),
+            "uhe_source_direction_sphere_exists": source_direction_sphere_path.exists(),
             "forward_paths_exists": forward_paths_path.exists(),
             "forward_path_segments_exists": forward_segments_path.exists(),
             "forward_summary_exists": forward_summary_csv_path.exists(),
@@ -162,6 +172,11 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "uhe_source_summary": rel(source_csv_path, output_dir),
                 "uhe_source_summary_json": rel(source_summary_path, output_dir),
                 "uhe_source_preview": rel(source_preview_path, output_dir),
+                "uhe_source_sampling_uniformity": rel(source_uniformity_path, output_dir),
+                "uhe_source_sampling_uniformity_report": rel(source_uniformity_report_path, output_dir),
+                "uhe_source_direction_uniformity": rel(source_direction_uniformity_path, output_dir),
+                "uhe_source_direction_uniformity_report": rel(source_direction_uniformity_report_path, output_dir),
+                "uhe_source_direction_sphere": rel(source_direction_sphere_path, output_dir),
                 "forward_paths": rel(forward_paths_path, output_dir),
                 "forward_path_segments": rel(forward_segments_path, output_dir),
                 "forward_summary": rel(forward_summary_csv_path, output_dir),
@@ -194,7 +209,7 @@ def render_html(values: dict[str, dict[str, Any]], config_path: Path) -> str:
     body {{ font-family: system-ui, sans-serif; margin: 0; background: #eef2f6; color: #18202a; }}
     header {{ padding: 18px 24px 16px; background: #000; color: white; display: grid; place-items: center; text-align: center; }}
     .brand {{ display: grid; justify-items: center; gap: 8px; }}
-    .brand-logo {{ width: min(360px, 72vw); height: 110px; object-fit: contain; display: block; }}
+    .brand-logo {{ width: min(520px, 82vw); height: 160px; object-fit: contain; display: block; }}
     main {{ max-width: 1680px; margin: 0 auto; padding: 18px; display: grid; grid-template-columns: 240px minmax(420px, 560px) minmax(560px, 1fr); gap: 18px; align-items: start; }}
     nav {{ background: white; border: 1px solid #d6dce5; border-radius: 6px; padding: 10px; position: sticky; top: 14px; }}
     .tab-button {{ display: block; width: 100%; text-align: left; margin: 0 0 6px; border-color: #d6dce5; background: #f8fafc; color: #18202a; }}
@@ -318,6 +333,13 @@ function collect() {{
   }});
   return values;
 }}
+function bindNumberInputs() {{
+  document.querySelectorAll('input[type="number"]').forEach(input => {{
+    input.addEventListener("wheel", event => {{
+      if (document.activeElement === input) event.preventDefault();
+    }}, {{ passive: false }});
+  }});
+}}
 async function post(path, body) {{
   const res = await fetch(path, {{method: "POST", headers: {{"Content-Type": "application/json"}}, body: JSON.stringify(body)}});
   const text = await res.text();
@@ -353,6 +375,11 @@ async function sampleUheSource() {{
       state.outputs.uhe_source_summary_exists = true;
       state.outputs.uhe_source_summary_json_exists = true;
       state.outputs.uhe_source_preview_exists = true;
+      state.outputs.uhe_source_sampling_uniformity_exists = true;
+      state.outputs.uhe_source_sampling_uniformity_report_exists = true;
+      state.outputs.uhe_source_direction_uniformity_exists = true;
+      state.outputs.uhe_source_direction_uniformity_report_exists = true;
+      state.outputs.uhe_source_direction_sphere_exists = true;
       state.source_status = Object.assign({{}}, state.source_status || {{}}, {{
         configured_status: state.values.uhe_neutrino_source.status,
         samples_exists: true,
@@ -683,6 +710,11 @@ function renderSourcePanel() {{
     ${{state.outputs.uhe_source_samples_exists ? `<a href="${{outUrl("uhe_source_samples")}}" target="_blank">Samples<br><code>${{outPath("uhe_source_samples")}}</code></a>` : ""}}
     ${{state.outputs.uhe_source_summary_exists ? `<a href="${{outUrl("uhe_source_summary")}}" target="_blank">Summary CSV<br><code>${{outPath("uhe_source_summary")}}</code></a>` : ""}}
     ${{state.outputs.uhe_source_summary_json_exists ? `<a href="${{outUrl("uhe_source_summary_json")}}" target="_blank">Summary JSON<br><code>${{outPath("uhe_source_summary_json")}}</code></a>` : ""}}
+    ${{state.outputs.uhe_source_sampling_uniformity_exists ? `<a href="${{outUrl("uhe_source_sampling_uniformity")}}" target="_blank">Sampling uniformity PNG<br><code>${{outPath("uhe_source_sampling_uniformity")}}</code></a>` : ""}}
+    ${{state.outputs.uhe_source_sampling_uniformity_report_exists ? `<a href="${{outUrl("uhe_source_sampling_uniformity_report")}}" target="_blank">Sampling uniformity JSON<br><code>${{outPath("uhe_source_sampling_uniformity_report")}}</code></a>` : ""}}
+    ${{state.outputs.uhe_source_direction_uniformity_exists ? `<a href="${{outUrl("uhe_source_direction_uniformity")}}" target="_blank">Direction uniformity PNG<br><code>${{outPath("uhe_source_direction_uniformity")}}</code></a>` : ""}}
+    ${{state.outputs.uhe_source_direction_sphere_exists ? `<a href="${{outUrl("uhe_source_direction_sphere")}}" target="_blank">Direction sphere PNG<br><code>${{outPath("uhe_source_direction_sphere")}}</code></a>` : ""}}
+    ${{state.outputs.uhe_source_direction_uniformity_report_exists ? `<a href="${{outUrl("uhe_source_direction_uniformity_report")}}" target="_blank">Direction uniformity JSON<br><code>${{outPath("uhe_source_direction_uniformity_report")}}</code></a>` : ""}}
   </div>`;
   const summaryHtml = summary ? `<div class="summary-grid">
     <div class="summary-item"><strong>Status</strong>${{summary.status}}</div>
@@ -762,7 +794,16 @@ function renderContextPanel() {{
     const figure = state.outputs.uhe_source_preview_exists
       ? `<img src="${{outUrl("uhe_source_preview")}}?v=${{sourcePreviewVersion}}" alt="UHE source sample preview">`
       : `<div class="context-empty">No UHE source preview generated yet.</div>`;
-    return `<aside class="panel"><h2>UHE Source Samples</h2><div class="context-figure">${{figure}}</div></aside>`;
+    const uniformityFigure = state.outputs.uhe_source_sampling_uniformity_exists
+      ? `<img src="${{outUrl("uhe_source_sampling_uniformity")}}?v=${{sourcePreviewVersion}}" alt="UHE source sampling uniformity histograms">`
+      : `<div class="context-empty">No sampling uniformity diagnostic generated yet.</div>`;
+    const directionUniformityFigure = state.outputs.uhe_source_direction_uniformity_exists
+      ? `<img src="${{outUrl("uhe_source_direction_uniformity")}}?v=${{sourcePreviewVersion}}" alt="UHE source direction uniformity histograms">`
+      : `<div class="context-empty">No direction uniformity diagnostic generated yet.</div>`;
+    const directionSphereFigure = state.outputs.uhe_source_direction_sphere_exists
+      ? `<img src="${{outUrl("uhe_source_direction_sphere")}}?v=${{sourcePreviewVersion}}" alt="UHE source local direction sphere">`
+      : `<div class="context-empty">No local direction sphere generated yet.</div>`;
+    return `<aside class="panel"><h2>UHE Source Samples</h2><div class="context-figure">${{figure}}</div><section><h2>Sampling Uniformity</h2><div class="context-figure">${{uniformityFigure}}</div></section><section><h2>Direction Uniformity</h2><div class="context-figure">${{directionUniformityFigure}}</div></section><section><h2>Local Direction Sphere</h2><div class="context-figure">${{directionSphereFigure}}</div></section></aside>`;
   }}
   if (activeTab === "Forward Geodesics") {{
     const figure = state.outputs.forward_geometry_3d_html_exists
@@ -794,7 +835,15 @@ function renderOutputsPanel() {{
     ${{link(out.uhe_source_summary_exists, "uhe_source_summary", "UHE source summary")}}
     ${{link(out.uhe_source_summary_json_exists, "uhe_source_summary_json", "UHE source summary JSON")}}
     ${{link(out.uhe_source_preview_exists, "uhe_source_preview", "UHE source preview")}}
+    ${{link(out.uhe_source_sampling_uniformity_exists, "uhe_source_sampling_uniformity", "UHE source sampling uniformity")}}
+    ${{link(out.uhe_source_sampling_uniformity_report_exists, "uhe_source_sampling_uniformity_report", "UHE source sampling uniformity JSON")}}
+    ${{link(out.uhe_source_direction_uniformity_exists, "uhe_source_direction_uniformity", "UHE source direction uniformity")}}
+    ${{link(out.uhe_source_direction_sphere_exists, "uhe_source_direction_sphere", "UHE source direction sphere")}}
+    ${{link(out.uhe_source_direction_uniformity_report_exists, "uhe_source_direction_uniformity_report", "UHE source direction uniformity JSON")}}
     ${{out.uhe_source_preview_exists ? `<img src="${{outUrl("uhe_source_preview")}}" alt="UHE source preview">` : ""}}
+    ${{out.uhe_source_sampling_uniformity_exists ? `<img src="${{outUrl("uhe_source_sampling_uniformity")}}" alt="UHE source sampling uniformity">` : ""}}
+    ${{out.uhe_source_direction_uniformity_exists ? `<img src="${{outUrl("uhe_source_direction_uniformity")}}" alt="UHE source direction uniformity">` : ""}}
+    ${{out.uhe_source_direction_sphere_exists ? `<img src="${{outUrl("uhe_source_direction_sphere")}}" alt="UHE source direction sphere">` : ""}}
   `) + group("ForwardGeodesics/", `
     ${{link(out.forward_geometry_3d_html_exists, "forward_geometry_3d_html", "Interactive forward 3D geometry")}}
     ${{link(out.forward_geometry_3d_exists, "forward_geometry_3d", "Forward 3D geometry")}}
@@ -926,6 +975,7 @@ function render() {{
   if (uheButton) uheButton.onclick = sampleUheSource;
   const forwardButton = document.querySelector("#forward-geodesics-button");
   if (forwardButton) forwardButton.onclick = propagateForwardGeodesics;
+  bindNumberInputs();
   drawGeometrySvg();
   document.querySelector("#runNameInput").addEventListener("input", event => {{
     state.values = collect();

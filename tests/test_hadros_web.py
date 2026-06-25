@@ -102,6 +102,11 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source() -
     assert payload["outputs"]["paths"]["forward_geometry_3d_json"] == "ForwardGeodesics/uhe_neutrino_forward_geometry_3d.json"
     assert payload["outputs"]["paths"]["forward_geometry_3d_html"] == "ForwardGeodesics/uhe_neutrino_forward_geometry_3d.html"
     assert payload["outputs"]["paths"]["forward_summary_json"] == "ForwardGeodesics/uhe_neutrino_forward_summary.json"
+    assert payload["outputs"]["paths"]["uhe_source_sampling_uniformity"] == "UHEsource/uhe_source_sampling_uniformity.png"
+    assert payload["outputs"]["paths"]["uhe_source_sampling_uniformity_report"] == "UHEsource/uhe_source_sampling_uniformity_report.json"
+    assert payload["outputs"]["paths"]["uhe_source_direction_uniformity"] == "UHEsource/uhe_source_direction_uniformity.png"
+    assert payload["outputs"]["paths"]["uhe_source_direction_uniformity_report"] == "UHEsource/uhe_source_direction_uniformity_report.json"
+    assert payload["outputs"]["paths"]["uhe_source_direction_sphere"] == "UHEsource/uhe_source_direction_sphere.png"
     assert payload["values"]["forward_geodesics"]["geodesic_backend"] == "full_kerr_geodesic"
 
     assert "Forward Geodesics" in html
@@ -128,6 +133,11 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source() -
     assert "uhe_neutrino_forward_summary.csv" in html
     assert "uhe_neutrino_forward_paths.jsonl" in html
     assert "uhe_neutrino_forward_path_segments.jsonl" in html
+    assert "uhe_source_sampling_uniformity.png" in html
+    assert "uhe_source_sampling_uniformity_report.json" in html
+    assert "uhe_source_direction_uniformity.png" in html
+    assert "uhe_source_direction_uniformity_report.json" in html
+    assert "uhe_source_direction_sphere.png" in html
     assert "geodesic_validation_report.json" in html
     assert "stop_condition_statistics.csv" in html
     assert "uhe_neutrino_source_preview.png" in html

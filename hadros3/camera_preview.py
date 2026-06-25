@@ -375,7 +375,18 @@ def render_camera_preview(values: dict[str, dict[str, Any]], *, root: Path, outp
             _draw_analytic_camera_preview(values, png_path, message)
         else:
             try:
-                subprocess.run(command, cwd=root, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=45, check=True)
+                env = os.environ.copy()
+                env["HADROS_PREVIEW_OUTPUT_DIR"] = str(output_dir)
+                subprocess.run(
+                    command,
+                    cwd=root,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    timeout=45,
+                    check=True,
+                    env=env,
+                )
                 _ppm_to_png(ppm_path, png_path)
                 backend_used = str(cuda_bin)
                 cuda_used = True
@@ -414,6 +425,7 @@ def render_camera_preview(values: dict[str, dict[str, Any]], *, root: Path, outp
             "png": str(png_path),
             "ppm": str(ppm_path) if ppm_path.exists() else None,
             "summary": str(summary_path),
+            "performance_log": str(output_dir / "performance_log.txt") if (output_dir / "performance_log.txt").exists() else None,
         },
     }
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")

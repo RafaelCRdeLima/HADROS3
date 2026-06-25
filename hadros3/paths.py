@@ -82,3 +82,18 @@ def ensure_output_layout(run_output: Path) -> None:
     target_interactive_dir = run_output / CAMERA_PREVIEW_DIR / "interactive_camera_preview"
     if legacy_interactive_dir.exists() and legacy_interactive_dir.is_dir() and not target_interactive_dir.exists():
         shutil.move(str(legacy_interactive_dir), str(target_interactive_dir))
+    legacy_global_camera_dir = run_output.parent / "camera_preview"
+    target_camera_dir = run_output / CAMERA_PREVIEW_DIR
+    if legacy_global_camera_dir.exists() and legacy_global_camera_dir.is_dir():
+        for source in legacy_global_camera_dir.iterdir():
+            if not source.is_file():
+                continue
+            target = target_camera_dir / source.name
+            if target.exists():
+                source.unlink()
+            else:
+                source.rename(target)
+        try:
+            legacy_global_camera_dir.rmdir()
+        except OSError:
+            pass

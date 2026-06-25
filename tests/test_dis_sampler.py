@@ -4,6 +4,8 @@ import json
 import math
 from pathlib import Path
 
+import pytest
+
 from hadros3.config import defaults
 from hadros3.dis_sampler import SigmaNuNProvider, constant_density_tau, generate_dis_interaction_products, interaction_probability
 from hadros3.forward_geodesics import generate_forward_geodesic_products
@@ -46,6 +48,7 @@ def _values() -> dict:
     )
     values["dis_interaction_sampler"].update(
         {
+            "dis_backend": "python_prototype",
             "dis_model": "GBW",
             "medium_model": "analytic_torus",
             "medium_velocity_model": "zamo_fallback",
@@ -90,6 +93,11 @@ def test_dis_sampler_consumes_source_and_forward_outputs(tmp_path: Path) -> None
     assert summary["powheg_invoked"] is False
     assert summary["pythia_invoked"] is False
     assert summary["geant4_invoked"] is False
+    assert summary["dis_backend"] == "python_prototype"
+    assert summary["backend_language"] == "Python"
+    assert summary["python_prototype_used"] is True
+    assert summary["cpp_backend_used"] is False
+    assert summary["uses_hadros_original_runtime_path"] is False
     assert summary["dis_model"] == "GBW"
     assert summary["medium_model"] == "analytic_torus"
     assert summary["medium_velocity_model"] == "zamo_fallback"
@@ -149,6 +157,41 @@ def test_dis_sampler_seed_is_reproducible(tmp_path: Path) -> None:
     generate_dis_interaction_products(values, run_output_dir=tmp_path)
     second = (tmp_path / "DIS" / "dis_interaction_candidates.jsonl").read_text(encoding="utf-8")
     assert first == second
+
+
+def test_cpp_dis_sampler_backend_matches_python_contract(tmp_path: Path) -> None:
+    if not Path("bin/hadros3_dis_sampler").exists():
+        pytest.skip("H3-W7 C++ DIS sampler is not built")
+    values = _values()
+    values["dis_interaction_sampler"]["dis_backend"] = "cpp_hadros_original_port"
+    generate_uhe_source_products(values, output_dir=tmp_path)
+    generate_forward_geodesic_products(values, run_output_dir=tmp_path)
+    summary = generate_dis_interaction_products(values, run_output_dir=tmp_path)
+
+    assert summary["dis_backend"] == "cpp_hadros_original_port"
+    assert summary["backend_language"] == "C++17"
+    assert summary["backend_executable"] == "bin/hadros3_dis_sampler"
+    assert summary["backend_kind"] == "ported_hadros_cpp_dis_optical_depth_sampler"
+    assert summary["cpp_backend_used"] is True
+    assert summary["python_prototype_used"] is False
+    assert summary["cuda_backend_used"] is False
+    assert summary["uses_hadros_original_runtime_path"] is False
+    assert summary["sigma_table_path"] == "data/sigma/sigma_nuN_CC_GBW.dat"
+    assert summary["sigma_table_rows"] == 300
+    assert summary["n_paths_processed"] == 5
+    assert summary["n_segments_processed"] > 0
+
+    dis_dir = tmp_path / "DIS"
+    validation = json.loads((dis_dir / "backend_validation_report.json").read_text(encoding="utf-8"))
+    assert validation["comparison_pass"] is True
+    report = json.loads((dis_dir / "dis_optical_depth_report.json").read_text(encoding="utf-8"))
+    assert report["validations"]["rho_non_negative"] is True
+    assert report["validations"]["n_baryon_non_negative"] is True
+    assert report["validations"]["sigma_non_negative"] is True
+    assert report["validations"]["d_tau_non_negative"] is True
+    assert report["validations"]["tau_non_negative"] is True
+    assert report["validations"]["probability_bounds"] is True
+    assert report["validations"]["cdf_normalized"] is True
 
 
 def test_interaction_probability_bounds() -> None:

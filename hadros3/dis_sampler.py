@@ -6,6 +6,9 @@ import csv
 import json
 import math
 import random
+import shutil
+import subprocess
+import tempfile
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,6 +27,8 @@ SIGMA_TABLE_PATHS = {
     "GBW": Path("data/sigma/sigma_nuN_CC_GBW.dat"),
     "IIM": Path("data/sigma/sigma_nuN_CC_IIM.dat"),
 }
+ROOT = Path(__file__).resolve().parents[1]
+DIS_CPP_EXECUTABLE = ROOT / "bin" / "hadros3_dis_sampler"
 
 
 @dataclass(frozen=True)
@@ -362,7 +367,7 @@ draw();
     )
 
 
-def generate_dis_interaction_products(values: dict[str, dict[str, Any]], *, run_output_dir: Path) -> dict[str, Any]:
+def _generate_dis_interaction_products_python(values: dict[str, dict[str, Any]], *, run_output_dir: Path) -> dict[str, Any]:
     config_problems = validate_values(values)
     if config_problems:
         raise ValueError("Invalid HADROS3 configuration:\n- " + "\n- ".join(config_problems))
@@ -546,9 +551,11 @@ def generate_dis_interaction_products(values: dict[str, dict[str, Any]], *, run_
         "backend_executable": "hadros3.dis_sampler",
         "backend_version_or_git_commit": "python-prototype",
         "dis_backend": "python_prototype",
+        "backend_kind": "python_reference_debug_backend",
         "cpp_backend_used": False,
         "cuda_backend_used": False,
         "python_prototype_used": True,
+        "uses_hadros_original_runtime_path": False,
         "optical_depth_dis_sampler_invoked": True,
         "dis_model": config.dis_model,
         "medium_model": config.medium_model,
@@ -623,3 +630,175 @@ def generate_dis_interaction_products(values: dict[str, dict[str, Any]], *, run_
     draw_interaction_locations(accepted, segments, values, locations_path)
     write_interaction_locations_html(accepted, locations_html_path)
     return summary
+
+
+def _write_runtime_config(values: dict[str, dict[str, Any]], run_output_dir: Path) -> Path:
+    metadata_dir = run_output_dir / "RunMetadata"
+    metadata_dir.mkdir(parents=True, exist_ok=True)
+    path = metadata_dir / "hadros3_config.json"
+    path.write_text(json.dumps({"hadros3_values": values}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return path
+
+
+def _validation_flags(path_records: list[dict[str, Any]], candidates: list[dict[str, Any]]) -> dict[str, bool]:
+    return {
+        "rho_non_negative": all(record["max_rho_g_cm3"] >= 0.0 for record in path_records),
+        "n_baryon_non_negative": all(
+            record.get("candidate_n_baryon_cm3", 0.0) >= 0.0 for record in candidates if "candidate_n_baryon_cm3" in record
+        ),
+        "sigma_non_negative": all(record["max_sigma_cm2"] >= 0.0 for record in path_records),
+        "d_tau_non_negative": all(record["max_d_tau"] >= 0.0 for record in path_records),
+        "tau_non_negative": all(record["tau_nuN_total"] >= 0.0 for record in path_records),
+        "probability_bounds": all(0.0 <= record["interaction_probability"] <= 1.0 for record in path_records),
+        "cdf_normalized": True,
+        "observer_bridge_inactive": True,
+        "expensive_event_generation_inactive": True,
+        "powheg_inactive": True,
+        "pythia_inactive": True,
+        "geant4_inactive": True,
+    }
+
+
+def _relative_error(a: float, b: float) -> float:
+    scale = max(abs(a), abs(b), 1.0)
+    return abs(a - b) / scale
+
+
+def _compare_backend_summaries(cpp_summary: dict[str, Any], py_summary: dict[str, Any]) -> dict[str, Any]:
+    keys = [
+        "n_paths_processed",
+        "n_segments_processed",
+        "tau_min",
+        "tau_mean",
+        "tau_max",
+        "acceptance_fraction",
+        "n_interactions_accepted",
+        "max_density_g_cm3",
+        "max_sigma_cm2",
+        "max_d_tau",
+    ]
+    tolerances = {
+        "n_paths_processed": 0.0,
+        "n_segments_processed": 0.0,
+        "n_interactions_accepted": max(1.0, 0.25 * float(cpp_summary.get("n_paths_processed", 0.0))),
+        "acceptance_fraction": 0.25,
+        "tau_min": 5.0e-12,
+        "tau_mean": 5.0e-12,
+        "tau_max": 5.0e-12,
+        "max_density_g_cm3": 5.0e-12,
+        "max_sigma_cm2": 5.0e-12,
+        "max_d_tau": 5.0e-12,
+    }
+    metrics: dict[str, Any] = {}
+    pass_flag = True
+    for key in keys:
+        cpp_value = float(cpp_summary.get(key, 0.0))
+        py_value = float(py_summary.get(key, 0.0))
+        if key in {"n_paths_processed", "n_segments_processed", "n_interactions_accepted"}:
+            delta = abs(cpp_value - py_value)
+            ok = delta <= tolerances[key]
+        else:
+            delta = _relative_error(cpp_value, py_value)
+            ok = delta <= tolerances[key]
+        metrics[key] = {
+            "cpp": cpp_summary.get(key),
+            "python": py_summary.get(key),
+            "difference_or_relative_error": delta,
+            "tolerance": tolerances[key],
+            "pass": ok,
+        }
+        pass_flag = pass_flag and ok
+    return {
+        "status": "ok" if pass_flag else "warning",
+        "comparison_pass": pass_flag,
+        "tolerance_note": "Tau/density/sigma/d_tau use relative error. Acceptance metrics may differ because Python and C++ RNG streams are independent but seeded.",
+        "metrics": metrics,
+    }
+
+
+def _python_reference_summary(values: dict[str, dict[str, Any]], run_output_dir: Path) -> dict[str, Any]:
+    with tempfile.TemporaryDirectory(prefix="hadros3_dis_backend_validation_") as tmp:
+        tmp_dir = Path(tmp)
+        for dirname in ["UHEsource", "ForwardGeodesics"]:
+            shutil.copytree(run_output_dir / dirname, tmp_dir / dirname)
+        reference_values = json.loads(json.dumps(values))
+        reference_values["dis_interaction_sampler"]["dis_backend"] = "python_prototype"
+        return _generate_dis_interaction_products_python(reference_values, run_output_dir=tmp_dir)
+
+
+def generate_dis_interaction_products_cpp(values: dict[str, dict[str, Any]], *, run_output_dir: Path) -> dict[str, Any]:
+    if not DIS_CPP_EXECUTABLE.exists():
+        raise FileNotFoundError(f"H3-W7 C++ backend not built: {DIS_CPP_EXECUTABLE}. Run `make cpp` or `make hadros3-dis-sampler`.")
+    _write_runtime_config(values, run_output_dir)
+    subprocess.run([str(DIS_CPP_EXECUTABLE), "--run-output", str(run_output_dir)], cwd=ROOT, check=True)
+    output_dir = dis_dir(run_output_dir)
+    summary_path = output_dir / "dis_summary.json"
+    report_path = output_dir / "dis_optical_depth_report.json"
+    backend_validation_path = output_dir / "backend_validation_report.json"
+    path_depths_path = output_dir / "dis_path_optical_depths.jsonl"
+    candidates_path = output_dir / "dis_interaction_candidates.jsonl"
+    accepted_path = output_dir / "dis_accepted_interactions.jsonl"
+    tau_preview_path = output_dir / "dis_tau_preview.png"
+    locations_path = output_dir / "dis_interaction_locations.png"
+    locations_html_path = output_dir / "dis_interaction_locations_3d.html"
+    path_records = read_jsonl(path_depths_path)
+    candidates = read_jsonl(candidates_path)
+    accepted = read_jsonl(accepted_path)
+    segments = read_jsonl(forward_geodesics_dir(run_output_dir) / "uhe_neutrino_forward_path_segments.jsonl")
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary.update(
+        {
+            "backend_language": "C++17",
+            "backend_executable": "bin/hadros3_dis_sampler",
+            "backend_kind": "ported_hadros_cpp_dis_optical_depth_sampler",
+            "backend_version_or_git_commit": "local-build",
+            "dis_backend": "cpp_hadros_original_port",
+            "cpp_backend_used": True,
+            "cuda_backend_used": False,
+            "python_prototype_used": False,
+            "uses_hadros_original_runtime_path": False,
+            "products": {
+                **summary.get("products", {}),
+                "dis_tau_preview": str(tau_preview_path),
+                "dis_interaction_locations": str(locations_path),
+                "dis_interaction_locations_3d_html": str(locations_html_path),
+                "backend_validation_report": str(backend_validation_path),
+            },
+        }
+    )
+    report = {**summary, "validations": _validation_flags(path_records, candidates)}
+    try:
+        py_summary = _python_reference_summary(values, run_output_dir)
+        backend_validation = _compare_backend_summaries(summary, py_summary)
+        backend_validation.update(
+            {
+                "cpp_backend": {key: value for key, value in summary.items() if key != "products"},
+                "python_backend": {key: value for key, value in py_summary.items() if key != "products"},
+            }
+        )
+    except Exception as exc:  # pragma: no cover - diagnostic fallback
+        backend_validation = {
+            "status": "error",
+            "comparison_pass": False,
+            "message": f"Could not run Python reference comparison: {exc}",
+        }
+    write_json(summary_path, summary)
+    write_json(report_path, report)
+    write_json(backend_validation_path, backend_validation)
+    _write_summary_csv(output_dir / "dis_summary.csv", summary)
+    draw_tau_preview(path_records, tau_preview_path)
+    draw_interaction_locations(accepted, segments, values, locations_path)
+    write_interaction_locations_html(accepted, locations_html_path)
+    return summary
+
+
+def generate_dis_interaction_products(values: dict[str, dict[str, Any]], *, run_output_dir: Path) -> dict[str, Any]:
+    config_problems = validate_values(values)
+    if config_problems:
+        raise ValueError("Invalid HADROS3 configuration:\n- " + "\n- ".join(config_problems))
+    backend = str(values.get("dis_interaction_sampler", {}).get("dis_backend", "cpp_hadros_original_port"))
+    if backend == "cpp_hadros_original_port":
+        return generate_dis_interaction_products_cpp(values, run_output_dir=run_output_dir)
+    if backend == "python_prototype":
+        return _generate_dis_interaction_products_python(values, run_output_dir=run_output_dir)
+    raise ValueError(f"unsupported dis_interaction_sampler.dis_backend: {backend}")

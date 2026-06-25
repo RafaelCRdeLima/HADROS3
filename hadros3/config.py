@@ -256,6 +256,14 @@ def schema() -> list[dict[str, Any]]:
                     options=["zamo_fallback", "static", "future_hydro_velocity"],
                 ),
                 field("dis_interaction_sampler", "density_floor_g_cm3", "Density floor", 0.0, kind="number"),
+                field(
+                    "dis_interaction_sampler",
+                    "dis_backend",
+                    "DIS backend",
+                    "cpp_hadros_original_port",
+                    kind="select",
+                    options=["cpp_hadros_original_port", "python_prototype"],
+                ),
                 field("dis_interaction_sampler", "dis_model", "DIS model", "GBW", kind="select", options=["GBW", "IIM"]),
                 field(
                     "dis_interaction_sampler",
@@ -527,6 +535,8 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
         problems.append("dis_interaction_sampler.medium_velocity_model must be zamo_fallback or static in H3-W7")
     if float(dis.get("density_floor_g_cm3", 0.0)) < 0.0:
         problems.append("dis_interaction_sampler.density_floor_g_cm3 must be non-negative")
+    if str(dis.get("dis_backend", "cpp_hadros_original_port")) not in {"cpp_hadros_original_port", "python_prototype"}:
+        problems.append("dis_interaction_sampler.dis_backend must be cpp_hadros_original_port or python_prototype")
     if str(dis.get("dis_model", "GBW")) not in {"GBW", "IIM"}:
         problems.append("dis_interaction_sampler.dis_model must be GBW or IIM")
     if str(dis.get("interaction_sampling_mode", "optical_depth_inverse_cdf")) != "optical_depth_inverse_cdf":

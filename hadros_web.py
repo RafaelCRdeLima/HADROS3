@@ -1065,7 +1065,10 @@ function renderDisPanel() {{
     <div class="summary-item"><strong>DIS backend</strong><code>${{summary.dis_backend || "pending"}}</code></div>
     <div class="summary-item"><strong>Backend language</strong>${{summary.backend_language || "pending"}}</div>
     <div class="summary-item"><strong>Backend executable</strong><code>${{summary.backend_executable || "pending"}}</code></div>
+    <div class="summary-item"><strong>Backend kind</strong><code>${{summary.backend_kind || "pending"}}</code></div>
+    <div class="summary-item"><strong>C++ backend used</strong>${{String(summary.cpp_backend_used)}}</div>
     <div class="summary-item"><strong>Python prototype used</strong>${{String(summary.python_prototype_used)}}</div>
+    <div class="summary-item"><strong>uses_hadros_original_runtime_path</strong>${{String(summary.uses_hadros_original_runtime_path)}}</div>
     <div class="summary-item"><strong>sigma_table_path</strong><code>${{summary.sigma_table_path || "pending"}}</code></div>
     <div class="summary-item"><strong>sigma_table_rows</strong>${{summary.sigma_table_rows ?? "pending"}}</div>
     <div class="summary-item"><strong>sigma_table_is_compact_builtin_adapter</strong>${{String(summary.sigma_table_is_compact_builtin_adapter)}}</div>

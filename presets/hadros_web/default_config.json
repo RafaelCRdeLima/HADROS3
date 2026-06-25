@@ -16,6 +16,7 @@
   },
   "dis_interaction_sampler": {
     "density_floor_g_cm3": 0.0,
+    "dis_backend": "cpp_hadros_original_port",
     "dis_model": "GBW",
     "interaction_sampling_mode": "optical_depth_inverse_cdf",
     "max_interactions": 1000000,

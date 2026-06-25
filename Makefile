@@ -11,7 +11,7 @@ NVCCFLAGS ?= -O3 -std=c++17
 CPP_INCLUDES := -Icpp/include
 KERR_PORT_SRC := cpp/src/kerr/kerr_metric.cpp cpp/src/kerr/kerr_geodesic.cpp cpp/src/cascade/kerr_local_tetrad.cpp cpp/src/cascade/packet_kerr_null_propagator.cpp
 
-.PHONY: help install-dev test cpp hadros3-forward-geodesics hadros3-geodesic-preview-cuda hadros-web render-hadros-web render-camera-preview launch-camera-preview sample-uhe-source propagate-forward-geodesics sample-dis-interactions serve-hadros-web check validate clean
+.PHONY: help install-dev test cpp hadros3-forward-geodesics hadros3-dis-sampler hadros3-geodesic-preview-cuda hadros-web render-hadros-web render-camera-preview launch-camera-preview sample-uhe-source propagate-forward-geodesics sample-dis-interactions serve-hadros-web check validate clean
 
 help:
 	@echo "HADROS3 commands:"
@@ -23,6 +23,7 @@ help:
 	@echo "  make launch-camera-preview Open the original HADROS interactive camera preview"
 	@echo "  make sample-uhe-source Generate H3-W5 UHE source samples through hadros-web"
 	@echo "  make cpp               Build HADROS3 C++ physics backends"
+	@echo "  make hadros3-dis-sampler Build the self-contained H3-W7 C++ DIS sampler"
 	@echo "  make hadros3-geodesic-preview-cuda Build self-contained HADROS3 CUDA camera preview if CUDA is available"
 	@echo "  make propagate-forward-geodesics Generate H3-W6 forward geodesics through hadros-web"
 	@echo "  make sample-dis-interactions Generate H3-W7 DIS interaction samples through hadros-web"
@@ -43,9 +44,11 @@ install-dev:
 test:
 	$(PYTHON) -m pytest tests
 
-cpp: bin/hadros3_forward_geodesics
+cpp: bin/hadros3_forward_geodesics bin/hadros3_dis_sampler
 
 hadros3-forward-geodesics: bin/hadros3_forward_geodesics
+
+hadros3-dis-sampler: bin/hadros3_dis_sampler
 
 hadros3-geodesic-preview-cuda:
 	@mkdir -p bin
@@ -65,6 +68,10 @@ hadros3-geodesic-preview-cuda:
 bin/hadros3_forward_geodesics: cpp/apps/hadros3_forward_geodesics.cpp $(KERR_PORT_SRC) cpp/include/geodesic_state.hpp cpp/include/kerr_metric.hpp cpp/include/kerr_metric_derivatives.hpp cpp/include/kerr_geodesic.hpp cpp/include/hadros/cascade/kerr_local_tetrad.hpp cpp/include/hadros/cascade/packet_kerr_null_propagator.hpp cpp/include/hadros/cascade/types.hpp
 	@mkdir -p bin
 	$(CXX) $(CXXFLAGS) $(CPP_INCLUDES) cpp/apps/hadros3_forward_geodesics.cpp $(KERR_PORT_SRC) -o $@
+
+bin/hadros3_dis_sampler: cpp/apps/hadros3_dis_sampler.cpp
+	@mkdir -p bin
+	$(CXX) $(CXXFLAGS) $(CPP_INCLUDES) cpp/apps/hadros3_dis_sampler.cpp -o $@
 
 hadros-web:
 	$(PYTHON) hadros_web.py --serve --host $(HOST) --port $(PORT)

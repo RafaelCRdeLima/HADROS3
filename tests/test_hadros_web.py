@@ -26,6 +26,7 @@ def test_schema_exposes_hadros3_first_stage_controls() -> None:
         ("forward_geodesics", "geodesic_backend"),
         ("forward_geodesics", "n_samples_to_propagate"),
         ("dis_interaction_sampler", "dis_model"),
+        ("dis_interaction_sampler", "dis_backend"),
         ("dis_interaction_sampler", "medium_model"),
         ("dis_interaction_sampler", "medium_velocity_model"),
         ("observer_bridge", "mode"),

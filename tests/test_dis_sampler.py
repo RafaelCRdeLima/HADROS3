@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from hadros3.config import defaults
-from hadros3.dis_sampler import SigmaNuNProvider, constant_density_tau, generate_dis_interaction_products, interaction_probability
+from hadros3.dis_sampler import SigmaNuNProvider, constant_density_tau, generate_dis_interaction_products, generate_gbw_iim_comparison, interaction_probability
 from hadros3.forward_geodesics import generate_forward_geodesic_products
 from hadros3.uhe_source import generate_uhe_source_products
 
@@ -128,6 +128,17 @@ def test_dis_sampler_consumes_source_and_forward_outputs(tmp_path: Path) -> None
         "dis_interaction_locations.png",
         "dis_interaction_locations_3d.html",
         "dis_optical_depth_report.json",
+        "tau_distribution.png",
+        "interaction_probability_distribution.png",
+        "optical_depth_map.png",
+        "optical_depth_map_3d.html",
+        "medium_density_map.png",
+        "interaction_location_distribution.png",
+        "local_energy_distribution.png",
+        "local_density_distribution.png",
+        "sigma_distribution.png",
+        "density_energy_sigma_correlation.png",
+        "dis_diagnostics_report.json",
     ]:
         assert (dis_dir / filename).exists()
 
@@ -146,6 +157,26 @@ def test_dis_sampler_consumes_source_and_forward_outputs(tmp_path: Path) -> None
     assert report["validations"]["d_tau_non_negative"] is True
     assert report["validations"]["tau_non_negative"] is True
     assert report["validations"]["probability_bounds"] is True
+    assert report["interaction_points_outside_medium"] == 0
+    assert report["density_model_theta_is_hard_cut"] is False
+    accepted = [json.loads(line) for line in (dis_dir / "dis_accepted_interactions.jsonl").read_text(encoding="utf-8").splitlines()]
+    for interaction in accepted:
+        assert interaction["interaction_point_density_checked"] is True
+        assert interaction["interaction_point_inside_medium"] is True
+        assert interaction["interaction_point_rho_g_cm3"] > 0.0
+        assert interaction["interaction_rho_g_cm3"] > 0.0
+        assert interaction["interaction_point_sampling_attempts"] >= 1
+    diagnostics = json.loads((dis_dir / "dis_diagnostics_report.json").read_text(encoding="utf-8"))
+    assert diagnostics["diagnostics_generated"] is True
+    assert diagnostics["medium_density_map_generated"] is True
+    assert diagnostics["density_model_has_hard_radial_cut"] is True
+    assert diagnostics["density_model_theta_profile"] == "gaussian"
+    assert diagnostics["density_model_theta_is_hard_cut"] is False
+    assert diagnostics["interaction_points_outside_medium"] == 0
+    assert diagnostics["n_paths"] == 5
+    assert diagnostics["n_segments"] > 0
+    assert diagnostics["tau_statistics"]["tau_max"] >= diagnostics["tau_statistics"]["tau_min"]
+    assert diagnostics["probability_statistics"]["probability_max"] <= 1.0
 
 
 def test_dis_sampler_seed_is_reproducible(tmp_path: Path) -> None:
@@ -192,6 +223,43 @@ def test_cpp_dis_sampler_backend_matches_python_contract(tmp_path: Path) -> None
     assert report["validations"]["tau_non_negative"] is True
     assert report["validations"]["probability_bounds"] is True
     assert report["validations"]["cdf_normalized"] is True
+    assert report["interaction_points_outside_medium"] == 0
+    assert report["density_model_theta_is_hard_cut"] is False
+    accepted = [json.loads(line) for line in (dis_dir / "dis_accepted_interactions.jsonl").read_text(encoding="utf-8").splitlines()]
+    for interaction in accepted:
+        assert interaction["interaction_point_density_checked"] is True
+        assert interaction["interaction_point_inside_medium"] is True
+        assert interaction["interaction_point_rho_g_cm3"] > 0.0
+        assert interaction["interaction_rho_g_cm3"] > 0.0
+    diagnostics = json.loads((dis_dir / "dis_diagnostics_report.json").read_text(encoding="utf-8"))
+    assert diagnostics["diagnostics_generated"] is True
+    assert diagnostics["medium_density_map_generated"] is True
+    assert diagnostics["interaction_points_outside_medium"] == 0
+
+
+def test_gbw_iim_comparison_generates_diagnostics(tmp_path: Path) -> None:
+    if not Path("bin/hadros3_dis_sampler").exists():
+        pytest.skip("H3-W7 C++ DIS sampler is not built")
+    values = _values()
+    values["dis_interaction_sampler"]["dis_backend"] = "cpp_hadros_original_port"
+    generate_uhe_source_products(values, output_dir=tmp_path)
+    generate_forward_geodesic_products(values, run_output_dir=tmp_path)
+    generate_dis_interaction_products(values, run_output_dir=tmp_path)
+    comparison = generate_gbw_iim_comparison(values, run_output_dir=tmp_path)
+
+    assert comparison["status"] == "ok"
+    assert "GBW" in comparison["models"]
+    assert "IIM" in comparison["models"]
+    dis_dir = tmp_path / "DIS"
+    for filename in [
+        "gbw_vs_iim_tau_comparison.png",
+        "gbw_vs_iim_probability_comparison.png",
+        "gbw_vs_iim_interaction_locations.png",
+        "gbw_vs_iim_summary.json",
+    ]:
+        assert (dis_dir / filename).exists()
+    diagnostics = json.loads((dis_dir / "dis_diagnostics_report.json").read_text(encoding="utf-8"))
+    assert diagnostics["GBW_IIM_comparison"]["status"] == "ok"
 
 
 def test_interaction_probability_bounds() -> None:

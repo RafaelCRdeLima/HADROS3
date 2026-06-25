@@ -7,6 +7,7 @@ import json
 import math
 import random
 import shutil
+import statistics
 import subprocess
 import tempfile
 from collections import defaultdict
@@ -202,6 +203,60 @@ def _linear_angle(phi0: float, phi1: float, s: float) -> float:
     return phi0 + s * delta
 
 
+def sample_interaction_point_in_medium(
+    segment: dict[str, Any],
+    values: dict[str, dict[str, Any]],
+    *,
+    density_floor_g_cm3: float,
+    rng: random.Random,
+    max_attempts: int = 32,
+) -> dict[str, Any]:
+    best = {"rho": 0.0, "r": float(segment["r_mid_rg"]), "theta": float(segment["theta_mid_rad"]), "phi": float(segment["phi_mid_rad"])}
+    for attempt in range(1, max_attempts + 1):
+        s = rng.random()
+        r = float(segment["r_start_rg"]) + s * (float(segment["r_end_rg"]) - float(segment["r_start_rg"]))
+        theta = float(segment["theta_start_rad"]) + s * (float(segment["theta_end_rad"]) - float(segment["theta_start_rad"]))
+        phi = _linear_angle(float(segment["phi_start_rad"]), float(segment["phi_end_rad"]), s)
+        rho = analytic_torus_density_g_cm3(r, theta, values, density_floor_g_cm3=density_floor_g_cm3)
+        if rho > float(best["rho"]):
+            best = {"rho": rho, "r": r, "theta": theta, "phi": phi}
+        if rho > 0.0:
+            return {
+                "r": r,
+                "theta": theta,
+                "phi": phi,
+                "rho": rho,
+                "inside": True,
+                "attempts": attempt,
+                "method": "rejection_with_midpoint_fallback",
+            }
+    midpoint_rho = analytic_torus_density_g_cm3(
+        float(segment["r_mid_rg"]),
+        float(segment["theta_mid_rad"]),
+        values,
+        density_floor_g_cm3=density_floor_g_cm3,
+    )
+    if midpoint_rho > 0.0:
+        return {
+            "r": float(segment["r_mid_rg"]),
+            "theta": float(segment["theta_mid_rad"]),
+            "phi": float(segment["phi_mid_rad"]),
+            "rho": midpoint_rho,
+            "inside": True,
+            "attempts": max_attempts,
+            "method": "rejection_with_midpoint_fallback_midpoint",
+        }
+    return {
+        "r": float(best["r"]),
+        "theta": float(best["theta"]),
+        "phi": float(best["phi"]),
+        "rho": float(best["rho"]),
+        "inside": float(best["rho"]) > 0.0,
+        "attempts": max_attempts,
+        "method": "rejection_with_highest_density_fallback",
+    }
+
+
 def _write_summary_csv(path: Path, summary: dict[str, Any]) -> None:
     keys = [
         "status",
@@ -273,21 +328,22 @@ def draw_interaction_locations(accepted: list[dict[str, Any]], segments: list[di
     torus = values["analytic_torus"]
     r_inner = float(torus["r_inner_rg"])
     r_outer = float(torus["r_outer_rg"])
-    r_peak = float(torus["r_peak_rg"])
-    half_height = r_peak * math.tan(math.radians(float(torus["half_opening_angle_deg"])))
+    half_angle = math.radians(float(torus["half_opening_angle_deg"]))
+    ax.add_patch(plt.Circle((0.0, 0.0), r_inner, fill=False, edgecolor="#38bdf8", linestyle="--", linewidth=1.2, alpha=0.85, label="hard radial cuts"))
+    ax.add_patch(plt.Circle((0.0, 0.0), r_outer, fill=False, edgecolor="#38bdf8", linestyle="--", linewidth=1.2, alpha=0.85))
+    ray_length = r_outer * 1.15
     for sign in (-1.0, 1.0):
-        ax.fill_between(
-            [sign * r_inner, sign * r_outer],
-            [-half_height, -half_height],
-            [half_height, half_height],
-            color="#f97316",
-            alpha=0.12,
-            zorder=1,
-        )
-        ax.plot([sign * r_inner, sign * r_outer], [half_height, half_height], color="#fb923c", alpha=0.55, linewidth=1.0)
-        ax.plot([sign * r_inner, sign * r_outer], [-half_height, -half_height], color="#fb923c", alpha=0.55, linewidth=1.0)
-        ax.plot([sign * r_inner, sign * r_inner], [-half_height, half_height], color="#fb923c", alpha=0.55, linewidth=1.0)
-        ax.plot([sign * r_outer, sign * r_outer], [-half_height, half_height], color="#fb923c", alpha=0.55, linewidth=1.0)
+        theta = 0.5 * math.pi + sign * half_angle
+        for x_sign in (-1.0, 1.0):
+            ax.plot(
+                [0.0, x_sign * ray_length * math.sin(theta)],
+                [0.0, ray_length * math.cos(theta)],
+                color="#fde047",
+                linestyle=":",
+                linewidth=0.9,
+                alpha=0.8,
+                label="Gaussian width angle" if sign < 0.0 and x_sign < 0.0 else None,
+            )
     cone = values["polar_cone"]
     if bool(cone["enabled"]):
         opening = math.radians(float(cone["opening_angle_deg"]))
@@ -457,6 +513,647 @@ draw();
     )
 
 
+def _finite(values: list[float]) -> list[float]:
+    return [float(value) for value in values if math.isfinite(float(value))]
+
+
+def _stats(values: list[float]) -> dict[str, float]:
+    clean = _finite(values)
+    if not clean:
+        return {"min": 0.0, "mean": 0.0, "median": 0.0, "std": 0.0, "max": 0.0}
+    return {
+        "min": min(clean),
+        "mean": statistics.fmean(clean),
+        "median": statistics.median(clean),
+        "std": statistics.pstdev(clean) if len(clean) > 1 else 0.0,
+        "max": max(clean),
+    }
+
+
+def _hist_bins(values: list[float]) -> int:
+    return min(36, max(8, int(math.sqrt(max(1, len(values))))))
+
+
+def _draw_meridional_geometry(ax: Any, values: dict[str, dict[str, Any]]) -> None:
+    import matplotlib.pyplot as plt
+
+    torus = values["analytic_torus"]
+    r_inner = float(torus["r_inner_rg"])
+    r_outer = float(torus["r_outer_rg"])
+    half_angle = math.radians(float(torus["half_opening_angle_deg"]))
+    ax.add_patch(plt.Circle((0.0, 0.0), r_inner, fill=False, edgecolor="#38bdf8", linestyle="--", linewidth=1.0, alpha=0.82, zorder=2))
+    ax.add_patch(plt.Circle((0.0, 0.0), r_outer, fill=False, edgecolor="#38bdf8", linestyle="--", linewidth=1.0, alpha=0.82, zorder=2))
+    ray_length = r_outer * 1.15
+    for sign in (-1.0, 1.0):
+        theta = 0.5 * math.pi + sign * half_angle
+        for x_sign in (-1.0, 1.0):
+            ax.plot(
+                [0.0, x_sign * ray_length * math.sin(theta)],
+                [0.0, ray_length * math.cos(theta)],
+                color="#fde047",
+                linestyle=":",
+                linewidth=0.8,
+                alpha=0.68,
+                zorder=2,
+            )
+    cone = values["polar_cone"]
+    if bool(cone["enabled"]):
+        opening = math.radians(float(cone["opening_angle_deg"]))
+        r_min = float(cone["r_min_rg"])
+        r_max = float(cone["r_max_rg"])
+        signs = (1.0, -1.0) if str(cone["draw_mode"]) == "bipolar_funnel" else (1.0,)
+        for sign in signs:
+            polygon = [
+                (-r_min * math.sin(opening), sign * r_min * math.cos(opening)),
+                (-r_max * math.sin(opening), sign * r_max * math.cos(opening)),
+                (r_max * math.sin(opening), sign * r_max * math.cos(opening)),
+                (r_min * math.sin(opening), sign * r_min * math.cos(opening)),
+            ]
+            ax.add_patch(plt.Polygon(polygon, closed=True, facecolor="#60a5fa", edgecolor="#bfdbfe", alpha=0.09, linewidth=0.9, zorder=1))
+    ax.add_patch(plt.Circle((0.0, 0.0), 1.0, color="black", alpha=0.95, zorder=4))
+
+
+def _segment_diagnostics(values: dict[str, dict[str, Any]], segments: list[dict[str, Any]]) -> list[dict[str, float]]:
+    config = dis_config_from_values(values)
+    provider = SigmaNuNProvider(config.dis_model)
+    r_g_cm = rg_to_cm(config.mass_msun)
+    rows: list[dict[str, float]] = []
+    for segment in segments:
+        rho = analytic_torus_density_g_cm3(
+            float(segment["r_mid_rg"]),
+            float(segment["theta_mid_rad"]),
+            values,
+            density_floor_g_cm3=config.density_floor_g_cm3,
+        )
+        n_baryon = rho / M_BARYON_G
+        e_local, _ = zamo_or_static_local_energy_gev(segment, config.spin_a, config.medium_velocity_model)
+        try:
+            sigma = provider.sigma_cm2(e_local)
+        except ValueError:
+            sigma = 0.0
+        d_tau = max(0.0, n_baryon * sigma * float(segment["dl_segment_rg"]) * r_g_cm)
+        x0, _, z0 = _xyz(float(segment["r_start_rg"]), float(segment["theta_start_rad"]), float(segment["phi_start_rad"]))
+        x1, _, z1 = _xyz(float(segment["r_end_rg"]), float(segment["theta_end_rad"]), float(segment["phi_end_rad"]))
+        xm, ym, zm = _xyz(float(segment["r_mid_rg"]), float(segment["theta_mid_rad"]), float(segment["phi_mid_rad"]))
+        rows.append(
+            {
+                "x0": x0,
+                "z0": z0,
+                "x1": x1,
+                "z1": z1,
+                "xm": xm,
+                "ym": ym,
+                "zm": zm,
+                "rho_g_cm3": rho,
+                "E_nu_local_gev": e_local,
+                "sigma_nuN_cm2": sigma,
+                "d_tau": d_tau,
+            }
+        )
+    return rows
+
+
+def _plot_histogram(values: list[float], output_path: Path, *, title: str, xlabel: str, color: str = "#2563eb", logx: bool = False) -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    clean = _finite(values)
+    fig, ax = plt.subplots(figsize=(7.4, 4.8), facecolor="#f8fafc")
+    if clean:
+        plot_values = clean
+        if logx:
+            plot_values = [value for value in clean if value > 0.0]
+            if plot_values:
+                ax.set_xscale("log")
+        ax.hist(plot_values, bins=_hist_bins(plot_values), color=color, alpha=0.82)
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel("count")
+    ax.grid(True, color="#cbd5e1", alpha=0.55, linewidth=0.6)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=165)
+    plt.close(fig)
+
+
+def draw_optical_depth_map(segment_rows: list[dict[str, float]], values: dict[str, dict[str, Any]], output_path: Path) -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.collections import LineCollection
+    from matplotlib.colors import LogNorm
+
+    fig, ax = plt.subplots(figsize=(8.0, 7.2), facecolor="#f8fafc")
+    _draw_meridional_geometry(ax, values)
+    lines = [[(row["x0"], row["z0"]), (row["x1"], row["z1"])] for row in segment_rows]
+    d_tau = [row["d_tau"] for row in segment_rows]
+    positive = [value for value in d_tau if value > 0.0]
+    if lines:
+        if positive:
+            norm = LogNorm(vmin=max(min(positive), 1.0e-300), vmax=max(positive))
+            collection = LineCollection(lines, cmap="magma", norm=norm, linewidths=0.75, alpha=0.86, zorder=3)
+            collection.set_array([max(value, norm.vmin) for value in d_tau])
+        else:
+            collection = LineCollection(lines, colors="#93c5fd", linewidths=0.6, alpha=0.55, zorder=3)
+        ax.add_collection(collection)
+        if positive:
+            cbar = fig.colorbar(collection, ax=ax, shrink=0.82)
+            cbar.set_label(r"$d\tau_{\nu N}$ per segment")
+    limit = max(float(values["forward_geodesics"]["outer_radius_rg"]) * 0.35, float(values["polar_cone"]["r_max_rg"]) * 0.7, 5.0)
+    ax.set_xlim(-limit, limit)
+    ax.set_ylim(-limit, limit)
+    ax.set_aspect("equal", adjustable="box")
+    ax.set_title("DIS optical-depth accumulation along geodesics")
+    ax.set_xlabel(r"$x$ [$r_g$]")
+    ax.set_ylabel(r"$z$ [$r_g$]")
+    ax.grid(True, color="#cbd5e1", alpha=0.45, linewidth=0.55)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=170)
+    plt.close(fig)
+
+
+def write_optical_depth_map_html(segment_rows: list[dict[str, float]], values: dict[str, dict[str, Any]], output_path: Path) -> None:
+    stride = max(1, len(segment_rows) // 2500)
+    rows = segment_rows[::stride]
+    payload = json.dumps(rows)
+    torus = values["analytic_torus"]
+    cone = values["polar_cone"]
+    geometry = {
+        "torus": {
+            "rInner": float(torus["r_inner_rg"]),
+            "rOuter": float(torus["r_outer_rg"]),
+            "rPeak": float(torus["r_peak_rg"]),
+            "halfOpeningRad": math.radians(float(torus["half_opening_angle_deg"])),
+        },
+        "cone": {
+            "enabled": bool(cone["enabled"]),
+            "openingRad": math.radians(float(cone["opening_angle_deg"])),
+            "rMin": float(cone["r_min_rg"]),
+            "rMax": float(cone["r_max_rg"]),
+            "bipolar": str(cone["draw_mode"]) == "bipolar_funnel",
+        },
+    }
+    output_path.write_text(
+        f"""<!doctype html>
+<html><head><meta charset="utf-8"><title>HADROS3 DIS Optical Depth Map</title>
+<style>body{{font-family:system-ui,sans-serif;margin:0;background:#f8fafc;color:#172033}}canvas{{display:block;width:100vw;height:82vh;background:#101318;cursor:grab}}.note{{padding:12px 16px}}</style></head>
+<body><canvas id="canvas" width="1200" height="760"></canvas><div class="note">DIS optical depth map. Segment color scales with d_tau. Drag to rotate, wheel to zoom.</div>
+<script>
+const rows = {payload};
+const geometry = {json.dumps(geometry)};
+const c = document.getElementById("canvas"), ctx = c.getContext("2d");
+let yaw = 0.72, pitch = 0.38, zoom = 1.0, dragging = false, lastX = 0, lastY = 0;
+function rotate(p) {{
+  const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+  const x1 = cy * p.x - sy * p.y;
+  const y1 = sy * p.x + cy * p.y;
+  return {{x: x1, y: cp * y1 - sp * p.z, z: sp * y1 + cp * p.z}};
+}}
+function color(t) {{
+  const u = Math.max(0, Math.min(1, t));
+  const r = Math.round(60 + 195*u), g = Math.round(80 + 80*Math.sin(Math.PI*u)), b = Math.round(180 - 150*u);
+  return `rgba(${{r}},${{g}},${{b}},0.82)`;
+}}
+function draw() {{
+  ctx.fillStyle="#101318"; ctx.fillRect(0,0,c.width,c.height);
+  const maxDtau = Math.max(1e-300, ...rows.map(r => r.d_tau || 0));
+  const geometryLimit = Math.max(geometry.torus.rOuter, geometry.cone.rMax || 0);
+  const pointLimit = rows.length ? Math.max(...rows.flatMap(r => [Math.abs(r.xm), Math.abs(r.ym), Math.abs(r.zm)])) : 0;
+  const lim = Math.max(5, pointLimit, geometryLimit) * 1.25 / zoom;
+  const sx = x => c.width * (0.5 + 0.42 * x / lim), sy = z => c.height * (0.5 - 0.42 * z / lim);
+  ctx.strokeStyle="#334155"; ctx.lineWidth=1;
+  for (let i=-4;i<=4;i++) {{ ctx.beginPath(); ctx.moveTo(sx(-lim), sy(i*lim/4)); ctx.lineTo(sx(lim), sy(i*lim/4)); ctx.stroke(); ctx.beginPath(); ctx.moveTo(sx(i*lim/4), sy(-lim)); ctx.lineTo(sx(i*lim/4), sy(lim)); ctx.stroke(); }}
+  const ordered = rows.map(r => {{ const m = rotate({{x:r.xm,y:r.ym,z:r.zm}}); return {{...r, depth:m.y}}; }}).sort((a,b)=>a.depth-b.depth);
+  for (const r of ordered) {{
+    const a = rotate({{x:r.x0,y:0,z:r.z0}}), b = rotate({{x:r.x1,y:0,z:r.z1}});
+    const t = Math.log10(Math.max(r.d_tau, 1e-300)) / Math.log10(maxDtau);
+    ctx.strokeStyle = color(Number.isFinite(t) ? t : 0);
+    ctx.lineWidth = 1.1;
+    ctx.beginPath(); ctx.moveTo(sx(a.x), sy(a.z)); ctx.lineTo(sx(b.x), sy(b.z)); ctx.stroke();
+  }}
+  ctx.fillStyle="black"; ctx.beginPath(); ctx.arc(sx(0), sy(0), Math.max(4, 0.55*c.width/lim), 0, 2*Math.PI); ctx.fill();
+  ctx.fillStyle="#e5e7eb"; ctx.font="20px system-ui"; ctx.fillText("HADROS3 DIS Optical Depth Map", 18, 32);
+  ctx.font="14px system-ui"; ctx.fillText(`segments=${{rows.length}} max d_tau=${{maxDtau.toExponential(3)}}`, 18, 54);
+}}
+c.addEventListener("mousedown", e => {{ dragging = true; lastX = e.clientX; lastY = e.clientY; }});
+window.addEventListener("mouseup", () => dragging = false);
+window.addEventListener("mousemove", e => {{ if (!dragging) return; yaw += (e.clientX-lastX)*0.008; pitch = Math.max(-1.45, Math.min(1.45, pitch+(e.clientY-lastY)*0.008)); lastX=e.clientX; lastY=e.clientY; draw(); }});
+c.addEventListener("wheel", e => {{ e.preventDefault(); zoom = Math.max(0.2, Math.min(8, zoom * Math.exp(-e.deltaY * 0.001))); draw(); }}, {{passive:false}});
+draw();
+</script></body></html>
+""",
+        encoding="utf-8",
+    )
+
+
+def draw_correlation(segment_rows: list[dict[str, float]], output_path: Path) -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    rows = [row for row in segment_rows if row["rho_g_cm3"] > 0.0 and row["E_nu_local_gev"] > 0.0 and row["sigma_nuN_cm2"] > 0.0]
+    fig, ax = plt.subplots(figsize=(7.4, 5.8), facecolor="#f8fafc")
+    if rows:
+        stride = max(1, len(rows) // 6000)
+        rows = rows[::stride]
+        scatter = ax.scatter(
+            [row["rho_g_cm3"] for row in rows],
+            [row["E_nu_local_gev"] for row in rows],
+            c=[row["sigma_nuN_cm2"] for row in rows],
+            s=8,
+            cmap="plasma",
+            alpha=0.62,
+        )
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        cbar = fig.colorbar(scatter, ax=ax, shrink=0.82)
+        cbar.set_label(r"$\sigma_{\nu N}$ [cm$^2$]")
+    ax.set_title(r"DIS segment correlation: $\rho$, $E_{\rm local}$, $\sigma_{\nu N}$")
+    ax.set_xlabel(r"$\rho$ [g cm$^{-3}$]")
+    ax.set_ylabel(r"$E_{\nu,\rm local}$ [GeV]")
+    ax.grid(True, color="#cbd5e1", alpha=0.45, linewidth=0.55)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=165)
+    plt.close(fig)
+
+
+def draw_medium_density_map(
+    accepted: list[dict[str, Any]],
+    segments: list[dict[str, Any]],
+    values: dict[str, dict[str, Any]],
+    output_path: Path,
+) -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import LogNorm
+    from matplotlib.patches import Circle
+
+    config = dis_config_from_values(values)
+    torus = values["analytic_torus"]
+    r_inner = float(torus["r_inner_rg"])
+    r_outer = float(torus["r_outer_rg"])
+    half_angle = math.radians(float(torus["half_opening_angle_deg"]))
+    limit = max(r_outer * 1.35, 5.0)
+    n_r = 280
+    n_z = 360
+    r_axis = [limit * i / (n_r - 1) for i in range(n_r)]
+    z_axis = [-limit + 2.0 * limit * i / (n_z - 1) for i in range(n_z)]
+    density_grid: list[list[float]] = []
+    positive: list[float] = []
+    for z in z_axis:
+        row: list[float] = []
+        for cylindrical_r in r_axis:
+            radius = math.hypot(cylindrical_r, z)
+            theta = math.atan2(cylindrical_r, z) if radius > 0.0 else 0.0
+            rho = analytic_torus_density_g_cm3(radius, theta, values, density_floor_g_cm3=config.density_floor_g_cm3)
+            row.append(rho)
+            if rho > 0.0:
+                positive.append(rho)
+        density_grid.append(row)
+
+    fig, ax = plt.subplots(figsize=(8.6, 7.8), facecolor="#f8fafc")
+    if positive:
+        image = ax.imshow(
+            density_grid,
+            origin="lower",
+            extent=[min(r_axis), max(r_axis), min(z_axis), max(z_axis)],
+            aspect="equal",
+            cmap="magma",
+            norm=LogNorm(vmin=max(min(positive), 1.0e-30), vmax=max(positive)),
+        )
+        cbar = fig.colorbar(image, ax=ax, shrink=0.82)
+        cbar.set_label(r"$\rho$ [g cm$^{-3}$]")
+        contour_levels = [max(positive) * factor for factor in (1.0e-4, 1.0e-3, 1.0e-2, 1.0e-1)]
+        ax.contour(r_axis, z_axis, density_grid, levels=[level for level in contour_levels if min(positive) < level < max(positive)], colors="#f8fafc", linewidths=0.55, alpha=0.65)
+    else:
+        ax.imshow(density_grid, origin="lower", extent=[min(r_axis), max(r_axis), min(z_axis), max(z_axis)], aspect="equal", cmap="Greys")
+
+    ax.add_patch(Circle((0.0, 0.0), r_inner, fill=False, edgecolor="#38bdf8", linestyle="--", linewidth=1.4, label="hard radial cuts"))
+    ax.add_patch(Circle((0.0, 0.0), r_outer, fill=False, edgecolor="#38bdf8", linestyle="--", linewidth=1.4))
+    for sign in (-1.0, 1.0):
+        theta = 0.5 * math.pi + sign * half_angle
+        ax.plot(
+            [0.0, limit * math.sin(theta)],
+            [0.0, limit * math.cos(theta)],
+            color="#fde047",
+            linestyle=":",
+            linewidth=1.1,
+            label="Gaussian width angle" if sign < 0.0 else None,
+        )
+    if segments:
+        for segment in segments[:: max(1, len(segments) // 1100)]:
+            r0 = float(segment["r_start_rg"])
+            th0 = float(segment["theta_start_rad"])
+            r1 = float(segment["r_end_rg"])
+            th1 = float(segment["theta_end_rad"])
+            ax.plot(
+                [r0 * math.sin(th0), r1 * math.sin(th1)],
+                [r0 * math.cos(th0), r1 * math.cos(th1)],
+                color="#93c5fd",
+                alpha=0.13,
+                linewidth=0.45,
+            )
+    if accepted:
+        scatter = ax.scatter(
+            [float(row["interaction_r_rg"]) * math.sin(float(row["interaction_theta_rad"])) for row in accepted],
+            [float(row["interaction_r_rg"]) * math.cos(float(row["interaction_theta_rad"])) for row in accepted],
+            c=[float(row.get("interaction_point_rho_g_cm3", row["interaction_rho_g_cm3"])) for row in accepted],
+            s=30,
+            cmap="viridis",
+            edgecolors="black",
+            linewidths=0.35,
+            zorder=5,
+        )
+        fig.colorbar(scatter, ax=ax, shrink=0.82, label=r"accepted point $\rho$ [g cm$^{-3}$]")
+    ax.set_title("DIS medium density map: hard radial shell, Gaussian angular profile")
+    ax.set_xlabel(r"$R=r\sin\theta$ [$r_g$]")
+    ax.set_ylabel(r"$z=r\cos\theta$ [$r_g$]")
+    ax.set_xlim(0.0, limit)
+    ax.set_ylim(-limit, limit)
+    ax.grid(True, color="#cbd5e1", alpha=0.35, linewidth=0.5)
+    ax.legend(loc="upper right", fontsize=8)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=170)
+    plt.close(fig)
+
+
+def generate_dis_diagnostics(values: dict[str, dict[str, Any]], *, run_output_dir: Path, summary: dict[str, Any] | None = None) -> dict[str, Any]:
+    output_dir = dis_dir(run_output_dir)
+    path_records = read_jsonl(output_dir / "dis_path_optical_depths.jsonl")
+    accepted = read_jsonl(output_dir / "dis_accepted_interactions.jsonl")
+    segments = read_jsonl(forward_geodesics_dir(run_output_dir) / "uhe_neutrino_forward_path_segments.jsonl")
+    segment_rows = _segment_diagnostics(values, segments)
+
+    paths = {
+        "tau_distribution": output_dir / "tau_distribution.png",
+        "interaction_probability_distribution": output_dir / "interaction_probability_distribution.png",
+        "optical_depth_map": output_dir / "optical_depth_map.png",
+        "optical_depth_map_3d_html": output_dir / "optical_depth_map_3d.html",
+        "medium_density_map": output_dir / "medium_density_map.png",
+        "interaction_location_distribution": output_dir / "interaction_location_distribution.png",
+        "local_energy_distribution": output_dir / "local_energy_distribution.png",
+        "local_density_distribution": output_dir / "local_density_distribution.png",
+        "sigma_distribution": output_dir / "sigma_distribution.png",
+        "density_energy_sigma_correlation": output_dir / "density_energy_sigma_correlation.png",
+        "dis_diagnostics_report": output_dir / "dis_diagnostics_report.json",
+    }
+
+    tau_values = [float(record["tau_nuN_total"]) for record in path_records]
+    probability_values = [float(record["interaction_probability"]) for record in path_records]
+    accepted_energy = [float(record["interaction_E_nu_local_gev"]) for record in accepted]
+    accepted_density = [float(record["interaction_rho_g_cm3"]) for record in accepted]
+    accepted_sigma = [float(record["interaction_sigma_nuN_cm2"]) for record in accepted]
+    segment_sigma = [row["sigma_nuN_cm2"] for row in segment_rows if row["sigma_nuN_cm2"] > 0.0]
+
+    _plot_histogram(tau_values, paths["tau_distribution"], title=r"DIS $\tau_{\nu N}$ distribution", xlabel=r"$\tau_{\nu N,total}$", color="#2563eb", logx=any(value > 0.0 for value in tau_values))
+    _plot_histogram(probability_values, paths["interaction_probability_distribution"], title="DIS interaction probability distribution", xlabel=r"$P_{\rm int}=1-\exp(-\tau)$", color="#7c2d12")
+    draw_optical_depth_map(segment_rows, values, paths["optical_depth_map"])
+    write_optical_depth_map_html(segment_rows, values, paths["optical_depth_map_3d_html"])
+    draw_medium_density_map(accepted, segments, values, paths["medium_density_map"])
+    draw_interaction_locations(accepted, segments, values, paths["interaction_location_distribution"])
+    _plot_histogram(accepted_energy, paths["local_energy_distribution"], title=r"Accepted interaction $E_{\nu,\rm local}$", xlabel=r"$E_{\nu,\rm local}$ [GeV]", color="#059669", logx=True)
+    _plot_histogram(accepted_density, paths["local_density_distribution"], title="Accepted interaction density", xlabel=r"$\rho$ [g cm$^{-3}$]", color="#ea580c", logx=True)
+    _plot_histogram(segment_sigma, paths["sigma_distribution"], title=r"Segment $\sigma_{\nu N}$ used in optical-depth calculation", xlabel=r"$\sigma_{\nu N}$ [cm$^2$]", color="#9333ea", logx=True)
+    draw_correlation(segment_rows, paths["density_energy_sigma_correlation"])
+
+    tau_stats = _stats(tau_values)
+    probability_stats = _stats(probability_values)
+    energy_stats = _stats(accepted_energy)
+    rho_stats = _stats(accepted_density)
+    sigma_stats = _stats(segment_sigma)
+    interaction_points_total = len(accepted)
+    interaction_points_inside = sum(bool(record.get("interaction_point_inside_medium", False)) for record in accepted)
+    interaction_points_outside = interaction_points_total - interaction_points_inside
+    report = {
+        "diagnostics_generated": True,
+        "medium_density_map_generated": True,
+        "density_model_has_hard_radial_cut": True,
+        "density_model_theta_profile": "gaussian",
+        "density_model_theta_is_hard_cut": False,
+        "n_paths": len(path_records),
+        "n_segments": len(segments),
+        "interaction_points_total": interaction_points_total,
+        "interaction_points_inside_medium": interaction_points_inside,
+        "interaction_points_outside_medium": interaction_points_outside,
+        "interaction_points_outside_medium_fraction": interaction_points_outside / interaction_points_total if interaction_points_total else 0.0,
+        "tau_statistics": {
+            "tau_min": tau_stats["min"],
+            "tau_mean": tau_stats["mean"],
+            "tau_median": tau_stats["median"],
+            "tau_std": tau_stats["std"],
+            "tau_max": tau_stats["max"],
+        },
+        "probability_statistics": {
+            "probability_min": probability_stats["min"],
+            "probability_mean": probability_stats["mean"],
+            "probability_median": probability_stats["median"],
+            "probability_std": probability_stats["std"],
+            "probability_max": probability_stats["max"],
+        },
+        "E_local_statistics": {
+            "E_local_min": energy_stats["min"],
+            "E_local_mean": energy_stats["mean"],
+            "E_local_max": energy_stats["max"],
+        },
+        "rho_statistics": {
+            "rho_min": rho_stats["min"],
+            "rho_mean": rho_stats["mean"],
+            "rho_max": rho_stats["max"],
+        },
+        "sigma_statistics": {
+            "sigma_min": sigma_stats["min"],
+            "sigma_mean": sigma_stats["mean"],
+            "sigma_max": sigma_stats["max"],
+        },
+        "accepted_interactions": len(accepted),
+        "accepted_fraction": len(accepted) / len(path_records) if path_records else 0.0,
+        "GBW_IIM_comparison": None,
+        "products": {key: str(path) for key, path in paths.items()},
+    }
+    existing_comparison = output_dir / "gbw_vs_iim_summary.json"
+    if existing_comparison.exists():
+        try:
+            report["GBW_IIM_comparison"] = json.loads(existing_comparison.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            report["GBW_IIM_comparison"] = {"status": "invalid_summary"}
+    write_json(paths["dis_diagnostics_report"], report)
+    if summary is not None:
+        summary.setdefault("products", {}).update({key: str(path) for key, path in paths.items()})
+        summary.update(
+            {
+                "diagnostics_generated": True,
+                "medium_density_map_generated": True,
+                "density_model_has_hard_radial_cut": True,
+                "density_model_theta_profile": "gaussian",
+                "density_model_theta_is_hard_cut": False,
+                "interaction_points_total": interaction_points_total,
+                "interaction_points_inside_medium": interaction_points_inside,
+                "interaction_points_outside_medium": interaction_points_outside,
+                "interaction_points_outside_medium_fraction": interaction_points_outside / interaction_points_total if interaction_points_total else 0.0,
+                "tau_median": tau_stats["median"],
+                "tau_std": tau_stats["std"],
+                "E_local_min": energy_stats["min"],
+                "E_local_mean": energy_stats["mean"],
+                "E_local_max": energy_stats["max"],
+                "rho_min": rho_stats["min"],
+                "rho_mean": rho_stats["mean"],
+                "rho_max": rho_stats["max"],
+                "sigma_min": sigma_stats["min"],
+                "sigma_mean": sigma_stats["mean"],
+                "sigma_max": sigma_stats["max"],
+            }
+        )
+    return report
+
+
+def generate_gbw_iim_comparison(values: dict[str, dict[str, Any]], *, run_output_dir: Path) -> dict[str, Any]:
+    output_dir = dis_dir(run_output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    model_payloads: dict[str, dict[str, Any]] = {}
+    with tempfile.TemporaryDirectory(prefix="hadros3_dis_model_compare_") as tmp:
+        tmp_root = Path(tmp)
+        for model in ["GBW", "IIM"]:
+            tmp_run = tmp_root / model
+            tmp_run.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(uhe_source_dir(run_output_dir), uhe_source_dir(tmp_run))
+            shutil.copytree(forward_geodesics_dir(run_output_dir), forward_geodesics_dir(tmp_run))
+            model_values = json.loads(json.dumps(values))
+            model_values["dis_interaction_sampler"]["dis_model"] = model
+            summary = generate_dis_interaction_products(model_values, run_output_dir=tmp_run, include_model_comparison=False)
+            paths = read_jsonl(dis_dir(tmp_run) / "dis_path_optical_depths.jsonl")
+            accepted = read_jsonl(dis_dir(tmp_run) / "dis_accepted_interactions.jsonl")
+            diagnostics = json.loads((dis_dir(tmp_run) / "dis_diagnostics_report.json").read_text(encoding="utf-8"))
+            model_payloads[model] = {"summary": summary, "paths": paths, "accepted": accepted, "diagnostics": diagnostics}
+
+    gbw = model_payloads["GBW"]
+    iim = model_payloads["IIM"]
+    tau_path = output_dir / "gbw_vs_iim_tau_comparison.png"
+    prob_path = output_dir / "gbw_vs_iim_probability_comparison.png"
+    loc_path = output_dir / "gbw_vs_iim_interaction_locations.png"
+    summary_path = output_dir / "gbw_vs_iim_summary.json"
+
+    _plot_model_comparison_hist(
+        [float(row["tau_nuN_total"]) for row in gbw["paths"]],
+        [float(row["tau_nuN_total"]) for row in iim["paths"]],
+        tau_path,
+        title=r"GBW vs IIM $\tau_{\nu N}$",
+        xlabel=r"$\tau_{\nu N,total}$",
+        logx=True,
+    )
+    _plot_model_comparison_hist(
+        [float(row["interaction_probability"]) for row in gbw["paths"]],
+        [float(row["interaction_probability"]) for row in iim["paths"]],
+        prob_path,
+        title="GBW vs IIM interaction probability",
+        xlabel=r"$P_{\rm int}$",
+        logx=False,
+    )
+    _plot_model_interactions(gbw["accepted"], iim["accepted"], values, loc_path)
+
+    def row(model: str, payload: dict[str, Any]) -> dict[str, float | int]:
+        summary = payload["summary"]
+        diagnostics = payload["diagnostics"]
+        sigma_stats = diagnostics.get("sigma_statistics", {})
+        return {
+            "tau_mean": float(summary.get("tau_mean", 0.0)),
+            "tau_max": float(summary.get("tau_max", 0.0)),
+            "accepted_interactions": int(summary.get("n_interactions_accepted", 0)),
+            "accepted_fraction": float(summary.get("acceptance_fraction", 0.0)),
+            "sigma_mean": float(sigma_stats.get("sigma_mean", 0.0)),
+            "sigma_max": float(sigma_stats.get("sigma_max", 0.0)),
+        }
+
+    gbw_row = row("GBW", gbw)
+    iim_row = row("IIM", iim)
+    comparison = {
+        "status": "ok",
+        "models": {"GBW": gbw_row, "IIM": iim_row},
+        "differences": {
+            key: float(gbw_row[key]) - float(iim_row[key])
+            for key in ["tau_mean", "tau_max", "accepted_interactions", "accepted_fraction", "sigma_mean", "sigma_max"]
+        },
+        "products": {
+            "gbw_vs_iim_tau_comparison": str(tau_path),
+            "gbw_vs_iim_probability_comparison": str(prob_path),
+            "gbw_vs_iim_interaction_locations": str(loc_path),
+            "gbw_vs_iim_summary": str(summary_path),
+        },
+    }
+    write_json(summary_path, comparison)
+    report_path = output_dir / "dis_diagnostics_report.json"
+    if report_path.exists():
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        report["GBW_IIM_comparison"] = comparison
+        report.setdefault("products", {}).update(comparison["products"])
+        write_json(report_path, report)
+    return comparison
+
+
+def _plot_model_comparison_hist(gbw_values: list[float], iim_values: list[float], output_path: Path, *, title: str, xlabel: str, logx: bool) -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    gbw_clean = _finite(gbw_values)
+    iim_clean = _finite(iim_values)
+    if logx:
+        gbw_clean = [value for value in gbw_clean if value > 0.0]
+        iim_clean = [value for value in iim_clean if value > 0.0]
+    fig, ax = plt.subplots(figsize=(7.4, 4.8), facecolor="#f8fafc")
+    if gbw_clean:
+        ax.hist(gbw_clean, bins=_hist_bins(gbw_clean), histtype="step", linewidth=2.0, color="#2563eb", label="GBW")
+    if iim_clean:
+        ax.hist(iim_clean, bins=_hist_bins(iim_clean), histtype="step", linewidth=2.0, color="#dc2626", label="IIM")
+    if logx and any(value > 0.0 for value in gbw_clean + iim_clean):
+        ax.set_xscale("log")
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel("count")
+    ax.legend()
+    ax.grid(True, color="#cbd5e1", alpha=0.55, linewidth=0.6)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=165)
+    plt.close(fig)
+
+
+def _plot_model_interactions(gbw_accepted: list[dict[str, Any]], iim_accepted: list[dict[str, Any]], values: dict[str, dict[str, Any]], output_path: Path) -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig, axes = plt.subplots(1, 2, figsize=(13.2, 6.4), facecolor="#f8fafc", sharex=True, sharey=True)
+    for ax, title, records in [(axes[0], "GBW", gbw_accepted), (axes[1], "IIM", iim_accepted)]:
+        _draw_meridional_geometry(ax, values)
+        if records:
+            xs, zs, colors = [], [], []
+            for record in records:
+                x, _, z = _xyz(float(record["interaction_r_rg"]), float(record["interaction_theta_rad"]), float(record["interaction_phi_rad"]))
+                xs.append(x)
+                zs.append(z)
+                colors.append(float(record["interaction_E_nu_local_gev"]))
+            scatter = ax.scatter(xs, zs, c=colors, s=22, cmap="viridis", edgecolors="black", linewidths=0.25, zorder=5)
+            fig.colorbar(scatter, ax=ax, shrink=0.76, label=r"$E_{\nu,\rm local}$ [GeV]")
+        ax.set_title(f"{title} accepted={len(records)}")
+        ax.set_xlabel(r"$x$ [$r_g$]")
+        ax.grid(True, color="#cbd5e1", alpha=0.45, linewidth=0.55)
+    axes[0].set_ylabel(r"$z$ [$r_g$]")
+    limit = max(float(values["forward_geodesics"]["outer_radius_rg"]) * 0.35, float(values["polar_cone"]["r_max_rg"]) * 0.7, 5.0)
+    for ax in axes:
+        ax.set_xlim(-limit, limit)
+        ax.set_ylim(-limit, limit)
+        ax.set_aspect("equal", adjustable="box")
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=165)
+    plt.close(fig)
+
+
 def _generate_dis_interaction_products_python(values: dict[str, dict[str, Any]], *, run_output_dir: Path) -> dict[str, Any]:
     config_problems = validate_values(values)
     if config_problems:
@@ -485,6 +1182,8 @@ def _generate_dis_interaction_products_python(values: dict[str, dict[str, Any]],
     n_oob_sigma = 0
     n_static_fallback = 0
     n_segments_used_total = 0
+    interaction_points_inside = 0
+    interaction_points_outside = 0
     cdf_normalized = True
     for path in forward_paths:
         event_id = str(path["event_id"])
@@ -584,33 +1283,52 @@ def _generate_dis_interaction_products_python(values: dict[str, dict[str, Any]],
                     chosen = entry
                     break
             segment = chosen["segment"]
-            s = rng.random()
+            point = sample_interaction_point_in_medium(
+                segment,
+                values,
+                density_floor_g_cm3=config.density_floor_g_cm3,
+                rng=rng,
+            )
             candidate.update(
                 {
-                    "candidate_r_rg": float(segment["r_start_rg"]) + s * (float(segment["r_end_rg"]) - float(segment["r_start_rg"])),
-                    "candidate_theta_rad": float(segment["theta_start_rad"]) + s * (float(segment["theta_end_rad"]) - float(segment["theta_start_rad"])),
-                    "candidate_phi_rad": _linear_angle(float(segment["phi_start_rad"]), float(segment["phi_end_rad"]), s),
+                    "candidate_r_rg": point["r"],
+                    "candidate_theta_rad": point["theta"],
+                    "candidate_phi_rad": point["phi"],
                     "candidate_E_nu_local_gev": chosen["E_nu_local_gev"],
-                    "candidate_rho_g_cm3": chosen["rho_g_cm3"],
+                    "candidate_rho_g_cm3": point["rho"],
                     "candidate_n_baryon_cm3": chosen["n_baryon_cm3"],
                     "candidate_sigma_nuN_cm2": chosen["sigma_nuN_cm2"],
                     "candidate_d_tau_segment": chosen["d_tau_nuN"],
+                    "interaction_point_density_checked": True,
+                    "interaction_point_rho_g_cm3": point["rho"],
+                    "interaction_point_inside_medium": point["inside"],
+                    "interaction_point_sampling_method": point["method"],
+                    "interaction_point_sampling_attempts": point["attempts"],
                 }
             )
             if accepted_flag:
+                if bool(point["inside"]):
+                    interaction_points_inside += 1
+                else:
+                    interaction_points_outside += 1
                 accepted.append(
                     {
                         "interaction_id": f"H3DIS-{len(accepted):06d}",
                         "event_id": event_id,
                         "source_sample_id": source_sample_id,
-                        "interaction_r_rg": candidate["candidate_r_rg"],
-                        "interaction_theta_rad": candidate["candidate_theta_rad"],
-                        "interaction_phi_rad": candidate["candidate_phi_rad"],
+                        "interaction_r_rg": point["r"],
+                        "interaction_theta_rad": point["theta"],
+                        "interaction_phi_rad": point["phi"],
                         "interaction_E_nu_local_gev": chosen["E_nu_local_gev"],
-                        "interaction_rho_g_cm3": chosen["rho_g_cm3"],
+                        "interaction_rho_g_cm3": point["rho"],
                         "interaction_n_baryon_cm3": chosen["n_baryon_cm3"],
                         "interaction_sigma_nuN_cm2": chosen["sigma_nuN_cm2"],
                         "interaction_d_tau_segment": chosen["d_tau_nuN"],
+                        "interaction_point_density_checked": True,
+                        "interaction_point_rho_g_cm3": point["rho"],
+                        "interaction_point_inside_medium": point["inside"],
+                        "interaction_point_sampling_method": point["method"],
+                        "interaction_point_sampling_attempts": point["attempts"],
                         "tau_nuN_total": tau_total,
                         "interaction_probability": probability,
                         "interaction_weight": interaction_weight,
@@ -661,6 +1379,11 @@ def _generate_dis_interaction_products_python(values: dict[str, dict[str, Any]],
         "sigma_energy_min_gev": provider.energy_min_gev,
         "sigma_energy_max_gev": provider.energy_max_gev,
         "interaction_sampling_mode": config.interaction_sampling_mode,
+        "interaction_point_sampling_method": "rejection_with_midpoint_fallback",
+        "interaction_points_total": len(accepted),
+        "interaction_points_inside_medium": interaction_points_inside,
+        "interaction_points_outside_medium": interaction_points_outside,
+        "interaction_points_outside_medium_fraction": interaction_points_outside / len(accepted) if accepted else 0.0,
         "random_seed": config.random_seed,
         "n_paths_processed": len(path_records),
         "n_segments_processed": n_segments_used_total,
@@ -672,6 +1395,9 @@ def _generate_dis_interaction_products_python(values: dict[str, dict[str, Any]],
         "max_density_g_cm3": max_density,
         "max_sigma_cm2": max_sigma,
         "max_d_tau": max_d_tau,
+        "density_model_has_hard_radial_cut": True,
+        "density_model_theta_profile": "gaussian",
+        "density_model_theta_is_hard_cut": False,
         "n_oob_sigma_table_segments": n_oob_sigma,
         "n_static_to_zamo_fallback_segments": n_static_fallback,
         "observer_bridge_active_filter_invoked": False,
@@ -719,6 +1445,9 @@ def _generate_dis_interaction_products_python(values: dict[str, dict[str, Any]],
     draw_tau_preview(path_records, tau_preview_path)
     draw_interaction_locations(accepted, segments, values, locations_path)
     write_interaction_locations_html(accepted, values, locations_html_path)
+    generate_dis_diagnostics(values, run_output_dir=run_output_dir, summary=summary)
+    write_json(summary_path, summary)
+    _write_summary_csv(summary_csv_path, summary)
     return summary
 
 
@@ -847,6 +1576,9 @@ def generate_dis_interaction_products_cpp(values: dict[str, dict[str, Any]], *, 
             "cuda_backend_used": False,
             "python_prototype_used": False,
             "uses_hadros_original_runtime_path": False,
+            "density_model_has_hard_radial_cut": True,
+            "density_model_theta_profile": "gaussian",
+            "density_model_theta_is_hard_cut": False,
             "products": {
                 **summary.get("products", {}),
                 "dis_tau_preview": str(tau_preview_path),
@@ -879,10 +1611,13 @@ def generate_dis_interaction_products_cpp(values: dict[str, dict[str, Any]], *, 
     draw_tau_preview(path_records, tau_preview_path)
     draw_interaction_locations(accepted, segments, values, locations_path)
     write_interaction_locations_html(accepted, values, locations_html_path)
+    generate_dis_diagnostics(values, run_output_dir=run_output_dir, summary=summary)
+    write_json(summary_path, summary)
+    _write_summary_csv(output_dir / "dis_summary.csv", summary)
     return summary
 
 
-def generate_dis_interaction_products(values: dict[str, dict[str, Any]], *, run_output_dir: Path) -> dict[str, Any]:
+def _generate_dis_interaction_products_base(values: dict[str, dict[str, Any]], *, run_output_dir: Path) -> dict[str, Any]:
     config_problems = validate_values(values)
     if config_problems:
         raise ValueError("Invalid HADROS3 configuration:\n- " + "\n- ".join(config_problems))
@@ -892,3 +1627,15 @@ def generate_dis_interaction_products(values: dict[str, dict[str, Any]], *, run_
     if backend == "python_prototype":
         return _generate_dis_interaction_products_python(values, run_output_dir=run_output_dir)
     raise ValueError(f"unsupported dis_interaction_sampler.dis_backend: {backend}")
+
+
+def generate_dis_interaction_products(values: dict[str, dict[str, Any]], *, run_output_dir: Path, include_model_comparison: bool = True) -> dict[str, Any]:
+    summary = _generate_dis_interaction_products_base(values, run_output_dir=run_output_dir)
+    if include_model_comparison:
+        comparison = generate_gbw_iim_comparison(values, run_output_dir=run_output_dir)
+        summary["GBW_IIM_comparison"] = comparison
+        summary.setdefault("products", {}).update(comparison["products"])
+        output_dir = dis_dir(run_output_dir)
+        write_json(output_dir / "dis_summary.json", summary)
+        _write_summary_csv(output_dir / "dis_summary.csv", summary)
+    return summary

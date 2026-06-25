@@ -254,6 +254,16 @@ static double density(double r, double theta, const Config &c) {
   return rho > 0.0 ? std::max(rho, c.density_floor_g_cm3) : 0.0;
 }
 
+struct InteractionPoint {
+  double r = 0.0;
+  double theta = 0.0;
+  double phi = 0.0;
+  double rho = 0.0;
+  bool inside = false;
+  int attempts = 0;
+  std::string method = "rejection_with_midpoint_fallback";
+};
+
 static double local_energy(const Segment &s, const Config &c, bool &static_fallback) {
   const double a = c.spin_a;
   const double sinth = std::max(std::sin(s.thm), 1.0e-12);
@@ -276,6 +286,28 @@ static double probability(double tau) { return std::max(0.0, std::min(1.0, -std:
 static double interp_angle(double a0, double a1, double u) {
   const double delta = std::atan2(std::sin(a1 - a0), std::cos(a1 - a0));
   return a0 + u * delta;
+}
+
+static InteractionPoint sample_interaction_point(const Segment &s, const Config &config, std::mt19937_64 &rng, std::uniform_real_distribution<double> &uni) {
+  constexpr int max_attempts = 32;
+  InteractionPoint best;
+  for (int attempt = 1; attempt <= max_attempts; ++attempt) {
+    const double u = uni(rng);
+    const double rr = s.r0 + u * (s.r1 - s.r0);
+    const double th = s.th0 + u * (s.th1 - s.th0);
+    const double ph = interp_angle(s.ph0, s.ph1, u);
+    const double rho = density(rr, th, config);
+    if (rho > best.rho) best = {rr, th, ph, rho, rho > 0.0, attempt, "rejection_with_midpoint_fallback"};
+    if (rho > 0.0) return {rr, th, ph, rho, true, attempt, "rejection_with_midpoint_fallback"};
+  }
+  const double midpoint_rho = density(s.rm, s.thm, config);
+  if (midpoint_rho > 0.0) {
+    return {s.rm, s.thm, s.phm, midpoint_rho, true, max_attempts, "rejection_with_midpoint_fallback_midpoint"};
+  }
+  best.attempts = max_attempts;
+  best.method = "rejection_with_highest_density_fallback";
+  best.inside = best.rho > 0.0;
+  return best;
 }
 
 int main(int argc, char **argv) {
@@ -311,6 +343,7 @@ int main(int argc, char **argv) {
     const double rgcm = rg_to_cm(config.mass_msun);
     std::vector<double> tau_values;
     int accepted_count = 0, n_oob = 0, n_static_fallback = 0, n_segments_used = 0;
+    int interaction_points_inside = 0, interaction_points_outside = 0;
     bool cdf_normalized = true;
     double max_rho = 0.0, max_sigma = 0.0, max_dtau = 0.0;
 
@@ -379,14 +412,16 @@ int main(int argc, char **argv) {
           cumulative += entry.dtau;
           if (draw <= cumulative) { chosen = entry; break; }
         }
-        const double u = uni(rng);
-        const double rr = chosen.s.r0 + u * (chosen.s.r1 - chosen.s.r0);
-        const double th = chosen.s.th0 + u * (chosen.s.th1 - chosen.s.th0);
-        const double ph = interp_angle(chosen.s.ph0, chosen.s.ph1, u);
+        const InteractionPoint point = sample_interaction_point(chosen.s, config, rng, uni);
         candidates << ",\"candidate_E_nu_local_gev\":" << chosen.e << ",\"candidate_d_tau_segment\":" << chosen.dtau
-                   << ",\"candidate_n_baryon_cm3\":" << chosen.nb << ",\"candidate_phi_rad\":" << ph
-                   << ",\"candidate_r_rg\":" << rr << ",\"candidate_rho_g_cm3\":" << chosen.rho
-                   << ",\"candidate_sigma_nuN_cm2\":" << chosen.sig << ",\"candidate_theta_rad\":" << th;
+                   << ",\"candidate_n_baryon_cm3\":" << chosen.nb << ",\"candidate_phi_rad\":" << point.phi
+                   << ",\"candidate_r_rg\":" << point.r << ",\"candidate_rho_g_cm3\":" << point.rho
+                   << ",\"candidate_sigma_nuN_cm2\":" << chosen.sig << ",\"candidate_theta_rad\":" << point.theta
+                   << ",\"interaction_point_density_checked\":true"
+                   << ",\"interaction_point_inside_medium\":" << (point.inside ? "true" : "false")
+                   << ",\"interaction_point_rho_g_cm3\":" << point.rho
+                   << ",\"interaction_point_sampling_attempts\":" << point.attempts
+                   << ",\"interaction_point_sampling_method\":" << q(point.method);
         if (accept_flag) {
           accepted << "{\"direction_weight\":" << direction_weight << ",\"dis_model\":" << q(config.dis_model)
                    << ",\"event_id\":" << q(event_id) << ",\"expected_interaction_weight\":" << expected_weight
@@ -395,15 +430,25 @@ int main(int argc, char **argv) {
                    << ",\"interaction_d_tau_segment\":" << chosen.dtau
                    << ",\"interaction_id\":" << q("H3DIS-" + [&](){ std::ostringstream os; os << std::setw(6) << std::setfill('0') << accepted_count; return os.str(); }())
                    << ",\"interaction_n_baryon_cm3\":" << chosen.nb
-                   << ",\"interaction_phi_rad\":" << ph
+                   << ",\"interaction_phi_rad\":" << point.phi
                    << ",\"interaction_probability\":" << prob
-                   << ",\"interaction_r_rg\":" << rr
-                   << ",\"interaction_rho_g_cm3\":" << chosen.rho
+                   << ",\"interaction_point_density_checked\":true"
+                   << ",\"interaction_point_inside_medium\":" << (point.inside ? "true" : "false")
+                   << ",\"interaction_point_rho_g_cm3\":" << point.rho
+                   << ",\"interaction_point_sampling_attempts\":" << point.attempts
+                   << ",\"interaction_point_sampling_method\":" << q(point.method)
+                   << ",\"interaction_r_rg\":" << point.r
+                   << ",\"interaction_rho_g_cm3\":" << point.rho
                    << ",\"interaction_sigma_nuN_cm2\":" << chosen.sig
-                   << ",\"interaction_theta_rad\":" << th
+                   << ",\"interaction_theta_rad\":" << point.theta
                    << ",\"interaction_weight\":1,\"medium_model\":" << q(config.medium_model)
                    << ",\"source_sample_id\":" << source_id << ",\"source_weight\":" << source_weight
                    << ",\"tau_nuN_total\":" << tau << "}\n";
+          if (point.inside) {
+            ++interaction_points_inside;
+          } else {
+            ++interaction_points_outside;
+          }
           ++accepted_count;
         }
       }
@@ -430,6 +475,11 @@ int main(int argc, char **argv) {
             << ",\"cpp_backend_used\":true,\"cuda_backend_used\":false,\"density_model\":\"analytic_torus_density_v1\",\"dis_backend\":\"cpp_hadros_original_port\""
             << ",\"dis_model\":" << q(config.dis_model) << ",\"expensive_event_generation_invoked\":false,\"geant4_invoked\":false"
             << ",\"interaction_sampling_mode\":" << q(config.interaction_sampling_mode)
+            << ",\"interaction_point_sampling_method\":\"rejection_with_midpoint_fallback\""
+            << ",\"interaction_points_inside_medium\":" << interaction_points_inside
+            << ",\"interaction_points_outside_medium\":" << interaction_points_outside
+            << ",\"interaction_points_outside_medium_fraction\":" << (accepted_count == 0 ? 0.0 : static_cast<double>(interaction_points_outside) / accepted_count)
+            << ",\"interaction_points_total\":" << accepted_count
             << ",\"max_d_tau\":" << max_dtau << ",\"max_density_g_cm3\":" << max_rho << ",\"max_sigma_cm2\":" << max_sigma
             << ",\"medium_model\":" << q(config.medium_model) << ",\"medium_velocity_model\":" << q(config.medium_velocity_model)
             << ",\"medium_velocity_physics_risk\":true,\"n_interactions_accepted\":" << accepted_count
@@ -461,7 +511,14 @@ int main(int argc, char **argv) {
            << ",\"backend_language\":\"C++17\",\"backend_version_or_git_commit\":\"local-build\",\"cpp_backend_used\":true"
            << ",\"cuda_backend_used\":false,\"density_model\":\"analytic_torus_density_v1\",\"dis_backend\":\"cpp_hadros_original_port\""
            << ",\"dis_model\":" << q(config.dis_model) << ",\"expensive_event_generation_invoked\":false,\"geant4_invoked\":false"
+           << ",\"density_model_has_hard_radial_cut\":true,\"density_model_theta_is_hard_cut\":false"
+           << ",\"density_model_theta_profile\":\"gaussian\""
            << ",\"interaction_sampling_mode\":" << q(config.interaction_sampling_mode)
+           << ",\"interaction_point_sampling_method\":\"rejection_with_midpoint_fallback\""
+           << ",\"interaction_points_inside_medium\":" << interaction_points_inside
+           << ",\"interaction_points_outside_medium\":" << interaction_points_outside
+           << ",\"interaction_points_outside_medium_fraction\":" << (accepted_count == 0 ? 0.0 : static_cast<double>(interaction_points_outside) / accepted_count)
+           << ",\"interaction_points_total\":" << accepted_count
            << ",\"max_d_tau\":" << max_dtau << ",\"max_density_g_cm3\":" << max_rho << ",\"max_sigma_cm2\":" << max_sigma
            << ",\"medium_model\":" << q(config.medium_model) << ",\"medium_velocity_model\":" << q(config.medium_velocity_model)
            << ",\"medium_velocity_physics_risk\":true,\"n_interactions_accepted\":" << accepted_count

@@ -18,7 +18,7 @@ from urllib.parse import urlparse
 
 from hadros3.camera_preview import available_backends, launch_interactive_camera_preview, render_camera_preview
 from hadros3.config import deep_update, defaults, load_values, run_output_dir, safe_run_name, schema, validate_values
-from hadros3.dis_sampler import generate_dis_interaction_products
+from hadros3.dis_sampler import generate_dis_interaction_products, generate_gbw_iim_comparison
 from hadros3.forward_geodesics import generate_forward_geodesic_products
 from hadros3.paths import camera_preview_dir, clear_dis_outputs, clear_forward_geodesics_outputs, dashboard_dir, dis_dir, ensure_output_layout, forward_geodesics_dir, geometry_dir, rel, run_metadata_dir, uhe_source_dir
 from hadros3.pipeline import render_hadros_web
@@ -89,6 +89,21 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
     dis_locations_path = dis_output_dir / "dis_interaction_locations.png"
     dis_locations_3d_html_path = dis_output_dir / "dis_interaction_locations_3d.html"
     dis_report_path = dis_output_dir / "dis_optical_depth_report.json"
+    dis_tau_distribution_path = dis_output_dir / "tau_distribution.png"
+    dis_probability_distribution_path = dis_output_dir / "interaction_probability_distribution.png"
+    dis_optical_depth_map_path = dis_output_dir / "optical_depth_map.png"
+    dis_optical_depth_map_3d_html_path = dis_output_dir / "optical_depth_map_3d.html"
+    dis_medium_density_map_path = dis_output_dir / "medium_density_map.png"
+    dis_interaction_location_distribution_path = dis_output_dir / "interaction_location_distribution.png"
+    dis_local_energy_distribution_path = dis_output_dir / "local_energy_distribution.png"
+    dis_local_density_distribution_path = dis_output_dir / "local_density_distribution.png"
+    dis_sigma_distribution_path = dis_output_dir / "sigma_distribution.png"
+    dis_density_energy_sigma_correlation_path = dis_output_dir / "density_energy_sigma_correlation.png"
+    dis_diagnostics_report_path = dis_output_dir / "dis_diagnostics_report.json"
+    dis_gbw_iim_tau_comparison_path = dis_output_dir / "gbw_vs_iim_tau_comparison.png"
+    dis_gbw_iim_probability_comparison_path = dis_output_dir / "gbw_vs_iim_probability_comparison.png"
+    dis_gbw_iim_locations_path = dis_output_dir / "gbw_vs_iim_interaction_locations.png"
+    dis_gbw_iim_summary_path = dis_output_dir / "gbw_vs_iim_summary.json"
     html_path = web_dir / "index.html"
 
     camera_summary: dict[str, Any] | None = None
@@ -174,6 +189,21 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "dis_interaction_candidates": dis_candidates_path.exists(),
                 "dis_accepted_interactions": dis_accepted_path.exists(),
                 "dis_optical_depth_report": dis_report_path.exists(),
+                "tau_distribution": dis_tau_distribution_path.exists(),
+                "interaction_probability_distribution": dis_probability_distribution_path.exists(),
+                "optical_depth_map": dis_optical_depth_map_path.exists(),
+                "optical_depth_map_3d_html": dis_optical_depth_map_3d_html_path.exists(),
+                "medium_density_map": dis_medium_density_map_path.exists(),
+                "interaction_location_distribution": dis_interaction_location_distribution_path.exists(),
+                "local_energy_distribution": dis_local_energy_distribution_path.exists(),
+                "local_density_distribution": dis_local_density_distribution_path.exists(),
+                "sigma_distribution": dis_sigma_distribution_path.exists(),
+                "density_energy_sigma_correlation": dis_density_energy_sigma_correlation_path.exists(),
+                "dis_diagnostics_report": dis_diagnostics_report_path.exists(),
+                "gbw_vs_iim_tau_comparison": dis_gbw_iim_tau_comparison_path.exists(),
+                "gbw_vs_iim_probability_comparison": dis_gbw_iim_probability_comparison_path.exists(),
+                "gbw_vs_iim_interaction_locations": dis_gbw_iim_locations_path.exists(),
+                "gbw_vs_iim_summary": dis_gbw_iim_summary_path.exists(),
             },
             "summary": dis_summary,
             "links": {
@@ -186,6 +216,21 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "dis_interaction_candidates": rel(dis_candidates_path, output_dir),
                 "dis_accepted_interactions": rel(dis_accepted_path, output_dir),
                 "dis_optical_depth_report": rel(dis_report_path, output_dir),
+                "tau_distribution": rel(dis_tau_distribution_path, output_dir),
+                "interaction_probability_distribution": rel(dis_probability_distribution_path, output_dir),
+                "optical_depth_map": rel(dis_optical_depth_map_path, output_dir),
+                "optical_depth_map_3d_html": rel(dis_optical_depth_map_3d_html_path, output_dir),
+                "medium_density_map": rel(dis_medium_density_map_path, output_dir),
+                "interaction_location_distribution": rel(dis_interaction_location_distribution_path, output_dir),
+                "local_energy_distribution": rel(dis_local_energy_distribution_path, output_dir),
+                "local_density_distribution": rel(dis_local_density_distribution_path, output_dir),
+                "sigma_distribution": rel(dis_sigma_distribution_path, output_dir),
+                "density_energy_sigma_correlation": rel(dis_density_energy_sigma_correlation_path, output_dir),
+                "dis_diagnostics_report": rel(dis_diagnostics_report_path, output_dir),
+                "gbw_vs_iim_tau_comparison": rel(dis_gbw_iim_tau_comparison_path, output_dir),
+                "gbw_vs_iim_probability_comparison": rel(dis_gbw_iim_probability_comparison_path, output_dir),
+                "gbw_vs_iim_interaction_locations": rel(dis_gbw_iim_locations_path, output_dir),
+                "gbw_vs_iim_summary": rel(dis_gbw_iim_summary_path, output_dir),
             },
         },
         "pipeline_status": [
@@ -243,6 +288,21 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             "dis_interaction_locations_exists": dis_locations_path.exists(),
             "dis_interaction_locations_3d_html_exists": dis_locations_3d_html_path.exists(),
             "dis_optical_depth_report_exists": dis_report_path.exists(),
+            "tau_distribution_exists": dis_tau_distribution_path.exists(),
+            "interaction_probability_distribution_exists": dis_probability_distribution_path.exists(),
+            "optical_depth_map_exists": dis_optical_depth_map_path.exists(),
+            "optical_depth_map_3d_html_exists": dis_optical_depth_map_3d_html_path.exists(),
+            "medium_density_map_exists": dis_medium_density_map_path.exists(),
+            "interaction_location_distribution_exists": dis_interaction_location_distribution_path.exists(),
+            "local_energy_distribution_exists": dis_local_energy_distribution_path.exists(),
+            "local_density_distribution_exists": dis_local_density_distribution_path.exists(),
+            "sigma_distribution_exists": dis_sigma_distribution_path.exists(),
+            "density_energy_sigma_correlation_exists": dis_density_energy_sigma_correlation_path.exists(),
+            "dis_diagnostics_report_exists": dis_diagnostics_report_path.exists(),
+            "gbw_vs_iim_tau_comparison_exists": dis_gbw_iim_tau_comparison_path.exists(),
+            "gbw_vs_iim_probability_comparison_exists": dis_gbw_iim_probability_comparison_path.exists(),
+            "gbw_vs_iim_interaction_locations_exists": dis_gbw_iim_locations_path.exists(),
+            "gbw_vs_iim_summary_exists": dis_gbw_iim_summary_path.exists(),
             "provenance_exists": provenance_path.exists(),
             "config_exists": config_output_path.exists(),
             "render_summary_exists": render_summary_path.exists(),
@@ -290,6 +350,21 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "dis_interaction_locations": rel(dis_locations_path, output_dir),
                 "dis_interaction_locations_3d_html": rel(dis_locations_3d_html_path, output_dir),
                 "dis_optical_depth_report": rel(dis_report_path, output_dir),
+                "tau_distribution": rel(dis_tau_distribution_path, output_dir),
+                "interaction_probability_distribution": rel(dis_probability_distribution_path, output_dir),
+                "optical_depth_map": rel(dis_optical_depth_map_path, output_dir),
+                "optical_depth_map_3d_html": rel(dis_optical_depth_map_3d_html_path, output_dir),
+                "medium_density_map": rel(dis_medium_density_map_path, output_dir),
+                "interaction_location_distribution": rel(dis_interaction_location_distribution_path, output_dir),
+                "local_energy_distribution": rel(dis_local_energy_distribution_path, output_dir),
+                "local_density_distribution": rel(dis_local_density_distribution_path, output_dir),
+                "sigma_distribution": rel(dis_sigma_distribution_path, output_dir),
+                "density_energy_sigma_correlation": rel(dis_density_energy_sigma_correlation_path, output_dir),
+                "dis_diagnostics_report": rel(dis_diagnostics_report_path, output_dir),
+                "gbw_vs_iim_tau_comparison": rel(dis_gbw_iim_tau_comparison_path, output_dir),
+                "gbw_vs_iim_probability_comparison": rel(dis_gbw_iim_probability_comparison_path, output_dir),
+                "gbw_vs_iim_interaction_locations": rel(dis_gbw_iim_locations_path, output_dir),
+                "gbw_vs_iim_summary": rel(dis_gbw_iim_summary_path, output_dir),
                 "provenance": rel(provenance_path, output_dir),
                 "render_summary": rel(render_summary_path, output_dir),
                 "html_summary": rel(html_path, output_dir),
@@ -521,6 +596,21 @@ async function sampleUheSource() {{
       state.outputs.dis_interaction_locations_exists = false;
       state.outputs.dis_interaction_locations_3d_html_exists = false;
       state.outputs.dis_optical_depth_report_exists = false;
+      state.outputs.tau_distribution_exists = false;
+      state.outputs.interaction_probability_distribution_exists = false;
+      state.outputs.optical_depth_map_exists = false;
+      state.outputs.optical_depth_map_3d_html_exists = false;
+      state.outputs.medium_density_map_exists = false;
+      state.outputs.interaction_location_distribution_exists = false;
+      state.outputs.local_energy_distribution_exists = false;
+      state.outputs.local_density_distribution_exists = false;
+      state.outputs.sigma_distribution_exists = false;
+      state.outputs.density_energy_sigma_correlation_exists = false;
+      state.outputs.dis_diagnostics_report_exists = false;
+      state.outputs.gbw_vs_iim_tau_comparison_exists = false;
+      state.outputs.gbw_vs_iim_probability_comparison_exists = false;
+      state.outputs.gbw_vs_iim_interaction_locations_exists = false;
+      state.outputs.gbw_vs_iim_summary_exists = false;
       state.forward_geodesics_status = Object.assign({{}}, state.forward_geodesics_status || {{}}, {{
         input_uhe_source_found: true,
         paths_exists: false,
@@ -589,6 +679,21 @@ async function propagateForwardGeodesics() {{
       state.outputs.dis_interaction_locations_exists = false;
       state.outputs.dis_interaction_locations_3d_html_exists = false;
       state.outputs.dis_optical_depth_report_exists = false;
+      state.outputs.tau_distribution_exists = false;
+      state.outputs.interaction_probability_distribution_exists = false;
+      state.outputs.optical_depth_map_exists = false;
+      state.outputs.optical_depth_map_3d_html_exists = false;
+      state.outputs.medium_density_map_exists = false;
+      state.outputs.interaction_location_distribution_exists = false;
+      state.outputs.local_energy_distribution_exists = false;
+      state.outputs.local_density_distribution_exists = false;
+      state.outputs.sigma_distribution_exists = false;
+      state.outputs.density_energy_sigma_correlation_exists = false;
+      state.outputs.dis_diagnostics_report_exists = false;
+      state.outputs.gbw_vs_iim_tau_comparison_exists = false;
+      state.outputs.gbw_vs_iim_probability_comparison_exists = false;
+      state.outputs.gbw_vs_iim_interaction_locations_exists = false;
+      state.outputs.gbw_vs_iim_summary_exists = false;
       state.forward_geodesics_status = Object.assign({{}}, state.forward_geodesics_status || {{}}, {{
         configured_status: state.values.forward_geodesics.status,
         input_uhe_source_found: true,
@@ -644,6 +749,21 @@ async function sampleDisInteractions() {{
       state.outputs.dis_interaction_locations_exists = true;
       state.outputs.dis_interaction_locations_3d_html_exists = true;
       state.outputs.dis_optical_depth_report_exists = true;
+      state.outputs.tau_distribution_exists = true;
+      state.outputs.interaction_probability_distribution_exists = true;
+      state.outputs.optical_depth_map_exists = true;
+      state.outputs.optical_depth_map_3d_html_exists = true;
+      state.outputs.medium_density_map_exists = true;
+      state.outputs.interaction_location_distribution_exists = true;
+      state.outputs.local_energy_distribution_exists = true;
+      state.outputs.local_density_distribution_exists = true;
+      state.outputs.sigma_distribution_exists = true;
+      state.outputs.density_energy_sigma_correlation_exists = true;
+      state.outputs.dis_diagnostics_report_exists = true;
+      state.outputs.gbw_vs_iim_tau_comparison_exists = true;
+      state.outputs.gbw_vs_iim_probability_comparison_exists = true;
+      state.outputs.gbw_vs_iim_interaction_locations_exists = true;
+      state.outputs.gbw_vs_iim_summary_exists = true;
       state.dis_interaction_sampler = Object.assign({{}}, state.dis_interaction_sampler || {{}}, {{
         configured_status: state.values.dis_interaction_sampler.status,
         input_uhe_source_found: true,
@@ -655,6 +775,29 @@ async function sampleDisInteractions() {{
       }});
       state.outputs.provenance_exists = true;
       state.outputs.config_exists = true;
+      activeTab = "DIS Interaction Sampler";
+      disPreviewVersion = Date.now();
+      const logText = result.text;
+      render();
+      const log = document.querySelector("#log");
+      if (log) log.textContent = logText;
+    }}
+  }}
+  finally {{ button.disabled = false; }}
+}}
+async function compareDisModels() {{
+  const button = document.querySelector("#dis-compare-button");
+  button.disabled = true;
+  try {{
+    const values = collect();
+    const result = await post("/api/compare-dis-models", values);
+    if (result.ok && result.data && result.data.comparison) {{
+      state.values = values;
+      state.outputs.gbw_vs_iim_tau_comparison_exists = true;
+      state.outputs.gbw_vs_iim_probability_comparison_exists = true;
+      state.outputs.gbw_vs_iim_interaction_locations_exists = true;
+      state.outputs.gbw_vs_iim_summary_exists = true;
+      state.outputs.dis_diagnostics_report_exists = true;
       activeTab = "DIS Interaction Sampler";
       disPreviewVersion = Date.now();
       const logText = result.text;
@@ -1091,7 +1234,9 @@ function renderDisPanel() {{
     ${{inputHtml}}
     ${{configHtml}}
     <section><h2>Run</h2><button type="button" id="dis-sampler-button" class="source-action" ${{canRun ? "" : "disabled"}}>Compute DIS Optical Depth / Sample Interactions</button>
-    <p class="note">Runs only H3-W7. Observer Bridge, POWHEG, PYTHIA, GEANT4 and photon transport remain disabled.</p></section>
+    <button type="button" id="dis-compare-button" class="source-action" ${{canRun ? "" : "disabled"}}>Compare GBW vs IIM</button>
+    <p class="note">Runs only H3-W7. Observer Bridge, POWHEG, PYTHIA, GEANT4 and photon transport remain disabled.</p>
+    <p class="note">The analytic torus has a hard radial cut and a Gaussian angular profile; the opening angle is a width parameter, not a hard boundary.</p></section>
     ${{resultsHtml}}
     ${{outputLinks}}
   </div>`;
@@ -1140,8 +1285,18 @@ function renderContextPanel() {{
       ? `<img src="${{outUrl("dis_interaction_locations")}}?v=${{disPreviewVersion}}" alt="DIS interaction locations">`
       : `<div class="context-empty">No DIS interaction map generated yet.</div>`;
     const diagnosticCards = [
-      state.outputs.dis_tau_preview_exists ? `<figure class="diagnostic-plot-card"><figcaption>DIS tau preview</figcaption><a href="${{outUrl("dis_tau_preview")}}" target="_blank"><img src="${{outUrl("dis_tau_preview")}}?v=${{disPreviewVersion}}" alt="DIS tau preview"></a></figure>` : "",
-      state.outputs.dis_interaction_locations_exists ? `<figure class="diagnostic-plot-card"><figcaption>DIS interaction locations 2D</figcaption><a href="${{outUrl("dis_interaction_locations")}}" target="_blank"><img src="${{outUrl("dis_interaction_locations")}}?v=${{disPreviewVersion}}" alt="DIS interaction locations 2D"></a></figure>` : "",
+      state.outputs.tau_distribution_exists ? `<figure class="diagnostic-plot-card"><figcaption>Tau distribution</figcaption><a href="${{outUrl("tau_distribution")}}" target="_blank"><img src="${{outUrl("tau_distribution")}}?v=${{disPreviewVersion}}" alt="DIS tau distribution"></a></figure>` : "",
+      state.outputs.interaction_probability_distribution_exists ? `<figure class="diagnostic-plot-card"><figcaption>Interaction probability distribution</figcaption><a href="${{outUrl("interaction_probability_distribution")}}" target="_blank"><img src="${{outUrl("interaction_probability_distribution")}}?v=${{disPreviewVersion}}" alt="DIS interaction probability distribution"></a></figure>` : "",
+      state.outputs.medium_density_map_exists ? `<figure class="diagnostic-plot-card"><figcaption>Medium density map</figcaption><a href="${{outUrl("medium_density_map")}}" target="_blank"><img src="${{outUrl("medium_density_map")}}?v=${{disPreviewVersion}}" alt="DIS medium density map"></a><p class="note">The analytic torus has a hard radial cut and a Gaussian angular profile; the opening angle is a width parameter, not a hard boundary.</p></figure>` : "",
+      state.outputs.optical_depth_map_exists ? `<figure class="diagnostic-plot-card"><figcaption>Optical depth map</figcaption><a href="${{outUrl("optical_depth_map")}}" target="_blank"><img src="${{outUrl("optical_depth_map")}}?v=${{disPreviewVersion}}" alt="DIS optical depth map"></a></figure>` : "",
+      state.outputs.interaction_location_distribution_exists ? `<figure class="diagnostic-plot-card"><figcaption>Interaction location distribution</figcaption><a href="${{outUrl("interaction_location_distribution")}}" target="_blank"><img src="${{outUrl("interaction_location_distribution")}}?v=${{disPreviewVersion}}" alt="DIS interaction location distribution"></a></figure>` : "",
+      state.outputs.local_energy_distribution_exists ? `<figure class="diagnostic-plot-card"><figcaption>Local energy distribution</figcaption><a href="${{outUrl("local_energy_distribution")}}" target="_blank"><img src="${{outUrl("local_energy_distribution")}}?v=${{disPreviewVersion}}" alt="DIS local energy distribution"></a></figure>` : "",
+      state.outputs.local_density_distribution_exists ? `<figure class="diagnostic-plot-card"><figcaption>Local density distribution</figcaption><a href="${{outUrl("local_density_distribution")}}" target="_blank"><img src="${{outUrl("local_density_distribution")}}?v=${{disPreviewVersion}}" alt="DIS local density distribution"></a></figure>` : "",
+      state.outputs.sigma_distribution_exists ? `<figure class="diagnostic-plot-card"><figcaption>Sigma distribution</figcaption><a href="${{outUrl("sigma_distribution")}}" target="_blank"><img src="${{outUrl("sigma_distribution")}}?v=${{disPreviewVersion}}" alt="DIS sigma distribution"></a></figure>` : "",
+      state.outputs.density_energy_sigma_correlation_exists ? `<figure class="diagnostic-plot-card"><figcaption>Density energy sigma correlation</figcaption><a href="${{outUrl("density_energy_sigma_correlation")}}" target="_blank"><img src="${{outUrl("density_energy_sigma_correlation")}}?v=${{disPreviewVersion}}" alt="DIS density energy sigma correlation"></a></figure>` : "",
+      state.outputs.gbw_vs_iim_tau_comparison_exists ? `<figure class="diagnostic-plot-card"><figcaption>GBW vs IIM tau</figcaption><a href="${{outUrl("gbw_vs_iim_tau_comparison")}}" target="_blank"><img src="${{outUrl("gbw_vs_iim_tau_comparison")}}?v=${{disPreviewVersion}}" alt="GBW vs IIM tau comparison"></a></figure>` : "",
+      state.outputs.gbw_vs_iim_probability_comparison_exists ? `<figure class="diagnostic-plot-card"><figcaption>GBW vs IIM probability</figcaption><a href="${{outUrl("gbw_vs_iim_probability_comparison")}}" target="_blank"><img src="${{outUrl("gbw_vs_iim_probability_comparison")}}?v=${{disPreviewVersion}}" alt="GBW vs IIM probability comparison"></a></figure>` : "",
+      state.outputs.gbw_vs_iim_interaction_locations_exists ? `<figure class="diagnostic-plot-card"><figcaption>GBW vs IIM locations</figcaption><a href="${{outUrl("gbw_vs_iim_interaction_locations")}}" target="_blank"><img src="${{outUrl("gbw_vs_iim_interaction_locations")}}?v=${{disPreviewVersion}}" alt="GBW vs IIM interaction locations"></a></figure>` : "",
     ].filter(Boolean).join("");
     const diagnostics = diagnosticCards ? `<section><h2>Diagnostics</h2><div class="diagnostic-card-grid">${{diagnosticCards}}</div></section>` : "";
     return `<aside class="panel"><h2>DIS Interaction Map</h2><div class="context-figure">${{figure}}</div>${{diagnostics}}</aside>`;
@@ -1213,6 +1368,33 @@ function renderOutputsPanel() {{
     ${{link(out.dis_interaction_candidates_exists, "dis_interaction_candidates", "DIS interaction candidates")}}
     ${{link(out.dis_accepted_interactions_exists, "dis_accepted_interactions", "DIS accepted interactions")}}
     ${{link(out.dis_optical_depth_report_exists, "dis_optical_depth_report", "DIS optical-depth report")}}
+    ${{link(out.tau_distribution_exists, "tau_distribution", "Tau distribution")}}
+    ${{out.tau_distribution_exists ? `<img src="${{outUrl("tau_distribution")}}" alt="DIS tau distribution">` : ""}}
+    ${{link(out.interaction_probability_distribution_exists, "interaction_probability_distribution", "Interaction probability distribution")}}
+    ${{out.interaction_probability_distribution_exists ? `<img src="${{outUrl("interaction_probability_distribution")}}" alt="DIS interaction probability distribution">` : ""}}
+    ${{link(out.optical_depth_map_exists, "optical_depth_map", "Optical depth map")}}
+    ${{out.optical_depth_map_exists ? `<img src="${{outUrl("optical_depth_map")}}" alt="DIS optical depth map">` : ""}}
+    ${{link(out.optical_depth_map_3d_html_exists, "optical_depth_map_3d_html", "Optical depth map HTML")}}
+    ${{link(out.medium_density_map_exists, "medium_density_map", "Medium density map")}}
+    ${{out.medium_density_map_exists ? `<img src="${{outUrl("medium_density_map")}}" alt="DIS medium density map">` : ""}}
+    ${{link(out.interaction_location_distribution_exists, "interaction_location_distribution", "Interaction location distribution")}}
+    ${{out.interaction_location_distribution_exists ? `<img src="${{outUrl("interaction_location_distribution")}}" alt="DIS interaction location distribution">` : ""}}
+    ${{link(out.local_energy_distribution_exists, "local_energy_distribution", "Local energy distribution")}}
+    ${{out.local_energy_distribution_exists ? `<img src="${{outUrl("local_energy_distribution")}}" alt="DIS local energy distribution">` : ""}}
+    ${{link(out.local_density_distribution_exists, "local_density_distribution", "Local density distribution")}}
+    ${{out.local_density_distribution_exists ? `<img src="${{outUrl("local_density_distribution")}}" alt="DIS local density distribution">` : ""}}
+    ${{link(out.sigma_distribution_exists, "sigma_distribution", "Sigma distribution")}}
+    ${{out.sigma_distribution_exists ? `<img src="${{outUrl("sigma_distribution")}}" alt="DIS sigma distribution">` : ""}}
+    ${{link(out.density_energy_sigma_correlation_exists, "density_energy_sigma_correlation", "Density energy sigma correlation")}}
+    ${{out.density_energy_sigma_correlation_exists ? `<img src="${{outUrl("density_energy_sigma_correlation")}}" alt="DIS density energy sigma correlation">` : ""}}
+    ${{link(out.dis_diagnostics_report_exists, "dis_diagnostics_report", "DIS diagnostics JSON")}}
+    ${{link(out.gbw_vs_iim_tau_comparison_exists, "gbw_vs_iim_tau_comparison", "GBW vs IIM tau comparison")}}
+    ${{out.gbw_vs_iim_tau_comparison_exists ? `<img src="${{outUrl("gbw_vs_iim_tau_comparison")}}" alt="GBW vs IIM tau comparison">` : ""}}
+    ${{link(out.gbw_vs_iim_probability_comparison_exists, "gbw_vs_iim_probability_comparison", "GBW vs IIM probability comparison")}}
+    ${{out.gbw_vs_iim_probability_comparison_exists ? `<img src="${{outUrl("gbw_vs_iim_probability_comparison")}}" alt="GBW vs IIM probability comparison">` : ""}}
+    ${{link(out.gbw_vs_iim_interaction_locations_exists, "gbw_vs_iim_interaction_locations", "GBW vs IIM interaction locations")}}
+    ${{out.gbw_vs_iim_interaction_locations_exists ? `<img src="${{outUrl("gbw_vs_iim_interaction_locations")}}" alt="GBW vs IIM interaction locations">` : ""}}
+    ${{link(out.gbw_vs_iim_summary_exists, "gbw_vs_iim_summary", "GBW vs IIM summary JSON")}}
   `) + group("Dashboard/", `
     ${{link(out.html_summary_exists, "html_summary", "Dashboard HTML")}}
   `);
@@ -1330,6 +1512,8 @@ function render() {{
   if (forwardButton) forwardButton.onclick = propagateForwardGeodesics;
   const disButton = document.querySelector("#dis-sampler-button");
   if (disButton) disButton.onclick = sampleDisInteractions;
+  const disCompareButton = document.querySelector("#dis-compare-button");
+  if (disCompareButton) disCompareButton.onclick = compareDisModels;
   bindNumberInputs();
   drawGeometrySvg();
   document.querySelector("#runNameInput").addEventListener("input", event => {{
@@ -1527,7 +1711,6 @@ class Handler(BaseHTTPRequestHandler):
             output_dir.mkdir(parents=True, exist_ok=True)
             ensure_output_layout(output_dir)
             values["uhe_neutrino_source"]["status"] = "sampled_position_direction_energy_no_forward_kerr_geodesic"
-            write_values(self.config_path, values)
             source_summary = generate_uhe_source_products(values, output_dir=output_dir)
             clear_forward_geodesics_outputs(output_dir)
             clear_dis_outputs(output_dir)
@@ -1548,7 +1731,6 @@ class Handler(BaseHTTPRequestHandler):
             output_dir.mkdir(parents=True, exist_ok=True)
             ensure_output_layout(output_dir)
             values["forward_geodesics"]["status"] = "forward_kerr_geodesics_propagated_no_interactions"
-            write_values(self.config_path, values)
             forward_summary = generate_forward_geodesic_products(values, run_output_dir=output_dir)
             clear_dis_outputs(output_dir)
             render_summary = render_hadros_web(values, root=ROOT, forward_geodesic_summary=forward_summary)
@@ -1568,10 +1750,25 @@ class Handler(BaseHTTPRequestHandler):
             output_dir.mkdir(parents=True, exist_ok=True)
             ensure_output_layout(output_dir)
             values["dis_interaction_sampler"]["status"] = "dis_optical_depth_sampled_no_observer_bridge"
-            write_values(self.config_path, values)
             dis_summary = generate_dis_interaction_products(values, run_output_dir=output_dir)
             render_summary = render_hadros_web(values, root=ROOT, dis_summary=dis_summary)
             summary = {"status": "ok", "dis": dis_summary, "render": render_summary}
+            self._send(200, json.dumps(summary, indent=2, sort_keys=True) + "\n", "application/json")
+            return
+        if self.path == "/api/compare-dis-models":
+            problems = validate_values(values)
+            if problems:
+                self._send(
+                    400,
+                    json.dumps({"status": "error", "validation_errors": problems}, indent=2, sort_keys=True) + "\n",
+                    "application/json",
+                )
+                return
+            output_dir = ROOT / run_output_dir(values)
+            ensure_output_layout(output_dir)
+            comparison = generate_gbw_iim_comparison(values, run_output_dir=output_dir)
+            render_summary = render_hadros_web(values, root=ROOT)
+            summary = {"status": "ok", "comparison": comparison, "render": render_summary}
             self._send(200, json.dumps(summary, indent=2, sort_keys=True) + "\n", "application/json")
             return
         if self.path == "/api/launch-interactive-camera-preview":
@@ -1644,7 +1841,6 @@ def main() -> int:
             output_dir = ROOT / output_dir
         ensure_output_layout(output_dir)
         values["uhe_neutrino_source"]["status"] = "sampled_position_direction_energy_no_forward_kerr_geodesic"
-        write_values(args.config, values)
         source_summary = generate_uhe_source_products(values, output_dir=output_dir)
         clear_forward_geodesics_outputs(output_dir)
         clear_dis_outputs(output_dir)
@@ -1657,7 +1853,6 @@ def main() -> int:
             output_dir = ROOT / output_dir
         ensure_output_layout(output_dir)
         values["forward_geodesics"]["status"] = "forward_kerr_geodesics_propagated_no_interactions"
-        write_values(args.config, values)
         forward_summary = generate_forward_geodesic_products(values, run_output_dir=output_dir)
         clear_dis_outputs(output_dir)
         render_summary = render_hadros_web(values, root=ROOT, output_dir=output_dir, forward_geodesic_summary=forward_summary)
@@ -1669,7 +1864,6 @@ def main() -> int:
             output_dir = ROOT / output_dir
         ensure_output_layout(output_dir)
         values["dis_interaction_sampler"]["status"] = "dis_optical_depth_sampled_no_observer_bridge"
-        write_values(args.config, values)
         dis_summary = generate_dis_interaction_products(values, run_output_dir=output_dir)
         render_summary = render_hadros_web(values, root=ROOT, output_dir=output_dir, dis_summary=dis_summary)
         print(json.dumps({"status": "ok", "dis": dis_summary, "render": render_summary}, indent=2, sort_keys=True))

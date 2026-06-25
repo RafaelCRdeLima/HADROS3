@@ -120,6 +120,18 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert payload["dis_interaction_sampler"]["input_forward_geodesics_found"] is False
     assert payload["outputs"]["paths"]["dis_tau_preview"] == "DIS/dis_tau_preview.png"
     assert payload["outputs"]["paths"]["dis_interaction_locations"] == "DIS/dis_interaction_locations.png"
+    assert payload["outputs"]["paths"]["tau_distribution"] == "DIS/tau_distribution.png"
+    assert payload["outputs"]["paths"]["interaction_probability_distribution"] == "DIS/interaction_probability_distribution.png"
+    assert payload["outputs"]["paths"]["optical_depth_map"] == "DIS/optical_depth_map.png"
+    assert payload["outputs"]["paths"]["optical_depth_map_3d_html"] == "DIS/optical_depth_map_3d.html"
+    assert payload["outputs"]["paths"]["medium_density_map"] == "DIS/medium_density_map.png"
+    assert payload["outputs"]["paths"]["interaction_location_distribution"] == "DIS/interaction_location_distribution.png"
+    assert payload["outputs"]["paths"]["local_energy_distribution"] == "DIS/local_energy_distribution.png"
+    assert payload["outputs"]["paths"]["local_density_distribution"] == "DIS/local_density_distribution.png"
+    assert payload["outputs"]["paths"]["sigma_distribution"] == "DIS/sigma_distribution.png"
+    assert payload["outputs"]["paths"]["density_energy_sigma_correlation"] == "DIS/density_energy_sigma_correlation.png"
+    assert payload["outputs"]["paths"]["dis_diagnostics_report"] == "DIS/dis_diagnostics_report.json"
+    assert payload["outputs"]["paths"]["gbw_vs_iim_summary"] == "DIS/gbw_vs_iim_summary.json"
     assert payload["outputs"]["paths"]["dis_summary_json"] == "DIS/dis_summary.json"
     assert payload["outputs"]["paths"]["uhe_source_sampling_uniformity"] == "UHEsource/uhe_source_sampling_uniformity.png"
     assert payload["outputs"]["paths"]["uhe_source_sampling_uniformity_report"] == "UHEsource/uhe_source_sampling_uniformity_report.json"
@@ -164,6 +176,18 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert "uhe_neutrino_source_preview.png" in html
     assert "dis_tau_preview.png" in html
     assert "dis_interaction_locations.png" in html
+    assert "tau_distribution.png" in html
+    assert "interaction_probability_distribution.png" in html
+    assert "optical_depth_map.png" in html
+    assert "medium_density_map.png" in html
+    assert "The analytic torus has a hard radial cut and a Gaussian angular profile; the opening angle is a width parameter, not a hard boundary." in html
+    assert "interaction_location_distribution.png" in html
+    assert "local_energy_distribution.png" in html
+    assert "local_density_distribution.png" in html
+    assert "sigma_distribution.png" in html
+    assert "density_energy_sigma_correlation.png" in html
+    assert "dis_diagnostics_report.json" in html
+    assert "Compare GBW vs IIM" in html
     assert "sigma_table_path" in html
     assert "sigma_table_rows" in html
     assert "sigma_table_is_compact_builtin_adapter" in html

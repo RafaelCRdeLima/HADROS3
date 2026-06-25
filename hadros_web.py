@@ -1097,7 +1097,8 @@ function renderDisPanel() {{
   </div>`;
 }}
 function renderContextPanel() {{
-  if (activeTab === "Camera") {{
+  const geometryPreviewTabs = new Set(["Camera", "Black Hole", "Torus / Medium", "Funnel / Cone"]);
+  if (geometryPreviewTabs.has(activeTab)) {{
     return `<aside class="panel"><h2>Geometry Preview</h2><div class="geometry-preview-large"><svg id="geometrySvg" role="img" aria-label="Dynamic HADROS3 geometry preview"></svg></div></aside>`;
   }}
   if (activeTab === "UHE Source") {{

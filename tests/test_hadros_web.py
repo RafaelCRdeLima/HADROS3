@@ -69,6 +69,16 @@ def test_uhe_source_theta_max_must_fit_inside_funnel() -> None:
     assert "uhe_neutrino_source.theta_max_deg must be <= polar_cone.opening_angle_deg" in problems
 
 
+def test_geometry_preview_context_is_available_on_geometry_tabs() -> None:
+    html = render_html(defaults(), Path("presets/hadros_web/default_config.json"))
+
+    assert 'const geometryPreviewTabs = new Set(["Camera", "Black Hole", "Torus / Medium", "Funnel / Cone"]);' in html
+    assert "geometryPreviewTabs.has(activeTab)" in html
+    assert "DIS Interaction Map" in html
+    assert "Forward Geodesics Geometry" in html
+    assert "UHE Source Samples" in html
+
+
 def test_render_hadros_web_writes_first_stage_products(tmp_path: Path) -> None:
     values = defaults()
     summary = render_hadros_web(values, root=Path.cwd(), output_dir=tmp_path)

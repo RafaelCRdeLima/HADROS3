@@ -5,6 +5,7 @@ from pathlib import Path
 
 from hadros3.config import defaults, parse_latex_number, schema, validate_values
 from hadros3.pipeline import render_hadros_web
+from hadros_web import dashboard_payload, render_html
 
 
 def test_schema_exposes_hadros3_first_stage_controls() -> None:
@@ -83,3 +84,28 @@ def test_render_hadros_web_writes_first_stage_products(tmp_path: Path) -> None:
     assert provenance["status"] == "geometry_configured_no_expensive_events"
     assert provenance["disabled_expensive_or_future_stages"]["powheg"] == "disabled"
     assert provenance["camera_preview"]["requested_mode"] in {"analytic_geometry_only", "kerr_like_cuda", "full_kerr"}
+
+
+def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source() -> None:
+    values = defaults()
+    payload = dashboard_payload(values, Path("presets/hadros_web/default_config.json"))
+    html = render_html(values, Path("presets/hadros_web/default_config.json"))
+
+    assert payload["source_status"]["input_dir"] == "UHEsource"
+    assert payload["forward_geodesics_status"]["input_uhe_source_dir"] == "UHEsource"
+    assert payload["forward_geodesics_status"]["output_dir"] == "ForwardGeodesics"
+    assert payload["outputs"]["paths"]["forward_preview"] == "ForwardGeodesics/uhe_neutrino_forward_preview.png"
+    assert payload["outputs"]["paths"]["forward_summary_json"] == "ForwardGeodesics/uhe_neutrino_forward_summary.json"
+
+    assert "Forward Geodesics" in html
+    assert "Propagate Forward Geodesics" in html
+    assert "Input UHEsource/" in html
+    assert "ForwardGeodesics/" in html
+    assert "uhe_neutrino_forward_preview.png" in html
+    assert "uhe_neutrino_forward_summary.json" in html
+    assert "uhe_neutrino_forward_summary.csv" in html
+    assert "uhe_neutrino_forward_paths.jsonl" in html
+    assert "uhe_neutrino_forward_path_segments.jsonl" in html
+    assert "geodesic_validation_report.json" in html
+    assert "stop_condition_statistics.csv" in html
+    assert "uhe_neutrino_source_preview.png" in html

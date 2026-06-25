@@ -90,6 +90,27 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
         "camera_summary": camera_summary,
         "source_summary": source_summary,
         "forward_summary": forward_summary,
+        "source_status": {
+            "configured_status": values.get("uhe_neutrino_source", {}).get("status"),
+            "input_dir": rel(source_dir, output_dir),
+            "samples_exists": source_samples_path.exists(),
+            "preview_exists": source_preview_path.exists(),
+            "summary_exists": source_summary_path.exists(),
+            "ready_for_forward_geodesics": source_samples_path.exists(),
+        },
+        "forward_geodesics_status": {
+            "configured_status": values.get("forward_geodesics", {}).get("status"),
+            "input_uhe_source_dir": rel(source_dir, output_dir),
+            "input_uhe_source_found": source_samples_path.exists(),
+            "output_dir": rel(forward_dir, output_dir),
+            "paths_exists": forward_paths_path.exists(),
+            "path_segments_exists": forward_segments_path.exists(),
+            "summary_csv_exists": forward_summary_csv_path.exists(),
+            "summary_json_exists": forward_summary_path.exists(),
+            "preview_exists": forward_preview_path.exists(),
+            "geodesic_validation_report_exists": geodesic_validation_path.exists(),
+            "stop_condition_statistics_exists": stop_statistics_path.exists(),
+        },
         "outputs": {
             "output_dir": str(output_dir),
             "preview_exists": geometry_preview_path.exists(),
@@ -307,6 +328,13 @@ async function sampleUheSource() {{
       state.outputs.uhe_source_summary_exists = true;
       state.outputs.uhe_source_summary_json_exists = true;
       state.outputs.uhe_source_preview_exists = true;
+      state.source_status = Object.assign({{}}, state.source_status || {{}}, {{
+        configured_status: state.values.uhe_neutrino_source.status,
+        samples_exists: true,
+        preview_exists: true,
+        summary_exists: true,
+        ready_for_forward_geodesics: true,
+      }});
       state.forward_summary = null;
       state.outputs.forward_paths_exists = false;
       state.outputs.forward_path_segments_exists = false;
@@ -315,6 +343,16 @@ async function sampleUheSource() {{
       state.outputs.forward_preview_exists = false;
       state.outputs.geodesic_validation_report_exists = false;
       state.outputs.stop_condition_statistics_exists = false;
+      state.forward_geodesics_status = Object.assign({{}}, state.forward_geodesics_status || {{}}, {{
+        input_uhe_source_found: true,
+        paths_exists: false,
+        path_segments_exists: false,
+        summary_csv_exists: false,
+        summary_json_exists: false,
+        preview_exists: false,
+        geodesic_validation_report_exists: false,
+        stop_condition_statistics_exists: false,
+      }});
       state.outputs.provenance_exists = true;
       state.outputs.config_exists = true;
       activeTab = "UHE Source";
@@ -344,6 +382,17 @@ async function propagateForwardGeodesics() {{
       state.outputs.forward_preview_exists = true;
       state.outputs.geodesic_validation_report_exists = true;
       state.outputs.stop_condition_statistics_exists = true;
+      state.forward_geodesics_status = Object.assign({{}}, state.forward_geodesics_status || {{}}, {{
+        configured_status: state.values.forward_geodesics.status,
+        input_uhe_source_found: true,
+        paths_exists: true,
+        path_segments_exists: true,
+        summary_csv_exists: true,
+        summary_json_exists: true,
+        preview_exists: true,
+        geodesic_validation_report_exists: true,
+        stop_condition_statistics_exists: true,
+      }});
       state.outputs.provenance_exists = true;
       state.outputs.config_exists = true;
       activeTab = "Forward Geodesics";
@@ -583,16 +632,25 @@ function renderSourcePanel() {{
 }}
 function renderForwardPanel() {{
   const summary = state.forward_summary;
+  const forwardStatus = state.forward_geodesics_status || {{}};
+  const sourceFound = Boolean(forwardStatus.input_uhe_source_found || state.outputs.uhe_source_samples_exists);
+  const inputStatus = `<div class="summary-grid">
+    <div class="summary-item"><strong>Input UHEsource/</strong><span class="${{sourceFound ? "ok" : "pending"}}">${{sourceFound ? "found" : "missing"}}</span></div>
+    <div class="summary-item"><strong>Input samples</strong><code>${{outPath("uhe_source_samples")}}</code></div>
+  </div>`;
   const forwardLinks = `<div class="output-link-grid">
+    ${{state.outputs.forward_preview_exists ? `<a href="${{outUrl("forward_preview")}}" target="_blank">Preview PNG<br><code>${{outPath("forward_preview")}}</code></a>` : ""}}
+    ${{state.outputs.forward_summary_json_exists ? `<a href="${{outUrl("forward_summary_json")}}" target="_blank">Summary JSON<br><code>${{outPath("forward_summary_json")}}</code></a>` : ""}}
+    ${{state.outputs.forward_summary_exists ? `<a href="${{outUrl("forward_summary")}}" target="_blank">Summary CSV<br><code>${{outPath("forward_summary")}}</code></a>` : ""}}
     ${{state.outputs.forward_paths_exists ? `<a href="${{outUrl("forward_paths")}}" target="_blank">Paths<br><code>${{outPath("forward_paths")}}</code></a>` : ""}}
     ${{state.outputs.forward_path_segments_exists ? `<a href="${{outUrl("forward_path_segments")}}" target="_blank">Segments<br><code>${{outPath("forward_path_segments")}}</code></a>` : ""}}
-    ${{state.outputs.forward_summary_json_exists ? `<a href="${{outUrl("forward_summary_json")}}" target="_blank">Summary JSON<br><code>${{outPath("forward_summary_json")}}</code></a>` : ""}}
     ${{state.outputs.geodesic_validation_report_exists ? `<a href="${{outUrl("geodesic_validation_report")}}" target="_blank">Validation<br><code>${{outPath("geodesic_validation_report")}}</code></a>` : ""}}
     ${{state.outputs.stop_condition_statistics_exists ? `<a href="${{outUrl("stop_condition_statistics")}}" target="_blank">Stops<br><code>${{outPath("stop_condition_statistics")}}</code></a>` : ""}}
   </div>`;
   const stops = summary && summary.stop_condition_counts ? Object.entries(summary.stop_condition_counts).map(([k, v]) => `${{k}}=${{v}}`).join(", ") : "none";
-  const summaryHtml = summary ? `<div class="summary-grid">
+  const summaryHtml = summary ? `${{inputStatus}}<div class="summary-grid">
     <div class="summary-item"><strong>Status</strong>${{summary.status}}</div>
+    <div class="summary-item"><strong>Trajectories propagated</strong>${{summary.n_samples_propagated}}</div>
     <div class="summary-item"><strong>Paths</strong>${{summary.n_paths}}</div>
     <div class="summary-item"><strong>Segments</strong>${{summary.n_segments}}</div>
     <div class="summary-item"><strong>Backend</strong>${{summary.geodesic_backend}}</div>
@@ -602,7 +660,7 @@ function renderForwardPanel() {{
     <div class="summary-item"><strong>Validation</strong>${{summary.validation_pass}}</div>
     <div class="summary-item"><strong>Momentum</strong>${{summary.momentum_generator}}</div>
     <div class="summary-item"><strong>Kerr physical?</strong>${{summary.momentum_is_physical_kerr}}</div>
-  </div><p class="note"><strong>Stop conditions:</strong> ${{stops}}</p>${{forwardLinks}}` : `<p class="note">Forward geodesics inactive. Generate UHE Source samples first, then propagate here.</p>`;
+  </div><p class="note"><strong>Stop conditions:</strong> ${{stops}}</p>${{forwardLinks}}` : `${{inputStatus}}<p class="note">Forward geodesics inactive. Generate UHE Source samples first, then propagate here.</p>`;
   return `<div class="source-panel">
     <button type="button" id="forward-geodesics-button" class="source-action">Propagate Forward Geodesics</button>
     ${{summaryHtml}}
@@ -629,27 +687,34 @@ function renderContextPanel() {{
 function renderOutputsPanel() {{
   const out = state.outputs;
   const link = (exists, key, label) => exists ? `<a href="${{outUrl(key)}}" target="_blank">${{label}}<br><code>${{outPath(key)}}</code></a>` : `<div class="summary-item"><strong>${{label}}</strong>pending</div>`;
-  return `<div class="output-link-grid">
+  const group = (title, body) => `<section><h2>${{title}}</h2><div class="output-link-grid">${{body}}</div></section>`;
+  return group("RunMetadata/", `
     ${{link(out.config_exists, "config", "Config")}}
+    ${{link(out.provenance_exists, "provenance", "Provenance")}}
+    ${{link(out.render_summary_exists, "render_summary", "Render summary")}}
+  `) + group("Geometry/", `
     ${{link(out.preview_exists, "geometry_preview", "Geometry preview")}}
     ${{link(out.schematic_exists, "system_schematic", "System schematic")}}
+  `) + group("CameraPreview/", `
     ${{link(out.camera_preview_exists, "camera_preview", "Camera preview")}}
+  `) + group("UHEsource/", `
     ${{link(out.uhe_source_samples_exists, "uhe_source_samples", "UHE source samples")}}
     ${{link(out.uhe_source_summary_exists, "uhe_source_summary", "UHE source summary")}}
     ${{link(out.uhe_source_summary_json_exists, "uhe_source_summary_json", "UHE source summary JSON")}}
     ${{link(out.uhe_source_preview_exists, "uhe_source_preview", "UHE source preview")}}
     ${{out.uhe_source_preview_exists ? `<img src="${{outUrl("uhe_source_preview")}}" alt="UHE source preview">` : ""}}
+  `) + group("ForwardGeodesics/", `
+    ${{link(out.forward_preview_exists, "forward_preview", "Forward preview")}}
+    ${{out.forward_preview_exists ? `<img src="${{outUrl("forward_preview")}}" alt="Forward geodesics preview">` : ""}}
+    ${{link(out.forward_summary_json_exists, "forward_summary_json", "Forward summary JSON")}}
+    ${{link(out.forward_summary_exists, "forward_summary", "Forward summary CSV")}}
     ${{link(out.forward_paths_exists, "forward_paths", "Forward paths")}}
     ${{link(out.forward_path_segments_exists, "forward_path_segments", "Forward segments")}}
-    ${{link(out.forward_summary_exists, "forward_summary", "Forward summary")}}
-    ${{link(out.forward_summary_json_exists, "forward_summary_json", "Forward summary JSON")}}
-    ${{link(out.forward_preview_exists, "forward_preview", "Forward preview")}}
     ${{link(out.geodesic_validation_report_exists, "geodesic_validation_report", "Geodesic validation")}}
     ${{link(out.stop_condition_statistics_exists, "stop_condition_statistics", "Stop conditions")}}
-    ${{link(out.provenance_exists, "provenance", "Provenance")}}
-    ${{link(out.render_summary_exists, "render_summary", "Render summary")}}
+  `) + group("Dashboard/", `
     ${{link(out.html_summary_exists, "html_summary", "Dashboard HTML")}}
-  </div>`;
+  `);
 }}
 function fnum(values, section, key, fallback) {{
   const value = Number(values?.[section]?.[key]);

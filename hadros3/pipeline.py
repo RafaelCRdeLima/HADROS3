@@ -8,7 +8,7 @@ from typing import Any
 
 from .camera_preview import render_camera_preview
 from .config import flatten_for_legacy_camera, run_output_dir, validate_values
-from .paths import camera_preview_dir, dashboard_dir, ensure_output_layout, geometry_dir, run_metadata_dir, uhe_source_dir
+from .paths import camera_preview_dir, dashboard_dir, ensure_output_layout, forward_geodesics_dir, geometry_dir, run_metadata_dir, uhe_source_dir
 from .provenance import build_provenance, write_json
 from .render import draw_geometry_preview, draw_system_schematic, write_html_summary
 
@@ -19,6 +19,7 @@ def render_hadros_web(
     root: Path,
     output_dir: Path | None = None,
     source_summary: dict[str, Any] | None = None,
+    forward_geodesic_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     problems = validate_values(values)
     if problems:
@@ -34,6 +35,7 @@ def render_hadros_web(
     metadata_dir = run_metadata_dir(run_output)
     web_dir = dashboard_dir(run_output)
     source_dir = uhe_source_dir(run_output)
+    forward_dir = forward_geodesics_dir(run_output)
     if source_summary is None:
         existing_source_summary = source_dir / "uhe_neutrino_source_summary.json"
         if existing_source_summary.exists():
@@ -41,6 +43,13 @@ def render_hadros_web(
                 source_summary = json.loads(existing_source_summary.read_text(encoding="utf-8"))
             except json.JSONDecodeError:
                 source_summary = None
+    if forward_geodesic_summary is None:
+        existing_forward_summary = forward_dir / "uhe_neutrino_forward_summary.json"
+        if existing_forward_summary.exists():
+            try:
+                forward_geodesic_summary = json.loads(existing_forward_summary.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                forward_geodesic_summary = None
 
     config_path = metadata_dir / "hadros3_config.json"
     provenance_path = metadata_dir / "hadros3_pipeline_provenance.json"
@@ -52,6 +61,9 @@ def render_hadros_web(
     camera_preview_summary: dict[str, Any] | None = None
     if source_summary:
         for key, value in source_summary.get("products", {}).items():
+            products[key] = str(value)
+    if forward_geodesic_summary:
+        for key, value in forward_geodesic_summary.get("products", {}).items():
             products[key] = str(value)
     if bool(values["outputs"]["write_config"]):
         config_payload = {
@@ -75,10 +87,10 @@ def render_hadros_web(
         "configuration_valid": True,
         "validation_errors": [],
         "expensive_event_generation_invoked": False,
-        "forward_neutrino_geodesics_invoked": False,
         "optical_depth_dis_sampler_invoked": False,
         "observer_bridge_active_filter_invoked": False,
         "source_sampler_active": bool(source_summary),
+        "forward_neutrino_geodesics_invoked": bool(forward_geodesic_summary),
     }
     if bool(values["outputs"]["write_provenance"]):
         provenance = build_provenance(
@@ -88,6 +100,7 @@ def render_hadros_web(
             validation=validation,
             camera_preview=camera_preview_summary,
             source_summary=source_summary,
+            forward_geodesic_summary=forward_geodesic_summary,
         )
         write_json(provenance_path, provenance)
         products["provenance"] = str(provenance_path)

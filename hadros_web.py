@@ -18,7 +18,8 @@ from urllib.parse import urlparse
 
 from hadros3.camera_preview import available_backends, launch_interactive_camera_preview, render_camera_preview
 from hadros3.config import deep_update, defaults, load_values, run_output_dir, safe_run_name, schema, validate_values
-from hadros3.paths import camera_preview_dir, dashboard_dir, ensure_output_layout, geometry_dir, rel, run_metadata_dir, uhe_source_dir
+from hadros3.forward_geodesics import generate_forward_geodesic_products
+from hadros3.paths import camera_preview_dir, clear_forward_geodesics_outputs, dashboard_dir, ensure_output_layout, forward_geodesics_dir, geometry_dir, rel, run_metadata_dir, uhe_source_dir
 from hadros3.pipeline import render_hadros_web
 from hadros3.reuse import discover_original_hadros
 from hadros3.uhe_source import generate_uhe_source_products
@@ -39,6 +40,7 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
     geom_dir = geometry_dir(output_dir)
     metadata_dir = run_metadata_dir(output_dir)
     source_dir = uhe_source_dir(output_dir)
+    forward_dir = forward_geodesics_dir(output_dir)
     web_dir = dashboard_dir(output_dir)
 
     camera_preview_path = camera_dir / "hadros3_camera_preview.png"
@@ -53,10 +55,18 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
     source_csv_path = source_dir / "uhe_neutrino_source_summary.csv"
     source_summary_path = source_dir / "uhe_neutrino_source_summary.json"
     source_preview_path = source_dir / "uhe_neutrino_source_preview.png"
+    forward_paths_path = forward_dir / "uhe_neutrino_forward_paths.jsonl"
+    forward_segments_path = forward_dir / "uhe_neutrino_forward_path_segments.jsonl"
+    forward_summary_csv_path = forward_dir / "uhe_neutrino_forward_summary.csv"
+    forward_summary_path = forward_dir / "uhe_neutrino_forward_summary.json"
+    forward_preview_path = forward_dir / "uhe_neutrino_forward_preview.png"
+    geodesic_validation_path = forward_dir / "geodesic_validation_report.json"
+    stop_statistics_path = forward_dir / "stop_condition_statistics.csv"
     html_path = web_dir / "index.html"
 
     camera_summary: dict[str, Any] | None = None
     source_summary: dict[str, Any] | None = None
+    forward_summary: dict[str, Any] | None = None
     if camera_summary_path.exists():
         try:
             camera_summary = json.loads(camera_summary_path.read_text(encoding="utf-8"))
@@ -67,6 +77,11 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             source_summary = json.loads(source_summary_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             source_summary = {"status": "invalid_summary", "message": "Could not parse UHE source summary."}
+    if forward_summary_path.exists():
+        try:
+            forward_summary = json.loads(forward_summary_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            forward_summary = {"status": "invalid_summary", "message": "Could not parse forward geodesic summary."}
     return {
         "schema": schema(),
         "values": values,
@@ -74,6 +89,7 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
         "camera_backends": available_backends(),
         "camera_summary": camera_summary,
         "source_summary": source_summary,
+        "forward_summary": forward_summary,
         "outputs": {
             "output_dir": str(output_dir),
             "preview_exists": geometry_preview_path.exists(),
@@ -85,6 +101,13 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             "uhe_source_summary_exists": source_csv_path.exists(),
             "uhe_source_summary_json_exists": source_summary_path.exists(),
             "uhe_source_preview_exists": source_preview_path.exists(),
+            "forward_paths_exists": forward_paths_path.exists(),
+            "forward_path_segments_exists": forward_segments_path.exists(),
+            "forward_summary_exists": forward_summary_csv_path.exists(),
+            "forward_summary_json_exists": forward_summary_path.exists(),
+            "forward_preview_exists": forward_preview_path.exists(),
+            "geodesic_validation_report_exists": geodesic_validation_path.exists(),
+            "stop_condition_statistics_exists": stop_statistics_path.exists(),
             "provenance_exists": provenance_path.exists(),
             "config_exists": config_output_path.exists(),
             "render_summary_exists": render_summary_path.exists(),
@@ -100,6 +123,13 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "uhe_source_summary": rel(source_csv_path, output_dir),
                 "uhe_source_summary_json": rel(source_summary_path, output_dir),
                 "uhe_source_preview": rel(source_preview_path, output_dir),
+                "forward_paths": rel(forward_paths_path, output_dir),
+                "forward_path_segments": rel(forward_segments_path, output_dir),
+                "forward_summary": rel(forward_summary_csv_path, output_dir),
+                "forward_summary_json": rel(forward_summary_path, output_dir),
+                "forward_preview": rel(forward_preview_path, output_dir),
+                "geodesic_validation_report": rel(geodesic_validation_path, output_dir),
+                "stop_condition_statistics": rel(stop_statistics_path, output_dir),
                 "provenance": rel(provenance_path, output_dir),
                 "render_summary": rel(render_summary_path, output_dir),
                 "html_summary": rel(html_path, output_dir),
@@ -208,6 +238,7 @@ let previewOpaqueStructures = false;
 let lastCameraMtime = 0;
 let previewPollTimer = null;
 let sourcePreviewVersion = Date.now();
+let forwardPreviewVersion = Date.now();
 function outPath(key) {{
   return state.outputs.paths && state.outputs.paths[key] ? state.outputs.paths[key] : key;
 }}
@@ -276,10 +307,47 @@ async function sampleUheSource() {{
       state.outputs.uhe_source_summary_exists = true;
       state.outputs.uhe_source_summary_json_exists = true;
       state.outputs.uhe_source_preview_exists = true;
+      state.forward_summary = null;
+      state.outputs.forward_paths_exists = false;
+      state.outputs.forward_path_segments_exists = false;
+      state.outputs.forward_summary_exists = false;
+      state.outputs.forward_summary_json_exists = false;
+      state.outputs.forward_preview_exists = false;
+      state.outputs.geodesic_validation_report_exists = false;
+      state.outputs.stop_condition_statistics_exists = false;
       state.outputs.provenance_exists = true;
       state.outputs.config_exists = true;
       activeTab = "UHE Source";
       sourcePreviewVersion = Date.now();
+      const logText = result.text;
+      render();
+      const log = document.querySelector("#log");
+      if (log) log.textContent = logText;
+    }}
+  }}
+  finally {{ button.disabled = false; }}
+}}
+async function propagateForwardGeodesics() {{
+  const button = document.querySelector("#forward-geodesics-button");
+  button.disabled = true;
+  try {{
+    const values = collect();
+    const result = await post("/api/propagate-forward-geodesics", values);
+    if (result.ok && result.data && result.data.forward) {{
+      state.values = values;
+      state.values.forward_geodesics.status = "forward_kerr_geodesics_propagated_no_interactions";
+      state.forward_summary = result.data.forward;
+      state.outputs.forward_paths_exists = true;
+      state.outputs.forward_path_segments_exists = true;
+      state.outputs.forward_summary_exists = true;
+      state.outputs.forward_summary_json_exists = true;
+      state.outputs.forward_preview_exists = true;
+      state.outputs.geodesic_validation_report_exists = true;
+      state.outputs.stop_condition_statistics_exists = true;
+      state.outputs.provenance_exists = true;
+      state.outputs.config_exists = true;
+      activeTab = "Forward Geodesics";
+      forwardPreviewVersion = Date.now();
       const logText = result.text;
       render();
       const log = document.querySelector("#log");
@@ -472,7 +540,7 @@ function tabLabel(tab) {{
   return aliases[tab.tab] || tab.tab;
 }}
 function orderedTabs() {{
-  const order = ["Camera", "Black Hole", "Torus / Medium", "Funnel / Cone", "UHE Source", "Interaction Sampler", "Observer Bridge", "Outputs", "Provenance"];
+  const order = ["Camera", "Black Hole", "Torus / Medium", "Funnel / Cone", "UHE Source", "Forward Geodesics", "Interaction Sampler", "Observer Bridge", "Outputs", "Provenance"];
   return [...state.schema].sort((a, b) => order.indexOf(tabLabel(a)) - order.indexOf(tabLabel(b)));
 }}
 function renderFields(tab) {{
@@ -513,6 +581,33 @@ function renderSourcePanel() {{
     ${{summaryHtml}}
   </div>`;
 }}
+function renderForwardPanel() {{
+  const summary = state.forward_summary;
+  const forwardLinks = `<div class="output-link-grid">
+    ${{state.outputs.forward_paths_exists ? `<a href="${{outUrl("forward_paths")}}" target="_blank">Paths<br><code>${{outPath("forward_paths")}}</code></a>` : ""}}
+    ${{state.outputs.forward_path_segments_exists ? `<a href="${{outUrl("forward_path_segments")}}" target="_blank">Segments<br><code>${{outPath("forward_path_segments")}}</code></a>` : ""}}
+    ${{state.outputs.forward_summary_json_exists ? `<a href="${{outUrl("forward_summary_json")}}" target="_blank">Summary JSON<br><code>${{outPath("forward_summary_json")}}</code></a>` : ""}}
+    ${{state.outputs.geodesic_validation_report_exists ? `<a href="${{outUrl("geodesic_validation_report")}}" target="_blank">Validation<br><code>${{outPath("geodesic_validation_report")}}</code></a>` : ""}}
+    ${{state.outputs.stop_condition_statistics_exists ? `<a href="${{outUrl("stop_condition_statistics")}}" target="_blank">Stops<br><code>${{outPath("stop_condition_statistics")}}</code></a>` : ""}}
+  </div>`;
+  const stops = summary && summary.stop_condition_counts ? Object.entries(summary.stop_condition_counts).map(([k, v]) => `${{k}}=${{v}}`).join(", ") : "none";
+  const summaryHtml = summary ? `<div class="summary-grid">
+    <div class="summary-item"><strong>Status</strong>${{summary.status}}</div>
+    <div class="summary-item"><strong>Paths</strong>${{summary.n_paths}}</div>
+    <div class="summary-item"><strong>Segments</strong>${{summary.n_segments}}</div>
+    <div class="summary-item"><strong>Backend</strong>${{summary.geodesic_backend}}</div>
+    <div class="summary-item"><strong>Null max</strong>${{Number(summary.null_norm_max).toExponential(4)}}</div>
+    <div class="summary-item"><strong>Killing E error</strong>${{Number(summary.killing_energy_max_error).toExponential(4)}}</div>
+    <div class="summary-item"><strong>Lz error</strong>${{Number(summary.lz_max_error).toExponential(4)}}</div>
+    <div class="summary-item"><strong>Validation</strong>${{summary.validation_pass}}</div>
+    <div class="summary-item"><strong>Momentum</strong>${{summary.momentum_generator}}</div>
+    <div class="summary-item"><strong>Kerr physical?</strong>${{summary.momentum_is_physical_kerr}}</div>
+  </div><p class="note"><strong>Stop conditions:</strong> ${{stops}}</p>${{forwardLinks}}` : `<p class="note">Forward geodesics inactive. Generate UHE Source samples first, then propagate here.</p>`;
+  return `<div class="source-panel">
+    <button type="button" id="forward-geodesics-button" class="source-action">Propagate Forward Geodesics</button>
+    ${{summaryHtml}}
+  </div>`;
+}}
 function renderContextPanel() {{
   if (activeTab === "Camera") {{
     return `<aside class="panel"><h2>Geometry Preview</h2><div class="geometry-preview-large"><svg id="geometrySvg" role="img" aria-label="Dynamic HADROS3 geometry preview"></svg></div></aside>`;
@@ -522,6 +617,12 @@ function renderContextPanel() {{
       ? `<img src="${{outUrl("uhe_source_preview")}}?v=${{sourcePreviewVersion}}" alt="UHE source sample preview">`
       : `<div class="context-empty">No UHE source preview generated yet.</div>`;
     return `<aside class="panel"><h2>UHE Source Samples</h2><div class="context-figure">${{figure}}</div></aside>`;
+  }}
+  if (activeTab === "Forward Geodesics") {{
+    const figure = state.outputs.forward_preview_exists
+      ? `<img src="${{outUrl("forward_preview")}}?v=${{forwardPreviewVersion}}" alt="Forward geodesic preview">`
+      : `<div class="context-empty">No forward geodesic preview generated yet.</div>`;
+    return `<aside class="panel"><h2>Forward Geodesics</h2><div class="context-figure">${{figure}}</div></aside>`;
   }}
   return "";
 }}
@@ -538,6 +639,13 @@ function renderOutputsPanel() {{
     ${{link(out.uhe_source_summary_json_exists, "uhe_source_summary_json", "UHE source summary JSON")}}
     ${{link(out.uhe_source_preview_exists, "uhe_source_preview", "UHE source preview")}}
     ${{out.uhe_source_preview_exists ? `<img src="${{outUrl("uhe_source_preview")}}" alt="UHE source preview">` : ""}}
+    ${{link(out.forward_paths_exists, "forward_paths", "Forward paths")}}
+    ${{link(out.forward_path_segments_exists, "forward_path_segments", "Forward segments")}}
+    ${{link(out.forward_summary_exists, "forward_summary", "Forward summary")}}
+    ${{link(out.forward_summary_json_exists, "forward_summary_json", "Forward summary JSON")}}
+    ${{link(out.forward_preview_exists, "forward_preview", "Forward preview")}}
+    ${{link(out.geodesic_validation_report_exists, "geodesic_validation_report", "Geodesic validation")}}
+    ${{link(out.stop_condition_statistics_exists, "stop_condition_statistics", "Stop conditions")}}
     ${{link(out.provenance_exists, "provenance", "Provenance")}}
     ${{link(out.render_summary_exists, "render_summary", "Render summary")}}
     ${{link(out.html_summary_exists, "html_summary", "Dashboard HTML")}}
@@ -645,12 +753,14 @@ function render() {{
   const runName = state.values.run.run_name || "HADROS3_run";
   const runStrip = `<div class="run-strip"><label><span>Run name</span><input id="runNameInput" type="text" value="${{runName}}"></label><span>Output</span><div class="output-folder">output/${{safeRunName(runName)}}</div></div>`;
   const nav = `<nav>${{tabs.map(tab => `<button class="tab-button ${{tabLabel(tab) === activeTab ? "active" : ""}}" data-tab="${{tabLabel(tab)}}">${{tabLabel(tab)}}</button>`).join("")}}</nav>`;
-  root.innerHTML = runStrip + nav + `<div class="panel"><p class="note">Geometry/configuration shell only. Expensive event stages are disabled.</p>${{renderFields(active)}}${{activeTab === "Camera" ? renderHadrosCameraPanel() + renderBackendTable() : ""}}${{activeTab === "UHE Source" ? renderSourcePanel() : ""}}${{activeTab === "Outputs" ? renderOutputsPanel() : ""}}` +
+  root.innerHTML = runStrip + nav + `<div class="panel"><p class="note">Geometry/configuration shell only. Expensive event stages are disabled.</p>${{renderFields(active)}}${{activeTab === "Camera" ? renderHadrosCameraPanel() + renderBackendTable() : ""}}${{activeTab === "UHE Source" ? renderSourcePanel() : ""}}${{activeTab === "Forward Geodesics" ? renderForwardPanel() : ""}}${{activeTab === "Outputs" ? renderOutputsPanel() : ""}}` +
     `<pre id="log"></pre></div>` +
     renderContextPanel();
   bindHadrosCameraPanel();
   const uheButton = document.querySelector("#uhe-source-button");
   if (uheButton) uheButton.onclick = sampleUheSource;
+  const forwardButton = document.querySelector("#forward-geodesics-button");
+  if (forwardButton) forwardButton.onclick = propagateForwardGeodesics;
   drawGeometrySvg();
   document.querySelector("#runNameInput").addEventListener("input", event => {{
     state.values = collect();
@@ -847,8 +957,28 @@ class Handler(BaseHTTPRequestHandler):
             values["uhe_neutrino_source"]["status"] = "sampled_position_with_proxy_direction_no_forward_kerr_geodesic"
             write_values(self.config_path, values)
             source_summary = generate_uhe_source_products(values, output_dir=output_dir)
+            clear_forward_geodesics_outputs(output_dir)
             render_summary = render_hadros_web(values, root=ROOT, source_summary=source_summary)
             summary = {"status": "ok", "source": source_summary, "render": render_summary}
+            self._send(200, json.dumps(summary, indent=2, sort_keys=True) + "\n", "application/json")
+            return
+        if self.path == "/api/propagate-forward-geodesics":
+            problems = validate_values(values)
+            if problems:
+                self._send(
+                    400,
+                    json.dumps({"status": "error", "validation_errors": problems}, indent=2, sort_keys=True) + "\n",
+                    "application/json",
+                )
+                return
+            output_dir = ROOT / run_output_dir(values)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            ensure_output_layout(output_dir)
+            values["forward_geodesics"]["status"] = "forward_kerr_geodesics_propagated_no_interactions"
+            write_values(self.config_path, values)
+            forward_summary = generate_forward_geodesic_products(values, run_output_dir=output_dir)
+            render_summary = render_hadros_web(values, root=ROOT, forward_geodesic_summary=forward_summary)
+            summary = {"status": "ok", "forward": forward_summary, "render": render_summary}
             self._send(200, json.dumps(summary, indent=2, sort_keys=True) + "\n", "application/json")
             return
         if self.path == "/api/launch-interactive-camera-preview":
@@ -873,6 +1003,7 @@ def main() -> int:
     parser.add_argument("--camera-preview-only", action="store_true", help="Render only the HADROS3 camera preview and exit.")
     parser.add_argument("--launch-interactive-camera", action="store_true", help="Launch the original HADROS interactive camera preview and exit.")
     parser.add_argument("--sample-uhe-source", action="store_true", help="Generate H3-W5 UHE source samples through hadros-web orchestration and exit.")
+    parser.add_argument("--propagate-forward-geodesics", action="store_true", help="Generate H3-W6 forward neutrino geodesics through hadros-web orchestration and exit.")
     parser.add_argument("--serve", action="store_true", help="Serve the web control surface.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8877)
@@ -921,8 +1052,20 @@ def main() -> int:
         values["uhe_neutrino_source"]["status"] = "sampled_position_with_proxy_direction_no_forward_kerr_geodesic"
         write_values(args.config, values)
         source_summary = generate_uhe_source_products(values, output_dir=output_dir)
+        clear_forward_geodesics_outputs(output_dir)
         render_summary = render_hadros_web(values, root=ROOT, output_dir=output_dir, source_summary=source_summary)
         print(json.dumps({"status": "ok", "source": source_summary, "render": render_summary}, indent=2, sort_keys=True))
+        return 0
+    if args.propagate_forward_geodesics:
+        output_dir = args.output_dir if args.output_dir is not None else ROOT / run_output_dir(values)
+        if not output_dir.is_absolute():
+            output_dir = ROOT / output_dir
+        ensure_output_layout(output_dir)
+        values["forward_geodesics"]["status"] = "forward_kerr_geodesics_propagated_no_interactions"
+        write_values(args.config, values)
+        forward_summary = generate_forward_geodesic_products(values, run_output_dir=output_dir)
+        render_summary = render_hadros_web(values, root=ROOT, output_dir=output_dir, forward_geodesic_summary=forward_summary)
+        print(json.dumps({"status": "ok", "forward": forward_summary, "render": render_summary}, indent=2, sort_keys=True))
         return 0
     summary = render_hadros_web(values, root=ROOT, output_dir=args.output_dir)
     print(json.dumps(summary, indent=2, sort_keys=True))

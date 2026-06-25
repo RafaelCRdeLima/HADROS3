@@ -19,6 +19,8 @@ def test_schema_exposes_hadros3_first_stage_controls() -> None:
         ("analytic_torus", "r_inner_rg"),
         ("polar_cone", "opening_angle_deg"),
         ("uhe_neutrino_source", "energy_gev"),
+        ("forward_geodesics", "geodesic_backend"),
+        ("forward_geodesics", "n_samples_to_propagate"),
         ("interaction_sampler", "mode"),
         ("observer_bridge", "mode"),
         ("provenance", "trust_boundary"),

@@ -10,6 +10,7 @@ CAMERA_PREVIEW_DIR = "CameraPreview"
 GEOMETRY_DIR = "Geometry"
 RUN_METADATA_DIR = "RunMetadata"
 UHE_SOURCE_DIR = "UHEsource"
+FORWARD_GEODESICS_DIR = "ForwardGeodesics"
 DASHBOARD_DIR = "Dashboard"
 
 
@@ -27,6 +28,17 @@ def run_metadata_dir(run_output: Path) -> Path:
 
 def uhe_source_dir(run_output: Path) -> Path:
     return run_output / UHE_SOURCE_DIR
+
+
+def forward_geodesics_dir(run_output: Path) -> Path:
+    return run_output / FORWARD_GEODESICS_DIR
+
+
+def clear_forward_geodesics_outputs(run_output: Path) -> None:
+    path = forward_geodesics_dir(run_output)
+    if path.exists():
+        shutil.rmtree(path)
+    path.mkdir(parents=True, exist_ok=True)
 
 
 def dashboard_dir(run_output: Path) -> Path:
@@ -60,6 +72,15 @@ def ensure_output_layout(run_output: Path) -> None:
             "uhe_neutrino_source_summary.csv",
             "uhe_neutrino_source_summary.json",
             "uhe_neutrino_source_preview.png",
+        ],
+        FORWARD_GEODESICS_DIR: [
+            "uhe_neutrino_forward_paths.jsonl",
+            "uhe_neutrino_forward_path_segments.jsonl",
+            "uhe_neutrino_forward_summary.csv",
+            "uhe_neutrino_forward_summary.json",
+            "uhe_neutrino_forward_preview.png",
+            "geodesic_validation_report.json",
+            "stop_condition_statistics.csv",
         ],
         DASHBOARD_DIR: [
             "index.html",

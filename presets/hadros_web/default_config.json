@@ -14,6 +14,18 @@
     "spin_a": 0.9,
     "spin_convention": "Boyer-Lindquist a/M"
   },
+  "forward_geodesics": {
+    "geodesic_backend": "hadros3_kerr_null_radial",
+    "horizon_tolerance_rg": 0.001,
+    "initial_step_rg": 1.0,
+    "killing_energy_tolerance": 1e-10,
+    "lz_tolerance": 1e-10,
+    "max_steps": 256,
+    "n_samples_to_propagate": 64,
+    "null_invariant_tolerance": 1e-06,
+    "outer_radius_rg": 80.0,
+    "status": "configured_only_no_forward_geodesics"
+  },
   "interaction_sampler": {
     "mode": "placeholder_disabled",
     "planned_model": "optical_depth_DIS"

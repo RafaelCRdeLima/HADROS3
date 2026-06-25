@@ -127,6 +127,35 @@ def schema() -> list[dict[str, Any]]:
             ],
         },
         {
+            "tab": "Forward Geodesics",
+            "fields": [
+                field(
+                    "forward_geodesics",
+                    "geodesic_backend",
+                    "Geodesic backend",
+                    "hadros3_kerr_null_radial",
+                    kind="select",
+                    options=["hadros3_kerr_null_radial"],
+                ),
+                field("forward_geodesics", "n_samples_to_propagate", "Neutrinos to propagate", 64, kind="number"),
+                field("forward_geodesics", "initial_step_rg", "Initial step", 1.0, kind="number"),
+                field("forward_geodesics", "max_steps", "Max steps", 256, kind="number"),
+                field("forward_geodesics", "outer_radius_rg", "Outer radius", 80.0, kind="number"),
+                field("forward_geodesics", "horizon_tolerance_rg", "Horizon tolerance", 1.0e-3, kind="number"),
+                field("forward_geodesics", "null_invariant_tolerance", "Null norm tolerance", 1.0e-6, kind="number"),
+                field("forward_geodesics", "killing_energy_tolerance", "Killing energy tolerance", 1.0e-10, kind="number"),
+                field("forward_geodesics", "lz_tolerance", "Lz tolerance", 1.0e-10, kind="number"),
+                field(
+                    "forward_geodesics",
+                    "status",
+                    "Status",
+                    "configured_only_no_forward_geodesics",
+                    kind="select",
+                    options=["configured_only_no_forward_geodesics", "forward_kerr_geodesics_propagated_no_interactions"],
+                ),
+            ],
+        },
+        {
             "tab": "Interaction Sampler",
             "fields": [
                 field("interaction_sampler", "mode", "Interaction sampler", "placeholder_disabled", kind="select", options=["placeholder_disabled"]),
@@ -234,6 +263,7 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
     torus = values["analytic_torus"]
     cone = values["polar_cone"]
     source = values["uhe_neutrino_source"]
+    forward = values["forward_geodesics"]
 
     spin = float(bh["spin_a"])
     if not (-0.999 <= spin <= 0.999):
@@ -287,6 +317,21 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
             problems.append("uhe_neutrino_source.energy_gev must be positive")
     except ValueError as exc:
         problems.append(f"uhe_neutrino_source.energy_gev is invalid: {exc}")
+    if str(forward.get("geodesic_backend")) != "hadros3_kerr_null_radial":
+        problems.append("forward_geodesics.geodesic_backend is unsupported in H3-W6")
+    if int(float(forward.get("n_samples_to_propagate", 0))) <= 0:
+        problems.append("forward_geodesics.n_samples_to_propagate must be positive")
+    if int(float(forward.get("max_steps", 0))) <= 0:
+        problems.append("forward_geodesics.max_steps must be positive")
+    if float(forward.get("initial_step_rg", 0.0)) <= 0.0:
+        problems.append("forward_geodesics.initial_step_rg must be positive")
+    if float(forward.get("outer_radius_rg", 0.0)) <= float(source["r_max_rg"]):
+        problems.append("forward_geodesics.outer_radius_rg must exceed uhe_neutrino_source.r_max_rg")
+    if float(forward.get("horizon_tolerance_rg", 0.0)) < 0.0:
+        problems.append("forward_geodesics.horizon_tolerance_rg must be non-negative")
+    for key in ["null_invariant_tolerance", "killing_energy_tolerance", "lz_tolerance"]:
+        if float(forward.get(key, 0.0)) <= 0.0:
+            problems.append(f"forward_geodesics.{key} must be positive")
     return problems
 
 

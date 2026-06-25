@@ -5,8 +5,9 @@ configuration-first base for the Kerr black hole, observer camera, analytic
 torus, polar cone/funnel, UHE source region, placeholders, outputs, and
 provenance.
 
-This stage does not run POWHEG, PYTHIA, GEANT4, forward neutrino geodesics,
-optical-depth DIS, or an active observer bridge.
+This stage does not run POWHEG, PYTHIA, GEANT4, optical-depth DIS, or an active
+observer bridge. Forward neutrino geodesics are available as the H3-W6 layer and
+still do not perform interactions.
 
 ## Commands
 
@@ -72,6 +73,27 @@ uhe_neutrino_source_summary.csv
 uhe_neutrino_source_preview.png
 ```
 
+Propagate the H3-W6 forward Kerr neutrino geodesics from existing H3-W5 source
+samples:
+
+```bash
+make propagate-forward-geodesics
+```
+
+The same action is available in the dashboard under the **Forward Geodesics**
+tab as `Propagate Forward Geodesics`. It consumes
+`output/<run-name>/UHEsource/uhe_neutrino_source_samples.jsonl` and writes:
+
+```text
+output/<run-name>/ForwardGeodesics/uhe_neutrino_forward_paths.jsonl
+output/<run-name>/ForwardGeodesics/uhe_neutrino_forward_path_segments.jsonl
+output/<run-name>/ForwardGeodesics/uhe_neutrino_forward_summary.csv
+output/<run-name>/ForwardGeodesics/uhe_neutrino_forward_summary.json
+output/<run-name>/ForwardGeodesics/uhe_neutrino_forward_preview.png
+output/<run-name>/ForwardGeodesics/geodesic_validation_report.json
+output/<run-name>/ForwardGeodesics/stop_condition_statistics.csv
+```
+
 Open the original HADROS interactive camera preview window:
 
 ```bash
@@ -88,7 +110,7 @@ with HADROS3 camera, black-hole, torus, and funnel parameters passed through as
 `PREVIEW_*`, `ASPIN`, and `CAM_*` variables. Runtime preview files are written
 to a space-safe `/tmp/hadros3_camera_preview_*` folder because the original
 HADROS Makefile does not quote output paths; the HADROS3 launcher log remains in
-`output/<run-name>/interactive_camera_preview/camera_preview_interactive.log`.
+`output/<run-name>/CameraPreview/interactive_camera_preview/camera_preview_interactive.log`.
 
 Controls are inherited from HADROS: drag/arrows orbit the camera, scroll or
 `+/-` changes distance, `[]` changes FOV, `A/D` changes spin, `R` renders, `S`

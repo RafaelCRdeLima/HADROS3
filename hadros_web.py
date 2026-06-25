@@ -839,8 +839,9 @@ function orderedTabs() {{
   }});
 }}
 function renderFields(tab) {{
+  const visibleFields = tab.fields.filter(f => f.visibility !== "INTERNAL");
   return `<section class="active-panel"><h2>${{tabLabel(tab)}}</h2>` +
-    tab.fields.map(f => `<label><span>${{f.label}}${{f.visibility === "EXPERT" ? " (Expert)" : ""}}</span>${{inputFor(f, state.values[f.section][f.key])}}</label>`).join("") +
+    visibleFields.map(f => `<label><span>${{f.label}}${{f.visibility === "EXPERT" ? " (Expert)" : ""}}</span>${{inputFor(f, state.values[f.section][f.key])}}</label>`).join("") +
     `</section>`;
 }}
 function renderBackendTable() {{

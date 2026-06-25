@@ -98,20 +98,31 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source() -
     assert payload["forward_geodesics_status"]["input_uhe_source_dir"] == "UHEsource"
     assert payload["forward_geodesics_status"]["output_dir"] == "ForwardGeodesics"
     assert payload["outputs"]["paths"]["forward_preview"] == "ForwardGeodesics/uhe_neutrino_forward_preview.png"
+    assert payload["outputs"]["paths"]["forward_geometry_3d"] == "ForwardGeodesics/uhe_neutrino_forward_geometry_3d.png"
+    assert payload["outputs"]["paths"]["forward_geometry_3d_json"] == "ForwardGeodesics/uhe_neutrino_forward_geometry_3d.json"
+    assert payload["outputs"]["paths"]["forward_geometry_3d_html"] == "ForwardGeodesics/uhe_neutrino_forward_geometry_3d.html"
     assert payload["outputs"]["paths"]["forward_summary_json"] == "ForwardGeodesics/uhe_neutrino_forward_summary.json"
+    assert payload["values"]["forward_geodesics"]["geodesic_backend"] == "full_kerr_geodesic"
 
     assert "Forward Geodesics" in html
     assert "Propagate Forward Geodesics" in html
+    assert "full_kerr_geodesic" in html
+    assert "Full Kerr null geodesic propagation" in html
     assert "Initial Direction" in html
+    assert "Isotropic local" in html
     assert "Coordinate radial outward" in html
     assert "Jet axis" in html
     assert "Cone emission" in html
+    assert "Recommended physical model" in html
     assert "The UHE source samples emission position, energy and direction." in html
     assert "The Kerr four-momentum is not sampled here" in html
     assert "Uses</strong>position + energy + emission_direction" in html
     assert "Builds</strong>Kerr null four-momentum" in html
     assert "Input UHEsource/" in html
     assert "ForwardGeodesics/" in html
+    assert "uhe_neutrino_forward_geometry_3d.html" in html
+    assert "uhe_neutrino_forward_geometry_3d.png" in html
+    assert "uhe_neutrino_forward_geometry_3d.json" in html
     assert "uhe_neutrino_forward_preview.png" in html
     assert "uhe_neutrino_forward_summary.json" in html
     assert "uhe_neutrino_forward_summary.csv" in html

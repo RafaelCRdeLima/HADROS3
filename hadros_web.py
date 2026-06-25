@@ -60,8 +60,14 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
     forward_summary_csv_path = forward_dir / "uhe_neutrino_forward_summary.csv"
     forward_summary_path = forward_dir / "uhe_neutrino_forward_summary.json"
     forward_preview_path = forward_dir / "uhe_neutrino_forward_preview.png"
+    forward_geometry_3d_path = forward_dir / "uhe_neutrino_forward_geometry_3d.png"
+    forward_geometry_3d_json_path = forward_dir / "uhe_neutrino_forward_geometry_3d.json"
+    forward_geometry_3d_html_path = forward_dir / "uhe_neutrino_forward_geometry_3d.html"
+    strong_diagnostic_png_path = forward_dir / "isotropic_kerr_strong_field_diagnostic.png"
+    strong_diagnostic_json_path = forward_dir / "isotropic_kerr_strong_field_diagnostic.json"
     geodesic_validation_path = forward_dir / "geodesic_validation_report.json"
     stop_statistics_path = forward_dir / "stop_condition_statistics.csv"
+    diagnostic_report_path = forward_dir / "forward_geodesics_diagnostic_report.md"
     html_path = web_dir / "index.html"
 
     camera_summary: dict[str, Any] | None = None
@@ -108,8 +114,14 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             "summary_csv_exists": forward_summary_csv_path.exists(),
             "summary_json_exists": forward_summary_path.exists(),
             "preview_exists": forward_preview_path.exists(),
+            "geometry_3d_exists": forward_geometry_3d_path.exists(),
+            "geometry_3d_json_exists": forward_geometry_3d_json_path.exists(),
+            "geometry_3d_html_exists": forward_geometry_3d_html_path.exists(),
+            "isotropic_kerr_strong_field_diagnostic_png_exists": strong_diagnostic_png_path.exists(),
+            "isotropic_kerr_strong_field_diagnostic_json_exists": strong_diagnostic_json_path.exists(),
             "geodesic_validation_report_exists": geodesic_validation_path.exists(),
             "stop_condition_statistics_exists": stop_statistics_path.exists(),
+            "forward_diagnostic_report_exists": diagnostic_report_path.exists(),
         },
         "outputs": {
             "output_dir": str(output_dir),
@@ -127,8 +139,14 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             "forward_summary_exists": forward_summary_csv_path.exists(),
             "forward_summary_json_exists": forward_summary_path.exists(),
             "forward_preview_exists": forward_preview_path.exists(),
+            "forward_geometry_3d_exists": forward_geometry_3d_path.exists(),
+            "forward_geometry_3d_json_exists": forward_geometry_3d_json_path.exists(),
+            "forward_geometry_3d_html_exists": forward_geometry_3d_html_path.exists(),
+            "isotropic_kerr_strong_field_diagnostic_png_exists": strong_diagnostic_png_path.exists(),
+            "isotropic_kerr_strong_field_diagnostic_json_exists": strong_diagnostic_json_path.exists(),
             "geodesic_validation_report_exists": geodesic_validation_path.exists(),
             "stop_condition_statistics_exists": stop_statistics_path.exists(),
+            "forward_diagnostic_report_exists": diagnostic_report_path.exists(),
             "provenance_exists": provenance_path.exists(),
             "config_exists": config_output_path.exists(),
             "render_summary_exists": render_summary_path.exists(),
@@ -149,8 +167,14 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "forward_summary": rel(forward_summary_csv_path, output_dir),
                 "forward_summary_json": rel(forward_summary_path, output_dir),
                 "forward_preview": rel(forward_preview_path, output_dir),
+                "forward_geometry_3d": rel(forward_geometry_3d_path, output_dir),
+                "forward_geometry_3d_json": rel(forward_geometry_3d_json_path, output_dir),
+                "forward_geometry_3d_html": rel(forward_geometry_3d_html_path, output_dir),
+                "isotropic_kerr_strong_field_diagnostic_png": rel(strong_diagnostic_png_path, output_dir),
+                "isotropic_kerr_strong_field_diagnostic_json": rel(strong_diagnostic_json_path, output_dir),
                 "geodesic_validation_report": rel(geodesic_validation_path, output_dir),
                 "stop_condition_statistics": rel(stop_statistics_path, output_dir),
+                "forward_diagnostic_report": rel(diagnostic_report_path, output_dir),
                 "provenance": rel(provenance_path, output_dir),
                 "render_summary": rel(render_summary_path, output_dir),
                 "html_summary": rel(html_path, output_dir),
@@ -194,6 +218,7 @@ def render_html(values: dict[str, dict[str, Any]], config_path: Path) -> str:
     .geometry-preview-empty {{ padding: 28px; color: #cbd5e1; text-align: center; }}
     .context-figure {{ border: 1px solid #d6dce5; border-radius: 6px; background: #101318; min-height: 640px; display: grid; place-items: center; overflow: hidden; }}
     .context-figure img {{ width: 100%; height: 100%; min-height: 640px; object-fit: contain; display: block; background: #101318; }}
+    .context-interactive {{ width: 100%; height: min(78vh, 860px); min-height: 640px; border: 0; display: block; background: #f7f8fb; }}
     .context-empty {{ padding: 28px; color: #cbd5e1; text-align: center; }}
     .ok {{ color: #1f6f46; font-weight: 650; }}
     .pending {{ color: #8a5a0a; font-weight: 650; }}
@@ -341,8 +366,14 @@ async function sampleUheSource() {{
       state.outputs.forward_summary_exists = false;
       state.outputs.forward_summary_json_exists = false;
       state.outputs.forward_preview_exists = false;
+      state.outputs.forward_geometry_3d_exists = false;
+      state.outputs.forward_geometry_3d_json_exists = false;
+      state.outputs.forward_geometry_3d_html_exists = false;
+      state.outputs.isotropic_kerr_strong_field_diagnostic_png_exists = false;
+      state.outputs.isotropic_kerr_strong_field_diagnostic_json_exists = false;
       state.outputs.geodesic_validation_report_exists = false;
       state.outputs.stop_condition_statistics_exists = false;
+      state.outputs.forward_diagnostic_report_exists = false;
       state.forward_geodesics_status = Object.assign({{}}, state.forward_geodesics_status || {{}}, {{
         input_uhe_source_found: true,
         paths_exists: false,
@@ -350,8 +381,14 @@ async function sampleUheSource() {{
         summary_csv_exists: false,
         summary_json_exists: false,
         preview_exists: false,
+        geometry_3d_exists: false,
+        geometry_3d_json_exists: false,
+        geometry_3d_html_exists: false,
+        isotropic_kerr_strong_field_diagnostic_png_exists: false,
+        isotropic_kerr_strong_field_diagnostic_json_exists: false,
         geodesic_validation_report_exists: false,
         stop_condition_statistics_exists: false,
+        forward_diagnostic_report_exists: false,
       }});
       state.outputs.provenance_exists = true;
       state.outputs.config_exists = true;
@@ -380,8 +417,14 @@ async function propagateForwardGeodesics() {{
       state.outputs.forward_summary_exists = true;
       state.outputs.forward_summary_json_exists = true;
       state.outputs.forward_preview_exists = true;
+      state.outputs.forward_geometry_3d_exists = true;
+      state.outputs.forward_geometry_3d_json_exists = true;
+      state.outputs.forward_geometry_3d_html_exists = true;
+      state.outputs.isotropic_kerr_strong_field_diagnostic_png_exists = true;
+      state.outputs.isotropic_kerr_strong_field_diagnostic_json_exists = true;
       state.outputs.geodesic_validation_report_exists = true;
       state.outputs.stop_condition_statistics_exists = true;
+      state.outputs.forward_diagnostic_report_exists = true;
       state.forward_geodesics_status = Object.assign({{}}, state.forward_geodesics_status || {{}}, {{
         configured_status: state.values.forward_geodesics.status,
         input_uhe_source_found: true,
@@ -390,8 +433,14 @@ async function propagateForwardGeodesics() {{
         summary_csv_exists: true,
         summary_json_exists: true,
         preview_exists: true,
+        geometry_3d_exists: true,
+        geometry_3d_json_exists: true,
+        geometry_3d_html_exists: true,
+        isotropic_kerr_strong_field_diagnostic_png_exists: true,
+        isotropic_kerr_strong_field_diagnostic_json_exists: true,
         geodesic_validation_report_exists: true,
         stop_condition_statistics_exists: true,
+        forward_diagnostic_report_exists: true,
       }});
       state.outputs.provenance_exists = true;
       state.outputs.config_exists = true;
@@ -608,21 +657,24 @@ function renderBackendTable() {{
 function renderSourcePanel() {{
   const summary = state.source_summary;
   const sourceValues = state.values.uhe_neutrino_source;
-  const directionModel = sourceValues.direction_model || "coordinate_radial_outward";
+  const directionModel = sourceValues.direction_model || "isotropic_local";
   const directionOptions = [
-    ["coordinate_radial_outward", "Coordinate radial outward", true],
+    ["isotropic_local", "Isotropic local", true, "Recommended physical model."],
+    ["coordinate_radial_outward", "Coordinate radial outward", true, "Diagnostic model."],
     ["jet_axis_future", "Jet axis", false],
     ["cone_emission_future", "Cone emission", false],
-    ["isotropic_local_future", "Isotropic local (future)", false],
     ["custom_future", "Custom (future)", false],
-  ].map(([value, label, enabled]) => `<label class="toggle-row"><input type="radio" name="directionModelDisplay" value="${{value}}" ${{directionModel === value ? "checked" : ""}} disabled><span class="toggle-main"><span class="toggle-name">${{label}}</span><span class="toggle-help">${{enabled ? "Implemented in H3-W5." : "Future model."}}</span></span></label>`).join("");
-  const directionStatus = directionModel === "coordinate_radial_outward" ? "implemented" : "future";
+  ].map(([value, label, enabled, help]) => `<label class="toggle-row"><input type="radio" name="directionModelDisplay" value="${{value}}" ${{directionModel === value ? "checked" : ""}} disabled><span class="toggle-main"><span class="toggle-name">${{label}}</span><span class="toggle-help">${{enabled ? help || "Implemented in H3-W5." : "Future model."}}</span></span></label>`).join("");
+  const directionStatus = ["coordinate_radial_outward", "isotropic_local"].includes(directionModel) ? "implemented" : "future";
   const directionPanel = `<section><h2>Initial Direction</h2>
     <p class="note">The UHE source samples emission position, energy and direction.<br>The Kerr four-momentum is not sampled here; it is constructed later by Forward Geodesics from position + energy + direction.</p>
     <div class="summary-grid">
       <div class="summary-item"><strong>direction_model</strong>${{directionModel}}</div>
       <div class="summary-item"><strong>direction_opening_angle_deg</strong>${{sourceValues.direction_opening_angle_deg}}</div>
       <div class="summary-item"><strong>direction_seed</strong>${{sourceValues.direction_seed}}</div>
+      <div class="summary-item"><strong>direction_sampling_pdf</strong>${{summary && summary.direction_sampling_pdf ? Number(summary.direction_sampling_pdf).toExponential(4) : "pending"}}</div>
+      <div class="summary-item"><strong>direction_physical_pdf</strong>${{summary && summary.direction_physical_pdf ? Number(summary.direction_physical_pdf).toExponential(4) : "pending"}}</div>
+      <div class="summary-item"><strong>direction_weight</strong>${{summary && summary.direction_weight ? summary.direction_weight : "pending"}}</div>
       <div class="summary-item"><strong>Model status</strong><span class="${{directionStatus === "implemented" ? "ok" : "pending"}}">${{directionStatus}}</span></div>
     </div>
     <div class="camera-controls-card">${{directionOptions}}</div>
@@ -663,8 +715,14 @@ function renderForwardPanel() {{
     <div class="summary-item"><strong>Input</strong><code>UHEsource/uhe_neutrino_source_samples.jsonl</code></div>
     <div class="summary-item"><strong>Uses</strong>position + energy + emission_direction</div>
     <div class="summary-item"><strong>Builds</strong>Kerr null four-momentum <code>p_mu</code></div>
+    <div class="summary-item"><strong>Propagation</strong>Full Kerr null geodesic propagation</div>
   </div>`;
   const forwardLinks = `<div class="output-link-grid">
+    ${{state.outputs.forward_geometry_3d_html_exists ? `<a href="${{outUrl("forward_geometry_3d_html")}}" target="_blank">Interactive 3D geometry<br><code>${{outPath("forward_geometry_3d_html")}}</code></a>` : ""}}
+    ${{state.outputs.forward_geometry_3d_exists ? `<a href="${{outUrl("forward_geometry_3d")}}" target="_blank">3D geometry PNG<br><code>${{outPath("forward_geometry_3d")}}</code></a>` : ""}}
+    ${{state.outputs.forward_geometry_3d_json_exists ? `<a href="${{outUrl("forward_geometry_3d_json")}}" target="_blank">3D geometry JSON<br><code>${{outPath("forward_geometry_3d_json")}}</code></a>` : ""}}
+    ${{state.outputs.isotropic_kerr_strong_field_diagnostic_png_exists ? `<a href="${{outUrl("isotropic_kerr_strong_field_diagnostic_png")}}" target="_blank">Strong-field isotropic diagnostic PNG<br><code>${{outPath("isotropic_kerr_strong_field_diagnostic_png")}}</code></a>` : ""}}
+    ${{state.outputs.isotropic_kerr_strong_field_diagnostic_json_exists ? `<a href="${{outUrl("isotropic_kerr_strong_field_diagnostic_json")}}" target="_blank">Strong-field isotropic diagnostic JSON<br><code>${{outPath("isotropic_kerr_strong_field_diagnostic_json")}}</code></a>` : ""}}
     ${{state.outputs.forward_preview_exists ? `<a href="${{outUrl("forward_preview")}}" target="_blank">Preview PNG<br><code>${{outPath("forward_preview")}}</code></a>` : ""}}
     ${{state.outputs.forward_summary_json_exists ? `<a href="${{outUrl("forward_summary_json")}}" target="_blank">Summary JSON<br><code>${{outPath("forward_summary_json")}}</code></a>` : ""}}
     ${{state.outputs.forward_summary_exists ? `<a href="${{outUrl("forward_summary")}}" target="_blank">Summary CSV<br><code>${{outPath("forward_summary")}}</code></a>` : ""}}
@@ -672,6 +730,7 @@ function renderForwardPanel() {{
     ${{state.outputs.forward_path_segments_exists ? `<a href="${{outUrl("forward_path_segments")}}" target="_blank">Segments<br><code>${{outPath("forward_path_segments")}}</code></a>` : ""}}
     ${{state.outputs.geodesic_validation_report_exists ? `<a href="${{outUrl("geodesic_validation_report")}}" target="_blank">Validation<br><code>${{outPath("geodesic_validation_report")}}</code></a>` : ""}}
     ${{state.outputs.stop_condition_statistics_exists ? `<a href="${{outUrl("stop_condition_statistics")}}" target="_blank">Stops<br><code>${{outPath("stop_condition_statistics")}}</code></a>` : ""}}
+    ${{state.outputs.forward_diagnostic_report_exists ? `<a href="${{outUrl("forward_diagnostic_report")}}" target="_blank">Diagnostic report<br><code>${{outPath("forward_diagnostic_report")}}</code></a>` : ""}}
   </div>`;
   const stops = summary && summary.stop_condition_counts ? Object.entries(summary.stop_condition_counts).map(([k, v]) => `${{k}}=${{v}}`).join(", ") : "none";
   const summaryHtml = summary ? `${{inputStatus}}<div class="summary-grid">
@@ -680,6 +739,9 @@ function renderForwardPanel() {{
     <div class="summary-item"><strong>Paths</strong>${{summary.n_paths}}</div>
     <div class="summary-item"><strong>Segments</strong>${{summary.n_segments}}</div>
     <div class="summary-item"><strong>Backend</strong>${{summary.geodesic_backend}}</div>
+    <div class="summary-item"><strong>Delta theta max</strong>${{Number(summary.max_delta_theta_rad || 0).toExponential(4)}}</div>
+    <div class="summary-item"><strong>Delta phi max</strong>${{Number(summary.max_delta_phi_rad || 0).toExponential(4)}}</div>
+    <div class="summary-item"><strong>Full Kerr?</strong>${{summary.full_kerr_geodesic}}</div>
     <div class="summary-item"><strong>Null max</strong>${{Number(summary.null_norm_max).toExponential(4)}}</div>
     <div class="summary-item"><strong>Killing E error</strong>${{Number(summary.killing_energy_max_error).toExponential(4)}}</div>
     <div class="summary-item"><strong>Lz error</strong>${{Number(summary.lz_max_error).toExponential(4)}}</div>
@@ -703,10 +765,14 @@ function renderContextPanel() {{
     return `<aside class="panel"><h2>UHE Source Samples</h2><div class="context-figure">${{figure}}</div></aside>`;
   }}
   if (activeTab === "Forward Geodesics") {{
-    const figure = state.outputs.forward_preview_exists
-      ? `<img src="${{outUrl("forward_preview")}}?v=${{forwardPreviewVersion}}" alt="Forward geodesic preview">`
+    const figure = state.outputs.forward_geometry_3d_html_exists
+      ? `<iframe class="context-interactive" src="${{outUrl("forward_geometry_3d_html")}}?v=${{forwardPreviewVersion}}" title="Interactive forward geodesic 3D geometry"></iframe>`
+      : state.outputs.forward_geometry_3d_exists
+      ? `<img src="${{outUrl("forward_geometry_3d")}}?v=${{forwardPreviewVersion}}" alt="Forward geodesic 3D geometry">`
+      : state.outputs.forward_preview_exists
+      ? `<img src="${{outUrl("forward_preview")}}?v=${{forwardPreviewVersion}}" alt="Forward geodesic 2D preview">`
       : `<div class="context-empty">No forward geodesic preview generated yet.</div>`;
-    return `<aside class="panel"><h2>Forward Geodesics</h2><div class="context-figure">${{figure}}</div></aside>`;
+    return `<aside class="panel"><h2>Forward Geodesics Geometry</h2><div class="context-figure">${{figure}}</div></aside>`;
   }}
   return "";
 }}
@@ -730,6 +796,13 @@ function renderOutputsPanel() {{
     ${{link(out.uhe_source_preview_exists, "uhe_source_preview", "UHE source preview")}}
     ${{out.uhe_source_preview_exists ? `<img src="${{outUrl("uhe_source_preview")}}" alt="UHE source preview">` : ""}}
   `) + group("ForwardGeodesics/", `
+    ${{link(out.forward_geometry_3d_html_exists, "forward_geometry_3d_html", "Interactive forward 3D geometry")}}
+    ${{link(out.forward_geometry_3d_exists, "forward_geometry_3d", "Forward 3D geometry")}}
+    ${{out.forward_geometry_3d_exists ? `<img src="${{outUrl("forward_geometry_3d")}}" alt="Forward geodesics 3D geometry">` : ""}}
+    ${{link(out.forward_geometry_3d_json_exists, "forward_geometry_3d_json", "Forward 3D geometry JSON")}}
+    ${{link(out.isotropic_kerr_strong_field_diagnostic_png_exists, "isotropic_kerr_strong_field_diagnostic_png", "Strong-field isotropic diagnostic")}}
+    ${{out.isotropic_kerr_strong_field_diagnostic_png_exists ? `<img src="${{outUrl("isotropic_kerr_strong_field_diagnostic_png")}}" alt="Strong-field isotropic Kerr diagnostic">` : ""}}
+    ${{link(out.isotropic_kerr_strong_field_diagnostic_json_exists, "isotropic_kerr_strong_field_diagnostic_json", "Strong-field isotropic diagnostic JSON")}}
     ${{link(out.forward_preview_exists, "forward_preview", "Forward preview")}}
     ${{out.forward_preview_exists ? `<img src="${{outUrl("forward_preview")}}" alt="Forward geodesics preview">` : ""}}
     ${{link(out.forward_summary_json_exists, "forward_summary_json", "Forward summary JSON")}}
@@ -738,6 +811,7 @@ function renderOutputsPanel() {{
     ${{link(out.forward_path_segments_exists, "forward_path_segments", "Forward segments")}}
     ${{link(out.geodesic_validation_report_exists, "geodesic_validation_report", "Geodesic validation")}}
     ${{link(out.stop_condition_statistics_exists, "stop_condition_statistics", "Stop conditions")}}
+    ${{link(out.forward_diagnostic_report_exists, "forward_diagnostic_report", "Forward diagnostic report")}}
   `) + group("Dashboard/", `
     ${{link(out.html_summary_exists, "html_summary", "Dashboard HTML")}}
   `);

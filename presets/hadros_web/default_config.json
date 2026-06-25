@@ -15,7 +15,7 @@
     "spin_convention": "Boyer-Lindquist a/M"
   },
   "forward_geodesics": {
-    "geodesic_backend": "hadros3_kerr_null_radial",
+    "geodesic_backend": "full_kerr_geodesic",
     "horizon_tolerance_rg": 0.001,
     "initial_step_rg": 1.0,
     "killing_energy_tolerance": 1e-10,
@@ -70,7 +70,7 @@
     "run_name": "HADROS3_hadros_web_preview"
   },
   "uhe_neutrino_source": {
-    "direction_model": "coordinate_radial_outward",
+    "direction_model": "isotropic_local",
     "direction_opening_angle_deg": 0.0,
     "direction_seed": 12345,
     "energy_gev": "10^{9}",
@@ -83,7 +83,7 @@
     "random_seed": 12345,
     "sampling_mode": "uniform_coordinate_volume",
     "source_model": "polar_cone",
-    "status": "sampled_position_direction_energy_no_forward_kerr_geodesic",
+    "status": "configured_only_no_sampling",
     "theta_max_deg": 12,
     "theta_min_deg": 0
   }

@@ -65,6 +65,42 @@ class CoordinateRadialOutwardDirectionGenerator(InitialDirectionGenerator):
         }
 
 
+class IsotropicLocalDirectionGenerator(InitialDirectionGenerator):
+    """Physical local isotropic emission direction in an orthonormal ZAMO frame."""
+
+    name = "IsotropicLocalDirectionGenerator"
+    direction_model = "isotropic_local"
+
+    def __init__(self, seed: int):
+        self.rng = random.Random(seed)
+
+    def sample(self, position: dict[str, float], energy_gev: float, sample_id: int) -> dict[str, Any]:
+        cos_alpha = 2.0 * self.rng.random() - 1.0
+        sin_alpha = math.sqrt(max(0.0, 1.0 - cos_alpha * cos_alpha))
+        beta = 2.0 * math.pi * self.rng.random()
+        n_r = cos_alpha
+        n_theta = sin_alpha * math.cos(beta)
+        n_phi = sin_alpha * math.sin(beta)
+        pdf = 1.0 / (4.0 * math.pi)
+        return {
+            "direction_generator": self.name,
+            "direction_model": self.direction_model,
+            "direction_local_components": {
+                "basis": "ZAMO_orthonormal",
+                "n_r": n_r,
+                "n_theta": n_theta,
+                "n_phi": n_phi,
+                "cos_alpha": cos_alpha,
+                "alpha_rad": math.acos(max(-1.0, min(1.0, cos_alpha))),
+                "beta_rad": beta,
+            },
+            "direction_sampling_pdf": pdf,
+            "direction_physical_pdf": pdf,
+            "direction_weight": 1.0,
+            "status": "physical_source_direction_isotropic_local_zamo",
+        }
+
+
 class InitialMomentumGenerator:
     """Interface for initial momentum metadata attached to source samples."""
 
@@ -152,6 +188,8 @@ def _momentum_generator(config: SourceConfig) -> InitialMomentumGenerator:
 def _direction_generator(config: SourceConfig) -> InitialDirectionGenerator:
     if config.direction_model == "coordinate_radial_outward":
         return CoordinateRadialOutwardDirectionGenerator()
+    if config.direction_model == "isotropic_local":
+        return IsotropicLocalDirectionGenerator(config.direction_seed)
     raise ValueError(f"unsupported H3-W5 direction model: {config.direction_model}")
 
 

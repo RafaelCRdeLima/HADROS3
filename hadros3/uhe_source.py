@@ -56,17 +56,26 @@ def validate_source_records(records: list[dict[str, Any]], values: dict[str, dic
             problems.append(f"sample {index} has non-positive source_sampling_pdf")
         if not math.isfinite(weight):
             problems.append(f"sample {index} has non-finite source_weight")
-        if record["direction_model"] != "coordinate_radial_outward":
+        if record["direction_model"] not in {"coordinate_radial_outward", "isotropic_local"}:
             problems.append(f"sample {index} has unsupported direction_model")
         direction = record["direction_local_components"]
-        if direction.get("basis") != "Boyer-Lindquist_coordinate_direction":
+        if direction.get("basis") not in {"Boyer-Lindquist_coordinate_direction", "ZAMO_orthonormal"}:
             problems.append(f"sample {index} has unsupported direction basis")
-        if not (
-            float(direction.get("dr", 0.0)) > 0.0
-            and float(direction.get("dtheta", math.inf)) == 0.0
-            and float(direction.get("dphi", math.inf)) == 0.0
-        ):
-            problems.append(f"sample {index} does not encode coordinate radial outward direction")
+        if record["direction_model"] == "coordinate_radial_outward":
+            if not (
+                float(direction.get("dr", 0.0)) > 0.0
+                and float(direction.get("dtheta", math.inf)) == 0.0
+                and float(direction.get("dphi", math.inf)) == 0.0
+            ):
+                problems.append(f"sample {index} does not encode coordinate radial outward direction")
+        if record["direction_model"] == "isotropic_local":
+            norm = math.sqrt(
+                float(direction.get("n_r", math.inf)) ** 2
+                + float(direction.get("n_theta", math.inf)) ** 2
+                + float(direction.get("n_phi", math.inf)) ** 2
+            )
+            if abs(norm - 1.0) > 1.0e-12:
+                problems.append(f"sample {index} isotropic local direction is not unit normalized")
         if not (math.isfinite(direction_physical_pdf) and direction_physical_pdf > 0.0):
             problems.append(f"sample {index} has non-positive direction_physical_pdf")
         if not (math.isfinite(direction_sampling_pdf) and direction_sampling_pdf > 0.0):

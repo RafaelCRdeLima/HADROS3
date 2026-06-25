@@ -14,6 +14,7 @@ def _source_values() -> dict:
     values = defaults()
     values["uhe_neutrino_source"].update(
         {
+            "direction_model": "isotropic_local",
             "energy_gev": "10^{12}",
             "r_min_rg": 3.0,
             "r_max_rg": 9.0,
@@ -44,18 +45,16 @@ def test_polar_cone_sampler_respects_domains_and_weights() -> None:
         assert record["source_physical_pdf"] == record["source_sampling_pdf"]
         assert math.isfinite(record["source_weight"])
         assert record["source_weight"] == 1.0
-        assert record["direction_generator"] == "CoordinateRadialOutwardDirectionGenerator"
-        assert record["direction_model"] == "coordinate_radial_outward"
-        assert record["direction_local_components"] == {
-            "basis": "Boyer-Lindquist_coordinate_direction",
-            "dr": 1.0,
-            "dtheta": 0.0,
-            "dphi": 0.0,
-        }
-        assert record["direction_sampling_pdf"] == 1.0
-        assert record["direction_physical_pdf"] == 1.0
+        assert record["direction_generator"] == "IsotropicLocalDirectionGenerator"
+        assert record["direction_model"] == "isotropic_local"
+        direction = record["direction_local_components"]
+        assert direction["basis"] == "ZAMO_orthonormal"
+        norm = math.sqrt(direction["n_r"] ** 2 + direction["n_theta"] ** 2 + direction["n_phi"] ** 2)
+        assert abs(norm - 1.0) < 1.0e-12
+        assert record["direction_sampling_pdf"] == 1.0 / (4.0 * math.pi)
+        assert record["direction_physical_pdf"] == 1.0 / (4.0 * math.pi)
         assert record["direction_weight"] == 1.0
-        assert record["emission_direction"]["direction_model"] == "coordinate_radial_outward"
+        assert record["emission_direction"]["direction_model"] == "isotropic_local"
         for key in [
             "x_emit_r",
             "x_emit_theta",
@@ -90,10 +89,10 @@ def test_generate_uhe_source_products_and_provenance(tmp_path: Path) -> None:
     assert summary["source_sampler_active"] is True
     assert summary["source_model"] == "polar_cone"
     assert summary["source_volume_model"] == "coordinate_volume"
-    assert summary["direction_generator"] == "CoordinateRadialOutwardDirectionGenerator"
-    assert summary["direction_model"] == "coordinate_radial_outward"
-    assert summary["direction_sampling_pdf"] == 1.0
-    assert summary["direction_physical_pdf"] == 1.0
+    assert summary["direction_generator"] == "IsotropicLocalDirectionGenerator"
+    assert summary["direction_model"] == "isotropic_local"
+    assert summary["direction_sampling_pdf"] == 1.0 / (4.0 * math.pi)
+    assert summary["direction_physical_pdf"] == 1.0 / (4.0 * math.pi)
     assert summary["direction_weight"] == 1.0
     assert summary["momentum_generator"] == "ProxyRadialMomentumGenerator"
     assert summary["momentum_is_physical_kerr"] is False
@@ -110,10 +109,10 @@ def test_generate_uhe_source_products_and_provenance(tmp_path: Path) -> None:
     provenance = json.loads(Path(render_summary["products"]["provenance"]).read_text(encoding="utf-8"))
     assert provenance["source_sampler"]["source_sampler_active"] is True
     assert provenance["source_sampler"]["source_model"] == "polar_cone"
-    assert provenance["source_sampler"]["direction_generator"] == "CoordinateRadialOutwardDirectionGenerator"
-    assert provenance["source_sampler"]["direction_model"] == "coordinate_radial_outward"
-    assert provenance["source_sampler"]["direction_sampling_pdf"] == 1.0
-    assert provenance["source_sampler"]["direction_physical_pdf"] == 1.0
+    assert provenance["source_sampler"]["direction_generator"] == "IsotropicLocalDirectionGenerator"
+    assert provenance["source_sampler"]["direction_model"] == "isotropic_local"
+    assert provenance["source_sampler"]["direction_sampling_pdf"] == 1.0 / (4.0 * math.pi)
+    assert provenance["source_sampler"]["direction_physical_pdf"] == 1.0 / (4.0 * math.pi)
     assert provenance["source_sampler"]["direction_weight"] == 1.0
     assert provenance["source_sampler"]["four_momentum_sampled_in_source"] is False
     assert provenance["source_sampler"]["momentum_is_physical_kerr"] is False

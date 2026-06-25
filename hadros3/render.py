@@ -283,6 +283,9 @@ def write_html_summary(values: dict[str, dict[str, Any]], products: dict[str, st
     camera_preview = href("camera_preview")
     config = href("config")
     provenance = href("provenance")
+    direction_model = values.get("uhe_neutrino_source", {}).get("direction_model", "unknown")
+    direction_seed = values.get("uhe_neutrino_source", {}).get("direction_seed", "unknown")
+    forward_backend = values.get("forward_geodesics", {}).get("geodesic_backend", "unknown")
     product_links = "\n".join(
         f'<li><a href="{href(key)}">{key}</a>: <code>{href(key)}</code></li>'
         for key in sorted(products)
@@ -318,6 +321,24 @@ def write_html_summary(values: dict[str, dict[str, Any]], products: dict[str, st
     <figure><img src="{preview}" alt="HADROS3 geometry preview"><figcaption>Geometry preview</figcaption></figure>
     <figure><img src="{schematic}" alt="HADROS3 schematic"><figcaption>System schematic</figcaption></figure>
     <figure><img src="{camera_preview}" alt="HADROS3 camera preview"><figcaption>Camera preview</figcaption></figure>
+  </section>
+  <section>
+    <h2>Initial Direction</h2>
+    <p>The UHE source samples emission position, energy and direction.</p>
+    <p>The Kerr four-momentum is not sampled here; it is constructed later by Forward Geodesics from position + energy + direction.</p>
+    <ul>
+      <li><code>direction_model</code>: {direction_model}</li>
+      <li><code>direction_seed</code>: {direction_seed}</li>
+    </ul>
+  </section>
+  <section>
+    <h2>Forward Geodesics Contract</h2>
+    <ul>
+      <li>Input: <code>UHEsource/uhe_neutrino_source_samples.jsonl</code></li>
+      <li>Uses: position + energy + emission_direction</li>
+      <li>Builds: Kerr null four-momentum <code>p_mu</code></li>
+      <li>Propagation: Full Kerr null geodesic propagation via <code>{forward_backend}</code></li>
+    </ul>
   </section>
   <section><h2>Products</h2><ul>{product_links}</ul></section>
   <section><h2>Parameters</h2><pre>{params}</pre></section>

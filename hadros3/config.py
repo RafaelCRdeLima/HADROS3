@@ -120,9 +120,10 @@ def schema() -> list[dict[str, Any]]:
                     "uhe_neutrino_source",
                     "direction_model",
                     "Direction Model",
-                    "coordinate_radial_outward",
+                    "isotropic_local",
                     kind="select",
                     options=[
+                        "isotropic_local",
                         "coordinate_radial_outward",
                         "jet_axis_future",
                         "cone_emission_future",
@@ -153,9 +154,9 @@ def schema() -> list[dict[str, Any]]:
                     "forward_geodesics",
                     "geodesic_backend",
                     "Geodesic backend",
-                    "hadros3_kerr_null_radial",
+                    "full_kerr_geodesic",
                     kind="select",
-                    options=["hadros3_kerr_null_radial"],
+                    options=["full_kerr_geodesic"],
                 ),
                 field("forward_geodesics", "n_samples_to_propagate", "Neutrinos to propagate", 64, kind="number"),
                 field("forward_geodesics", "initial_step_rg", "Initial step", 1.0, kind="number"),
@@ -331,8 +332,8 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
         problems.append("uhe_neutrino_source.sampling_mode must be uniform_coordinate_volume in H3-W5")
     if str(source.get("momentum_generator")) != "ProxyRadialMomentumGenerator":
         problems.append("uhe_neutrino_source.momentum_generator must be ProxyRadialMomentumGenerator in H3-W5")
-    if str(source.get("direction_model")) != "coordinate_radial_outward":
-        problems.append("uhe_neutrino_source.direction_model must be coordinate_radial_outward in H3-W5")
+    if str(source.get("direction_model")) not in {"coordinate_radial_outward", "isotropic_local"}:
+        problems.append("uhe_neutrino_source.direction_model must be coordinate_radial_outward or isotropic_local in H3-W5")
     if float(source.get("direction_opening_angle_deg", 0.0)) < 0.0:
         problems.append("uhe_neutrino_source.direction_opening_angle_deg must be non-negative")
     try:
@@ -345,7 +346,7 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
             problems.append("uhe_neutrino_source.energy_gev must be positive")
     except ValueError as exc:
         problems.append(f"uhe_neutrino_source.energy_gev is invalid: {exc}")
-    if str(forward.get("geodesic_backend")) != "hadros3_kerr_null_radial":
+    if str(forward.get("geodesic_backend")) != "full_kerr_geodesic":
         problems.append("forward_geodesics.geodesic_backend is unsupported in H3-W6")
     if int(float(forward.get("n_samples_to_propagate", 0))) <= 0:
         problems.append("forward_geodesics.n_samples_to_propagate must be positive")

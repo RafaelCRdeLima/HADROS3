@@ -40,6 +40,11 @@ def build_provenance(
     source_active = bool(source_summary and source_summary.get("source_sampler_active"))
     forward_active = bool(forward_geodesic_summary and forward_geodesic_summary.get("forward_neutrino_geodesics_invoked"))
     dis_active = bool(dis_summary and dis_summary.get("optical_depth_dis_sampler_invoked"))
+    paint_swatch_disk_diagnostic_mode = bool(camera_preview and camera_preview.get("paint_swatch_disk_diagnostic_mode"))
+    paint_swatch_disk_uses_forced_thin_disk = bool(camera_preview and camera_preview.get("paint_swatch_disk_uses_forced_thin_disk"))
+    paint_swatch_disk_physical_torus_emission = (
+        bool(camera_preview.get("paint_swatch_disk_physical_torus_emission")) if camera_preview and camera_preview.get("paint_swatch_disk_diagnostic_mode") else False
+    )
     source_sampler = {
         "source_sampler_active": source_active,
         "source_model": source_summary.get("source_model") if source_summary else values["uhe_neutrino_source"]["source_model"],
@@ -113,6 +118,9 @@ def build_provenance(
         },
         "products": products,
         "camera_preview": camera_preview,
+        "paint_swatch_disk_diagnostic_mode": paint_swatch_disk_diagnostic_mode,
+        "paint_swatch_disk_uses_forced_thin_disk": paint_swatch_disk_uses_forced_thin_disk,
+        "paint_swatch_disk_physical_torus_emission": paint_swatch_disk_physical_torus_emission,
         "source_sampler": source_sampler,
         "uhe_neutrino_source": source_sampler,
         "forward_geodesics": {

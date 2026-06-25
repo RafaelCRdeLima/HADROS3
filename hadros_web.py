@@ -366,7 +366,7 @@ const previewGeodesicModelOptions = [
 ];
 const previewNavModeNormal = [
   ["celestial_plus_torus_volume", "físico"],
-  ["paint_swatch_disk", "Paint-swatch thin disk"],
+  ["paint_swatch_disk", "paint_swatch_disk = diagnostic visual test, not physical torus emission"],
 ];
 let previewResolution = state.values.observer_camera.resolution || "512x288";
 let previewInteractiveResolution = state.values.observer_camera.preview_resolution || "256x144";
@@ -702,10 +702,13 @@ async function launchHadrosCameraPreview() {{
     lastCameraMtime = 0;
   }}
   const previewRMaxRg = Number(previewCelestialRadiusRs || 40) * 2;
+  const navDescription = previewNavMode === "paint_swatch_disk"
+    ? "paint_swatch_disk = diagnostic visual test, not physical torus emission"
+    : previewNavMode;
   document.querySelector("#log").textContent =
     "Launching geodesic camera preview at " + previewResolution + " final / " + previewInteractiveResolution +
     " interactive with " + (previewGeodesicModel === "full_kerr" ? "Full Kerr CUDA" : "Kerr-like CUDA") +
-    ", " + previewNavMode + ", " + previewSkyMode + " sky, " +
+    ", " + navDescription + ", " + previewSkyMode + " sky, " +
     (previewPhysicalTorus ? "physical preset torus/funnel" : "generic torus") + ", " +
     (previewOpaqueStructures ? "opaque structures" : "translucent structures") +
     ", and celestial sphere radius " + previewCelestialRadiusRs + " R_S.\\n\\n" +
@@ -775,6 +778,9 @@ function renderHadrosCameraPanel() {{
     ["S", "save camera to fields"],
     ["Q", "quit"],
   ].map(([key, description]) => `<div class="camera-control-item"><kbd>${{key}}</kbd><span>${{description}}</span></div>`).join("");
+  const diagnosticNote = previewNavMode === "paint_swatch_disk"
+    ? `<p class="note"><code>paint_swatch_disk</code> = diagnostic visual test, not physical torus emission</p>`
+    : "";
   return `<div class="camera-preview-panel">
     <div class="camera-preview-top"><button type="button" id="cameraPreview" class="camera-preview-button">Camera Preview</button><button type="button" id="cpuCameraPreview">CPU/OpenGL Preview</button><button type="button" id="loadCameraPreview">Load Saved Preview</button></div>
     <div class="camera-preview-row">
@@ -787,6 +793,7 @@ function renderHadrosCameraPanel() {{
       <label class="toggle-row"><input id="previewPhysicalTorus" type="checkbox" ${{previewPhysicalTorus ? "checked" : ""}}><span class="toggle-main"><span class="toggle-name">Physical preset torus/funnel</span><span class="toggle-help">Use current geometry instead of generic proxy.</span></span></label>
       <label class="toggle-row"><input id="previewOpaqueStructures" type="checkbox" ${{previewOpaqueStructures ? "checked" : ""}}><span class="toggle-main"><span class="toggle-name">Solid opaque structures</span><span class="toggle-help">Display-only solid geometry mode.</span></span></label>
     </div>
+    ${{diagnosticNote}}
     <div class="camera-controls-card"><h3>Camera Preview Controls</h3><div class="camera-controls-grid">${{controls}}</div></div>
   </div>`;
 }}
@@ -841,13 +848,19 @@ function renderBackendTable() {{
     `<tr><td>${{mode}}</td><td class="${{info.available ? "ok" : "pending"}}">${{info.available ? "available" : "unavailable"}}</td><td>${{info.backend || ""}}</td></tr>`
   ).join("");
   const summary = state.camera_summary;
-  const summaryHtml = summary ? `<p class="note">Camera preview: <strong>${{summary.status}}</strong> / mode <code>${{summary.requested_mode}}</code><br>${{summary.message || ""}}</p>
+  const diagnosticSummary = summary && summary.paint_swatch_disk_diagnostic_mode
+    ? `<p class="note"><code>paint_swatch_disk</code> = diagnostic visual test, not physical torus emission</p>`
+    : "";
+  const summaryHtml = summary ? `<p class="note">Camera preview: <strong>${{summary.status}}</strong> / mode <code>${{summary.requested_mode}}</code><br>${{summary.message || ""}}</p>${{diagnosticSummary}}
   <div class="summary-grid">
     <div class="summary-item"><strong>backend_used</strong><code>${{summary.backend_used || "pending"}}</code></div>
     <div class="summary-item"><strong>cuda_used</strong>${{String(summary.cuda_used)}}</div>
     <div class="summary-item"><strong>fallback_used</strong>${{String(summary.fallback_used)}}</div>
     <div class="summary-item"><strong>camera_preview_cuda_self_contained</strong>${{String(summary.camera_preview_cuda_self_contained)}}</div>
     <div class="summary-item"><strong>camera_preview_external_hadros_used</strong>${{String(summary.camera_preview_external_hadros_used)}}</div>
+    <div class="summary-item"><strong>paint_swatch_disk_diagnostic_mode</strong>${{String(summary.paint_swatch_disk_diagnostic_mode)}}</div>
+    <div class="summary-item"><strong>paint_swatch_disk_uses_forced_thin_disk</strong>${{String(summary.paint_swatch_disk_uses_forced_thin_disk)}}</div>
+    <div class="summary-item"><strong>paint_swatch_disk_physical_torus_emission</strong>${{String(summary.paint_swatch_disk_physical_torus_emission)}}</div>
   </div>` : `<p class="note">No camera preview summary yet.</p>`;
   return `${{summaryHtml}}<table class="backend-table"><thead><tr><th>Mode</th><th>Status</th><th>Backend</th></tr></thead><tbody>${{rows}}</tbody></table>`;
 }}

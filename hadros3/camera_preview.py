@@ -34,6 +34,16 @@ from .reuse import discover_original_hadros
 
 HADROS3_ROOT = Path(__file__).resolve().parents[1]
 HADROS3_CUDA_PREVIEW_BIN = HADROS3_ROOT / "bin" / "hadros3_geodesic_preview_cuda"
+PAINT_SWATCH_DISK_LABEL = "paint_swatch_disk = diagnostic visual test, not physical torus emission"
+PAINT_SWATCH_DISK_DIAGNOSTIC_CONTRACT = {
+    "disk_geometry": "thin_disk",
+    "disk_hit_mode": "first_hit",
+    "disk_r_in_rg": 9.26,
+    "disk_r_out_rg": 18.70,
+    "disk_thickness_rg": 0.02,
+    "torus_alpha": 0.0,
+    "funnel_enabled": False,
+}
 
 
 def _resolution(value: str) -> tuple[int, int]:
@@ -91,6 +101,20 @@ def _preview_nav_mode(values: dict[str, dict[str, Any]], options: dict[str, Any]
     return nav_mode
 
 
+def _paint_swatch_disk_metadata(nav_mode: str) -> dict[str, Any]:
+    diagnostic = nav_mode == "paint_swatch_disk"
+    metadata = {
+        "nav_mode": nav_mode,
+        "paint_swatch_disk_diagnostic_mode": diagnostic,
+        "paint_swatch_disk_uses_forced_thin_disk": diagnostic,
+        "paint_swatch_disk_physical_torus_emission": False,
+    }
+    if diagnostic:
+        metadata.update(PAINT_SWATCH_DISK_DIAGNOSTIC_CONTRACT)
+        metadata["paint_swatch_disk_label"] = PAINT_SWATCH_DISK_LABEL
+    return metadata
+
+
 def _interactive_make_command(
     values: dict[str, dict[str, Any]], output_dir: Path, preview_options: dict[str, Any] | None = None
 ) -> tuple[list[str], str, str, Path | None, dict[str, Any]]:
@@ -108,6 +132,7 @@ def _interactive_make_command(
     quality = str(options.get("previewQuality", values["observer_camera"].get("preview_quality", "medium")))
     sky_mode = str(options.get("previewSkyMode", "texture"))
     nav_mode = _preview_nav_mode(values, options)
+    preview_metadata = _paint_swatch_disk_metadata(nav_mode)
     preview_r_max_rg = max(
         float(values["polar_cone"]["r_max_rg"]),
         float(values["analytic_torus"]["r_outer_rg"]),
@@ -122,6 +147,12 @@ def _interactive_make_command(
     disk_thickness = max(0.02, 0.02 * float(values["analytic_torus"]["r_peak_rg"]))
     torus_alpha = 0.09
     funnel_enabled = bool(values["polar_cone"]["enabled"])
+    if preview_metadata["paint_swatch_disk_diagnostic_mode"]:
+        disk_r_in = PAINT_SWATCH_DISK_DIAGNOSTIC_CONTRACT["disk_r_in_rg"]
+        disk_r_out = PAINT_SWATCH_DISK_DIAGNOSTIC_CONTRACT["disk_r_out_rg"]
+        disk_thickness = PAINT_SWATCH_DISK_DIAGNOSTIC_CONTRACT["disk_thickness_rg"]
+        torus_alpha = PAINT_SWATCH_DISK_DIAGNOSTIC_CONTRACT["torus_alpha"]
+        funnel_enabled = PAINT_SWATCH_DISK_DIAGNOSTIC_CONTRACT["funnel_enabled"]
     torus_h = float(values["analytic_torus"]["r_peak_rg"]) * math.tan(
         math.radians(float(values["analytic_torus"]["half_opening_angle_deg"]))
     )
@@ -220,7 +251,7 @@ def _interactive_make_command(
             "--fov-speed",
             "35",
         ]
-        return command, geodesic_model, backend, None, {"nav_mode": nav_mode}
+        return command, geodesic_model, backend, None, preview_metadata
 
     hadros_root = _original_hadros_root()
     command = [
@@ -273,7 +304,7 @@ def _interactive_make_command(
         "PREVIEW_ZOOM_SPEED=18",
         "PREVIEW_FOV_SPEED=35",
     ]
-    return command, geodesic_model, backend, hadros_root, {"nav_mode": nav_mode}
+    return command, geodesic_model, backend, hadros_root, preview_metadata
 
 
 def _camera_preview_args(
@@ -288,11 +319,18 @@ def _camera_preview_args(
     r_max = str(max(float(values["polar_cone"]["r_max_rg"]), float(values["analytic_torus"]["r_outer_rg"]), 80.0))
     torus_h = str(float(values["analytic_torus"]["r_peak_rg"]) * math.tan(math.radians(float(values["analytic_torus"]["half_opening_angle_deg"]))))
     nav_mode = _preview_nav_mode(values, preview_options)
+    preview_metadata = _paint_swatch_disk_metadata(nav_mode)
     disk_r_in = float(values["analytic_torus"]["r_inner_rg"])
     disk_r_out = float(values["analytic_torus"]["r_outer_rg"])
     disk_thickness = max(0.02, 0.02 * float(values["analytic_torus"]["r_peak_rg"]))
     torus_alpha = 0.09
     funnel_enabled = bool(values["polar_cone"]["enabled"])
+    if preview_metadata["paint_swatch_disk_diagnostic_mode"]:
+        disk_r_in = PAINT_SWATCH_DISK_DIAGNOSTIC_CONTRACT["disk_r_in_rg"]
+        disk_r_out = PAINT_SWATCH_DISK_DIAGNOSTIC_CONTRACT["disk_r_out_rg"]
+        disk_thickness = PAINT_SWATCH_DISK_DIAGNOSTIC_CONTRACT["disk_thickness_rg"]
+        torus_alpha = PAINT_SWATCH_DISK_DIAGNOSTIC_CONTRACT["torus_alpha"]
+        funnel_enabled = PAINT_SWATCH_DISK_DIAGNOSTIC_CONTRACT["funnel_enabled"]
     if mode in {"kerr_like_cuda", "full_kerr"}:
         cuda_bin = _self_contained_cuda_preview_bin()
         geodesic_model = "full_kerr" if mode == "full_kerr" else "kerr_like"
@@ -363,7 +401,7 @@ def _camera_preview_args(
             command += ["--live", "1", "--vsync", "0", "--rot-speed", "55", "--zoom-speed", "18", "--fov-speed", "35"]
         else:
             command.insert(1, "--headless")
-        return command, geodesic_model, cuda_bin, {"nav_mode": nav_mode}
+        return command, geodesic_model, cuda_bin, preview_metadata
 
     cpu_bin = _component_path("geodesic_preview_bin")
     command = [
@@ -391,7 +429,7 @@ def _camera_preview_args(
     ]
     if not interactive:
         command.insert(1, "--headless")
-    return command, "legacy_cpu_geodesic_preview", cpu_bin, {"nav_mode": nav_mode}
+    return command, "legacy_cpu_geodesic_preview", cpu_bin, preview_metadata
 
 
 def available_backends() -> dict[str, Any]:
@@ -497,7 +535,7 @@ def render_camera_preview(
     backend_used = "hadros3_analytic_camera_placeholder"
     camera_preview_cuda_self_contained = mode in {"kerr_like_cuda", "full_kerr"}
     camera_preview_external_hadros_used = False
-    preview_metadata = {"nav_mode": _preview_nav_mode(values, preview_options)}
+    preview_metadata = _paint_swatch_disk_metadata(_preview_nav_mode(values, preview_options))
 
     if mode == "analytic_geometry_only":
         message = "Analytic geometry-only observer view; no Kerr CUDA backend invoked."

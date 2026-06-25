@@ -836,15 +836,37 @@ def _write_forward_diagnostics(
     energy_errors = _abs_finite_values(paths, "killing_energy_max_error")
     lz_errors = _abs_finite_values(paths, "lz_max_error")
 
+    positive_errors = [value for value in [*null_errors, *energy_errors, *lz_errors] if value > 0.0]
+    display_floor = (min(positive_errors) * 0.1) if positive_errors else 1.0e-18
+
+    def plot_values(values: list[float]) -> list[float]:
+        return [value if value > 0.0 else display_floor for value in values]
+
     fig, ax = plt.subplots(figsize=(10, 5.4), facecolor="white")
     if null_errors:
-        ax.semilogy(range(1, len(null_errors) + 1), null_errors, marker="o", markersize=3, linewidth=1.0, label="null norm max abs")
+        ax.semilogy(range(1, len(null_errors) + 1), plot_values(null_errors), marker="o", markersize=3, linewidth=1.0, label="null norm max abs")
     if energy_errors:
-        ax.semilogy(range(1, len(energy_errors) + 1), energy_errors, marker="s", markersize=3, linewidth=1.0, label="Killing energy relative error")
+        label = "Killing energy relative error"
+        if all(value == 0.0 for value in energy_errors):
+            label += " (exact zero; shown at floor)"
+        ax.semilogy(range(1, len(energy_errors) + 1), plot_values(energy_errors), marker="s", markersize=3, linewidth=1.0, label=label)
     if lz_errors:
-        ax.semilogy(range(1, len(lz_errors) + 1), lz_errors, marker="^", markersize=3, linewidth=1.0, label="L_z absolute error")
+        label = "L_z absolute error"
+        if all(value == 0.0 for value in lz_errors):
+            label += " (exact zero; shown at floor)"
+        ax.semilogy(range(1, len(lz_errors) + 1), plot_values(lz_errors), marker="^", markersize=3, linewidth=1.0, label=label)
     if not (null_errors or energy_errors or lz_errors):
         ax.text(0.5, 0.5, "No invariant data available", ha="center", va="center", transform=ax.transAxes)
+    if positive_errors and ((energy_errors and any(value == 0.0 for value in energy_errors)) or (lz_errors and any(value == 0.0 for value in lz_errors))):
+        ax.axhline(display_floor, color="#64748b", linestyle=":", linewidth=1.0, alpha=0.85)
+        ax.text(
+            0.01,
+            0.02,
+            f"zero-valued invariants are displayed at log-scale floor {display_floor:.1e}",
+            transform=ax.transAxes,
+            color="#334155",
+            fontsize=8,
+        )
     ax.set_xlabel("geodesic path")
     ax.set_ylabel("absolute error")
     ax.set_title("Forward geodesic invariant conservation")

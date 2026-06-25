@@ -335,6 +335,10 @@ def render_html(values: dict[str, dict[str, Any]], config_path: Path) -> str:
     .context-figure img {{ width: 100%; height: 100%; min-height: 640px; object-fit: contain; display: block; background: #101318; }}
     .context-interactive {{ width: 100%; height: min(78vh, 860px); min-height: 640px; border: 0; display: block; background: #f7f8fb; }}
     .context-empty {{ padding: 28px; color: #cbd5e1; text-align: center; }}
+    .diagnostic-card-grid {{ display: grid; gap: 12px; }}
+    .diagnostic-plot-card {{ margin: 0; border: 1px solid #d6dce5; border-radius: 6px; background: #f8fafc; padding: 10px; }}
+    .diagnostic-plot-card img {{ width: 100%; display: block; border: 1px solid #d6dce5; border-radius: 5px; background: white; }}
+    .diagnostic-plot-card figcaption {{ margin: 0 0 8px; font-weight: 650; overflow-wrap: anywhere; }}
     .ok {{ color: #1f6f46; font-weight: 650; }}
     .pending {{ color: #8a5a0a; font-weight: 650; }}
     .active-panel h2 {{ margin-top: 0; }}
@@ -979,10 +983,10 @@ function renderForwardPanel() {{
   </div>`;
   const diagnosticsReady = state.outputs.validation_invariants_exists || state.outputs.kerr_bending_vs_impact_parameter_exists || state.outputs.stop_condition_distribution_exists || state.outputs.geodesic_density_map_exists || state.outputs.forward_geodesics_diagnostics_report_exists;
   const diagnosticsHtml = diagnosticsReady ? `<section><h2>Diagnostics</h2><div class="output-link-grid">
-    ${{state.outputs.validation_invariants_exists ? `<a href="${{outUrl("validation_invariants")}}" target="_blank">Invariant conservation<br><code>${{outPath("validation_invariants")}}</code></a><img src="${{outUrl("validation_invariants")}}" alt="Forward geodesic invariant conservation">` : ""}}
-    ${{state.outputs.kerr_bending_vs_impact_parameter_exists ? `<a href="${{outUrl("kerr_bending_vs_impact_parameter")}}" target="_blank">Kerr bending vs impact parameter<br><code>${{outPath("kerr_bending_vs_impact_parameter")}}</code></a><img src="${{outUrl("kerr_bending_vs_impact_parameter")}}" alt="Kerr bending vs impact parameter">` : ""}}
-    ${{state.outputs.stop_condition_distribution_exists ? `<a href="${{outUrl("stop_condition_distribution")}}" target="_blank">Stop condition distribution<br><code>${{outPath("stop_condition_distribution")}}</code></a><img src="${{outUrl("stop_condition_distribution")}}" alt="Forward geodesic stop condition distribution">` : ""}}
-    ${{state.outputs.geodesic_density_map_exists ? `<a href="${{outUrl("geodesic_density_map")}}" target="_blank">Geodesic density map<br><code>${{outPath("geodesic_density_map")}}</code></a><img src="${{outUrl("geodesic_density_map")}}" alt="Forward geodesic density map">` : ""}}
+    ${{state.outputs.validation_invariants_exists ? `<a href="${{outUrl("validation_invariants")}}" target="_blank">Invariant conservation<br><code>${{outPath("validation_invariants")}}</code></a>` : ""}}
+    ${{state.outputs.kerr_bending_vs_impact_parameter_exists ? `<a href="${{outUrl("kerr_bending_vs_impact_parameter")}}" target="_blank">Kerr bending vs impact parameter<br><code>${{outPath("kerr_bending_vs_impact_parameter")}}</code></a>` : ""}}
+    ${{state.outputs.stop_condition_distribution_exists ? `<a href="${{outUrl("stop_condition_distribution")}}" target="_blank">Stop condition distribution<br><code>${{outPath("stop_condition_distribution")}}</code></a>` : ""}}
+    ${{state.outputs.geodesic_density_map_exists ? `<a href="${{outUrl("geodesic_density_map")}}" target="_blank">Geodesic density map<br><code>${{outPath("geodesic_density_map")}}</code></a>` : ""}}
     ${{state.outputs.forward_geodesics_diagnostics_report_exists ? `<a href="${{outUrl("forward_geodesics_diagnostics_report")}}" target="_blank">Diagnostics JSON report<br><code>${{outPath("forward_geodesics_diagnostics_report")}}</code></a>` : ""}}
   </div></section>` : `<section><h2>Diagnostics</h2><p class="note">Diagnostics will be generated automatically with forward geodesic propagation.</p></section>`;
   const stops = summary && summary.stop_condition_counts ? Object.entries(summary.stop_condition_counts).map(([k, v]) => `${{k}}=${{v}}`).join(", ") : "none";
@@ -1119,7 +1123,14 @@ function renderContextPanel() {{
       : state.outputs.forward_preview_exists
       ? `<img src="${{outUrl("forward_preview")}}?v=${{forwardPreviewVersion}}" alt="Forward geodesic 2D preview">`
       : `<div class="context-empty">No forward geodesic preview generated yet.</div>`;
-    return `<aside class="panel"><h2>Forward Geodesics Geometry</h2><div class="context-figure">${{figure}}</div></aside>`;
+    const diagnosticCards = [
+      state.outputs.validation_invariants_exists ? `<figure class="diagnostic-plot-card"><figcaption>Invariant conservation</figcaption><a href="${{outUrl("validation_invariants")}}" target="_blank"><img src="${{outUrl("validation_invariants")}}?v=${{forwardPreviewVersion}}" alt="Forward geodesic invariant conservation"></a></figure>` : "",
+      state.outputs.kerr_bending_vs_impact_parameter_exists ? `<figure class="diagnostic-plot-card"><figcaption>Kerr bending vs impact parameter</figcaption><a href="${{outUrl("kerr_bending_vs_impact_parameter")}}" target="_blank"><img src="${{outUrl("kerr_bending_vs_impact_parameter")}}?v=${{forwardPreviewVersion}}" alt="Kerr bending vs impact parameter"></a></figure>` : "",
+      state.outputs.stop_condition_distribution_exists ? `<figure class="diagnostic-plot-card"><figcaption>Stop condition distribution</figcaption><a href="${{outUrl("stop_condition_distribution")}}" target="_blank"><img src="${{outUrl("stop_condition_distribution")}}?v=${{forwardPreviewVersion}}" alt="Forward geodesic stop condition distribution"></a></figure>` : "",
+      state.outputs.geodesic_density_map_exists ? `<figure class="diagnostic-plot-card"><figcaption>Geodesic density map</figcaption><a href="${{outUrl("geodesic_density_map")}}" target="_blank"><img src="${{outUrl("geodesic_density_map")}}?v=${{forwardPreviewVersion}}" alt="Forward geodesic density map"></a></figure>` : "",
+    ].filter(Boolean).join("");
+    const diagnostics = diagnosticCards ? `<section><h2>Diagnostics</h2><div class="diagnostic-card-grid">${{diagnosticCards}}</div></section>` : "";
+    return `<aside class="panel"><h2>Forward Geodesics Geometry</h2><div class="context-figure">${{figure}}</div>${{diagnostics}}</aside>`;
   }}
   if (activeTab === "DIS Interaction Sampler") {{
     const figure = state.outputs.dis_interaction_locations_3d_html_exists

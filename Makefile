@@ -2,7 +2,7 @@ PYTHON ?= python3
 HOST ?= 127.0.0.1
 PORT ?= 8877
 
-.PHONY: help hadros-web render-hadros-web render-camera-preview launch-camera-preview sample-uhe-source propagate-forward-geodesics serve-hadros-web check clean
+.PHONY: help hadros-web render-hadros-web render-camera-preview launch-camera-preview sample-uhe-source propagate-forward-geodesics sample-dis-interactions serve-hadros-web check clean
 
 help:
 	@echo "HADROS3 commands:"
@@ -12,6 +12,7 @@ help:
 	@echo "  make launch-camera-preview Open the original HADROS interactive camera preview"
 	@echo "  make sample-uhe-source Generate H3-W5 UHE source samples through hadros-web"
 	@echo "  make propagate-forward-geodesics Generate H3-W6 forward geodesics through hadros-web"
+	@echo "  make sample-dis-interactions Generate H3-W7 DIS interaction samples through hadros-web"
 	@echo "  make serve-hadros-web  Alias for make hadros-web"
 	@echo "  make check             Run Python syntax checks"
 	@echo "  make clean             Remove generated previews and Python caches"
@@ -39,11 +40,14 @@ sample-uhe-source:
 propagate-forward-geodesics:
 	$(PYTHON) hadros_web.py --propagate-forward-geodesics
 
+sample-dis-interactions:
+	$(PYTHON) hadros_web.py --sample-dis-interactions
+
 serve-hadros-web:
 	$(MAKE) hadros-web
 
 check:
-	$(PYTHON) -m py_compile hadros_web.py hadros3/*.py tests/test_hadros_web.py tests/test_uhe_source.py tests/test_forward_geodesics.py
+	$(PYTHON) -m py_compile hadros_web.py hadros3/*.py tests/test_hadros_web.py tests/test_uhe_source.py tests/test_forward_geodesics.py tests/test_dis_sampler.py
 
 clean:
 	rm -rf output

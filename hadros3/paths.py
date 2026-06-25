@@ -11,6 +11,7 @@ GEOMETRY_DIR = "Geometry"
 RUN_METADATA_DIR = "RunMetadata"
 UHE_SOURCE_DIR = "UHEsource"
 FORWARD_GEODESICS_DIR = "ForwardGeodesics"
+DIS_DIR = "DIS"
 DASHBOARD_DIR = "Dashboard"
 
 
@@ -34,8 +35,19 @@ def forward_geodesics_dir(run_output: Path) -> Path:
     return run_output / FORWARD_GEODESICS_DIR
 
 
+def dis_dir(run_output: Path) -> Path:
+    return run_output / DIS_DIR
+
+
 def clear_forward_geodesics_outputs(run_output: Path) -> None:
     path = forward_geodesics_dir(run_output)
+    if path.exists():
+        shutil.rmtree(path)
+    path.mkdir(parents=True, exist_ok=True)
+
+
+def clear_dis_outputs(run_output: Path) -> None:
+    path = dis_dir(run_output)
     if path.exists():
         shutil.rmtree(path)
     path.mkdir(parents=True, exist_ok=True)
@@ -92,6 +104,17 @@ def ensure_output_layout(run_output: Path) -> None:
             "geodesic_validation_report.json",
             "stop_condition_statistics.csv",
             "forward_geodesics_diagnostic_report.md",
+        ],
+        DIS_DIR: [
+            "dis_path_optical_depths.jsonl",
+            "dis_interaction_candidates.jsonl",
+            "dis_accepted_interactions.jsonl",
+            "dis_summary.csv",
+            "dis_summary.json",
+            "dis_tau_preview.png",
+            "dis_interaction_locations.png",
+            "dis_interaction_locations_3d.html",
+            "dis_optical_depth_report.json",
         ],
         DASHBOARD_DIR: [
             "index.html",

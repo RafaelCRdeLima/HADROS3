@@ -177,10 +177,44 @@ def schema() -> list[dict[str, Any]]:
             ],
         },
         {
-            "tab": "Interaction Sampler",
+            "tab": "DIS Interaction Sampler",
             "fields": [
-                field("interaction_sampler", "mode", "Interaction sampler", "placeholder_disabled", kind="select", options=["placeholder_disabled"]),
-                field("interaction_sampler", "planned_model", "Planned model", "optical_depth_DIS", kind="select", options=["optical_depth_DIS"]),
+                field(
+                    "dis_interaction_sampler",
+                    "medium_model",
+                    "Medium model",
+                    "analytic_torus",
+                    kind="select",
+                    options=["analytic_torus", "future_hydrodynamic"],
+                ),
+                field(
+                    "dis_interaction_sampler",
+                    "medium_velocity_model",
+                    "Medium velocity",
+                    "zamo_fallback",
+                    kind="select",
+                    options=["zamo_fallback", "static", "future_hydro_velocity"],
+                ),
+                field("dis_interaction_sampler", "density_floor_g_cm3", "Density floor", 0.0, kind="number"),
+                field("dis_interaction_sampler", "dis_model", "DIS model", "GBW", kind="select", options=["GBW", "IIM"]),
+                field(
+                    "dis_interaction_sampler",
+                    "interaction_sampling_mode",
+                    "Interaction sampling mode",
+                    "optical_depth_inverse_cdf",
+                    kind="select",
+                    options=["optical_depth_inverse_cdf"],
+                ),
+                field("dis_interaction_sampler", "max_interactions", "Maximum accepted interactions", 1000000, kind="number"),
+                field("dis_interaction_sampler", "random_seed", "Random seed", 24680, kind="number"),
+                field(
+                    "dis_interaction_sampler",
+                    "status",
+                    "Status",
+                    "configured_only_no_dis_sampling",
+                    kind="select",
+                    options=["configured_only_no_dis_sampling", "dis_optical_depth_sampled_no_observer_bridge"],
+                ),
             ],
         },
         {
@@ -188,6 +222,34 @@ def schema() -> list[dict[str, Any]]:
             "fields": [
                 field("observer_bridge", "mode", "Observer bridge", "placeholder_diagnostic_disabled", kind="select", options=["placeholder_diagnostic_disabled"]),
                 field("observer_bridge", "planned_model", "Planned model", "distance_to_observer_bundle", kind="select", options=["distance_to_observer_bundle"]),
+            ],
+        },
+        {
+            "tab": "Event Generation",
+            "fields": [
+                field("event_generation", "mode", "Event generation", "placeholder_disabled", kind="select", options=["placeholder_disabled"]),
+                field("event_generation", "planned_model", "Planned model", "POWHEG_PYTHIA_future", kind="select", options=["POWHEG_PYTHIA_future"]),
+            ],
+        },
+        {
+            "tab": "GEANT4",
+            "fields": [
+                field("geant4", "mode", "GEANT4", "placeholder_disabled", kind="select", options=["placeholder_disabled"]),
+                field("geant4", "planned_model", "Planned model", "detector_transport_future", kind="select", options=["detector_transport_future"]),
+            ],
+        },
+        {
+            "tab": "Photon Transport",
+            "fields": [
+                field("photon_transport", "mode", "Photon transport", "placeholder_disabled", kind="select", options=["placeholder_disabled"]),
+                field("photon_transport", "planned_model", "Planned model", "radiative_transfer_future", kind="select", options=["radiative_transfer_future"]),
+            ],
+        },
+        {
+            "tab": "Spectra",
+            "fields": [
+                field("spectra", "mode", "Spectra", "placeholder_disabled", kind="select", options=["placeholder_disabled"]),
+                field("spectra", "planned_model", "Planned model", "spectral_products_future", kind="select", options=["spectral_products_future"]),
             ],
         },
         {
@@ -285,6 +347,7 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
     cone = values["polar_cone"]
     source = values["uhe_neutrino_source"]
     forward = values["forward_geodesics"]
+    dis = values.get("dis_interaction_sampler", {})
 
     spin = float(bh["spin_a"])
     if not (-0.999 <= spin <= 0.999):
@@ -361,6 +424,22 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
     for key in ["null_invariant_tolerance", "killing_energy_tolerance", "lz_tolerance"]:
         if float(forward.get(key, 0.0)) <= 0.0:
             problems.append(f"forward_geodesics.{key} must be positive")
+    if str(dis.get("medium_model", "analytic_torus")) != "analytic_torus":
+        problems.append("dis_interaction_sampler.medium_model must be analytic_torus in H3-W7")
+    if str(dis.get("medium_velocity_model", "zamo_fallback")) not in {"zamo_fallback", "static"}:
+        problems.append("dis_interaction_sampler.medium_velocity_model must be zamo_fallback or static in H3-W7")
+    if float(dis.get("density_floor_g_cm3", 0.0)) < 0.0:
+        problems.append("dis_interaction_sampler.density_floor_g_cm3 must be non-negative")
+    if str(dis.get("dis_model", "GBW")) not in {"GBW", "IIM"}:
+        problems.append("dis_interaction_sampler.dis_model must be GBW or IIM")
+    if str(dis.get("interaction_sampling_mode", "optical_depth_inverse_cdf")) != "optical_depth_inverse_cdf":
+        problems.append("dis_interaction_sampler.interaction_sampling_mode must be optical_depth_inverse_cdf")
+    if int(float(dis.get("max_interactions", 0))) <= 0:
+        problems.append("dis_interaction_sampler.max_interactions must be positive")
+    try:
+        int(float(dis.get("random_seed", 0)))
+    except (TypeError, ValueError):
+        problems.append("dis_interaction_sampler.random_seed must be an integer")
     return problems
 
 

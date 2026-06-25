@@ -278,6 +278,15 @@ def write_html_summary(values: dict[str, dict[str, Any]], products: dict[str, st
             return ""
         return Path(os.path.relpath(product, path.parent)).as_posix()
 
+    def product_json(key: str) -> dict[str, Any]:
+        product = products.get(key)
+        if not product:
+            return {}
+        try:
+            return json.loads(Path(product).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+
     preview = href("geometry_preview")
     schematic = href("system_schematic")
     camera_preview = href("camera_preview")
@@ -286,6 +295,24 @@ def write_html_summary(values: dict[str, dict[str, Any]], products: dict[str, st
     direction_model = values.get("uhe_neutrino_source", {}).get("direction_model", "unknown")
     direction_seed = values.get("uhe_neutrino_source", {}).get("direction_seed", "unknown")
     forward_backend = values.get("forward_geodesics", {}).get("geodesic_backend", "unknown")
+    dis_summary = product_json("dis_summary_json")
+    sigma_energy_min = dis_summary.get("sigma_table_energy_min_gev", dis_summary.get("sigma_energy_min_gev", "pending"))
+    sigma_energy_max = dis_summary.get("sigma_table_energy_max_gev", dis_summary.get("sigma_energy_max_gev", "pending"))
+    sigma_table_section = ""
+    if dis_summary:
+        sigma_table_section = f"""
+  <section>
+    <h2>DIS Sigma Table</h2>
+    <ul>
+      <li><code>sigma_table_path</code>: {dis_summary.get("sigma_table_path", "pending")}</li>
+      <li><code>sigma_table_rows</code>: {dis_summary.get("sigma_table_rows", "pending")}</li>
+      <li><code>sigma_table_is_compact_builtin_adapter</code>: {dis_summary.get("sigma_table_is_compact_builtin_adapter", "pending")}</li>
+      <li><code>sigma_table_physics_risk</code>: {dis_summary.get("sigma_table_physics_risk", "pending")}</li>
+      <li><code>sigma_table_energy_min_gev</code>: {sigma_energy_min}</li>
+      <li><code>sigma_table_energy_max_gev</code>: {sigma_energy_max}</li>
+    </ul>
+  </section>
+"""
     product_links = "\n".join(
         f'<li><a href="{href(key)}">{key}</a>: <code>{href(key)}</code></li>'
         for key in sorted(products)
@@ -340,6 +367,7 @@ def write_html_summary(values: dict[str, dict[str, Any]], products: dict[str, st
       <li>Propagation: Full Kerr null geodesic propagation via <code>{forward_backend}</code></li>
     </ul>
   </section>
+  {sigma_table_section}
   <section><h2>Products</h2><ul>{product_links}</ul></section>
   <section><h2>Parameters</h2><pre>{params}</pre></section>
 </main>

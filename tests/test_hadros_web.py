@@ -25,7 +25,9 @@ def test_schema_exposes_hadros3_first_stage_controls() -> None:
         ("uhe_neutrino_source", "direction_seed"),
         ("forward_geodesics", "geodesic_backend"),
         ("forward_geodesics", "n_samples_to_propagate"),
-        ("interaction_sampler", "mode"),
+        ("dis_interaction_sampler", "dis_model"),
+        ("dis_interaction_sampler", "medium_model"),
+        ("dis_interaction_sampler", "medium_velocity_model"),
         ("observer_bridge", "mode"),
         ("provenance", "trust_boundary"),
     }
@@ -102,6 +104,11 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source() -
     assert payload["outputs"]["paths"]["forward_geometry_3d_json"] == "ForwardGeodesics/uhe_neutrino_forward_geometry_3d.json"
     assert payload["outputs"]["paths"]["forward_geometry_3d_html"] == "ForwardGeodesics/uhe_neutrino_forward_geometry_3d.html"
     assert payload["outputs"]["paths"]["forward_summary_json"] == "ForwardGeodesics/uhe_neutrino_forward_summary.json"
+    assert payload["dis_interaction_sampler"]["input_uhe_source_found"] is False
+    assert payload["dis_interaction_sampler"]["input_forward_geodesics_found"] is False
+    assert payload["outputs"]["paths"]["dis_tau_preview"] == "DIS/dis_tau_preview.png"
+    assert payload["outputs"]["paths"]["dis_interaction_locations"] == "DIS/dis_interaction_locations.png"
+    assert payload["outputs"]["paths"]["dis_summary_json"] == "DIS/dis_summary.json"
     assert payload["outputs"]["paths"]["uhe_source_sampling_uniformity"] == "UHEsource/uhe_source_sampling_uniformity.png"
     assert payload["outputs"]["paths"]["uhe_source_sampling_uniformity_report"] == "UHEsource/uhe_source_sampling_uniformity_report.json"
     assert payload["outputs"]["paths"]["uhe_source_direction_uniformity"] == "UHEsource/uhe_source_direction_uniformity.png"
@@ -110,7 +117,9 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source() -
     assert payload["values"]["forward_geodesics"]["geodesic_backend"] == "full_kerr_geodesic"
 
     assert "Forward Geodesics" in html
+    assert "DIS Interaction Sampler" in html
     assert "Propagate Forward Geodesics" in html
+    assert "Compute DIS Optical Depth / Sample Interactions" in html
     assert "full_kerr_geodesic" in html
     assert "Full Kerr null geodesic propagation" in html
     assert "Initial Direction" in html
@@ -141,3 +150,15 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source() -
     assert "geodesic_validation_report.json" in html
     assert "stop_condition_statistics.csv" in html
     assert "uhe_neutrino_source_preview.png" in html
+    assert "dis_tau_preview.png" in html
+    assert "dis_interaction_locations.png" in html
+    assert "sigma_table_path" in html
+    assert "sigma_table_rows" in html
+    assert "sigma_table_is_compact_builtin_adapter" in html
+    assert "sigma_table_physics_risk" in html
+    assert "sigma_table_energy_min_gev" in html
+    assert "sigma_table_energy_max_gev" in html
+    assert "dis_path_optical_depths.jsonl" in html
+    assert "dis_interaction_candidates.jsonl" in html
+    assert "dis_accepted_interactions.jsonl" in html
+    assert "dis_optical_depth_report.json" in html

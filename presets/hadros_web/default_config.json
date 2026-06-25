@@ -14,6 +14,20 @@
     "spin_a": 0.9,
     "spin_convention": "Boyer-Lindquist a/M"
   },
+  "dis_interaction_sampler": {
+    "density_floor_g_cm3": 0.0,
+    "dis_model": "GBW",
+    "interaction_sampling_mode": "optical_depth_inverse_cdf",
+    "max_interactions": 1000000,
+    "medium_model": "analytic_torus",
+    "medium_velocity_model": "zamo_fallback",
+    "random_seed": 24680,
+    "status": "configured_only_no_dis_sampling"
+  },
+  "event_generation": {
+    "mode": "placeholder_disabled",
+    "planned_model": "POWHEG_PYTHIA_future"
+  },
   "forward_geodesics": {
     "geodesic_backend": "full_kerr_geodesic",
     "horizon_tolerance_rg": 0.001,
@@ -26,9 +40,9 @@
     "outer_radius_rg": 80.0,
     "status": "configured_only_no_forward_geodesics"
   },
-  "interaction_sampler": {
+  "geant4": {
     "mode": "placeholder_disabled",
-    "planned_model": "optical_depth_DIS"
+    "planned_model": "detector_transport_future"
   },
   "observer_bridge": {
     "mode": "placeholder_diagnostic_disabled",
@@ -54,6 +68,10 @@
     "write_provenance": true,
     "write_schematic": true
   },
+  "photon_transport": {
+    "mode": "placeholder_disabled",
+    "planned_model": "radiative_transfer_future"
+  },
   "polar_cone": {
     "draw_mode": "bipolar_funnel",
     "enabled": true,
@@ -68,6 +86,10 @@
   },
   "run": {
     "run_name": "HADROS3_hadros_web_preview"
+  },
+  "spectra": {
+    "mode": "placeholder_disabled",
+    "planned_model": "spectral_products_future"
   },
   "uhe_neutrino_source": {
     "direction_model": "isotropic_local",

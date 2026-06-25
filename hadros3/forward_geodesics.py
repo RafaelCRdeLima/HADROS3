@@ -97,20 +97,67 @@ def null_norm_covariant(p_t: float, p_r: float, p_theta: float, p_phi: float, r_
     )
 
 
-def kerr_null_momentum(position: dict[str, float], energy_gev: float, spin_a: float) -> dict[str, Any]:
+def emission_direction_from_sample(sample: dict[str, Any]) -> dict[str, Any]:
+    direction = sample.get("emission_direction")
+    if direction is None:
+        legacy_momentum = sample.get("initial_momentum") or {}
+        legacy_direction_model = legacy_momentum.get("direction_model")
+        if legacy_direction_model == "outward_coordinate_radial_proxy":
+            direction = {
+                "direction_generator": "CoordinateRadialOutwardDirectionGenerator",
+                "direction_model": "coordinate_radial_outward",
+                "direction_local_components": {
+                    "basis": "Boyer-Lindquist_coordinate_direction",
+                    "dr": 1.0,
+                    "dtheta": 0.0,
+                    "dphi": 0.0,
+                },
+                "direction_sampling_pdf": 1.0,
+                "direction_physical_pdf": 1.0,
+                "direction_weight": 1.0,
+            }
+        else:
+            direction = {
+                "direction_generator": sample.get("direction_generator"),
+                "direction_model": sample.get("direction_model"),
+                "direction_local_components": sample.get("direction_local_components"),
+                "direction_sampling_pdf": sample.get("direction_sampling_pdf"),
+                "direction_physical_pdf": sample.get("direction_physical_pdf"),
+                "direction_weight": sample.get("direction_weight"),
+            }
+    if direction.get("direction_model") != "coordinate_radial_outward":
+        raise ValueError(f"unsupported source emission direction: {direction.get('direction_model')}")
+    components = direction.get("direction_local_components") or {}
+    if components.get("basis") != "Boyer-Lindquist_coordinate_direction":
+        raise ValueError(f"unsupported source emission direction basis: {components.get('basis')}")
+    if not (
+        float(components.get("dr", 0.0)) > 0.0
+        and float(components.get("dtheta", math.inf)) == 0.0
+        and float(components.get("dphi", math.inf)) == 0.0
+    ):
+        raise ValueError("H3-W6 currently supports only coordinate radial outward emission directions")
+    return direction
+
+
+def kerr_null_momentum(position: dict[str, float], direction: dict[str, Any], energy_gev: float, spin_a: float) -> dict[str, Any]:
     r_rg = float(position["r_rg"])
     theta_rad = float(position["theta_rad"])
     metric = kerr_inverse_metric_components(r_rg, theta_rad, spin_a)
+    components = direction["direction_local_components"]
     p_t = -float(energy_gev)
     p_phi = 0.0
     p_theta = 0.0
+    radial_sign = 1.0 if float(components["dr"]) >= 0.0 else -1.0
     p_r = math.sqrt(max(0.0, -metric["gtt"] * p_t * p_t / metric["grr"]))
+    p_r *= radial_sign
     raw_null_norm = null_norm_covariant(p_t, p_r, p_theta, p_phi, r_rg, theta_rad, spin_a)
     null_norm = raw_null_norm / max(energy_gev * energy_gev, 1.0)
     return {
         "generator": KerrNullMomentumGenerator.name,
         "momentum_is_physical_kerr": True,
-        "direction_model": "outward_principal_like_null_kerr_covector",
+        "direction_generator": direction["direction_generator"],
+        "direction_model": direction["direction_model"],
+        "direction_local_components": direction["direction_local_components"],
         "four_momentum": {
             "basis": "Boyer-Lindquist_covariant",
             "p_t": p_t,
@@ -141,7 +188,8 @@ def propagate_one(sample: dict[str, Any], config: ForwardGeodesicConfig) -> tupl
     phi = float(position["phi_rad"])
     event_id = str(sample["event_id"])
     source_sample_id = int(sample["source_sample_id"])
-    initial_momentum = kerr_null_momentum(position, energy_gev, config.spin_a)
+    emission_direction = emission_direction_from_sample(sample)
+    initial_momentum = kerr_null_momentum(position, emission_direction, energy_gev, config.spin_a)
     p = initial_momentum["four_momentum"]
     p_t = float(p["p_t"])
     p_theta = float(p["p_theta"])
@@ -163,7 +211,7 @@ def propagate_one(sample: dict[str, Any], config: ForwardGeodesicConfig) -> tupl
             stop_condition = "outer_escape_radius"
             break
         try:
-            momentum = kerr_null_momentum({"r_rg": r, "theta_rad": theta}, energy_gev, config.spin_a)
+            momentum = kerr_null_momentum({"r_rg": r, "theta_rad": theta}, emission_direction, energy_gev, config.spin_a)
         except ValueError:
             stop_condition = "horizon_crossing"
             break
@@ -229,6 +277,9 @@ def propagate_one(sample: dict[str, Any], config: ForwardGeodesicConfig) -> tupl
         "geodesic_backend": config.geodesic_backend,
         "momentum_generator": KerrNullMomentumGenerator.name,
         "momentum_is_physical_kerr": True,
+        "direction_generator": emission_direction["direction_generator"],
+        "direction_model": emission_direction["direction_model"],
+        "emission_direction": emission_direction,
         "initial_position": position,
         "initial_momentum": initial_momentum,
         "n_segments": len(segments),
@@ -282,6 +333,8 @@ def generate_forward_geodesic_products(values: dict[str, dict[str, Any]], *, run
         "forward_neutrino_geodesics_invoked": True,
         "momentum_generator": KerrNullMomentumGenerator.name,
         "momentum_is_physical_kerr": True,
+        "direction_generator": samples[0].get("direction_generator") if samples else None,
+        "direction_model": samples[0].get("direction_model") if samples else None,
         "input_source_samples": str(source_path),
         "geodesic_backend": config.geodesic_backend,
         "n_samples_requested": config.n_samples_to_propagate,

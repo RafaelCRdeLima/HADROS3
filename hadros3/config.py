@@ -118,11 +118,31 @@ def schema() -> list[dict[str, Any]]:
                 ),
                 field(
                     "uhe_neutrino_source",
+                    "direction_model",
+                    "Direction Model",
+                    "coordinate_radial_outward",
+                    kind="select",
+                    options=[
+                        "coordinate_radial_outward",
+                        "jet_axis_future",
+                        "cone_emission_future",
+                        "isotropic_local_future",
+                        "custom_future",
+                    ],
+                ),
+                field("uhe_neutrino_source", "direction_opening_angle_deg", "Direction opening angle", 0.0, kind="number"),
+                field("uhe_neutrino_source", "direction_seed", "Direction seed", 12345, kind="number"),
+                field(
+                    "uhe_neutrino_source",
                     "status",
                     "Status",
                     "configured_only_no_sampling",
                     kind="select",
-                    options=["configured_only_no_sampling", "sampled_position_with_proxy_direction_no_forward_kerr_geodesic"],
+                    options=[
+                        "configured_only_no_sampling",
+                        "sampled_position_direction_energy_no_forward_kerr_geodesic",
+                        "sampled_position_with_proxy_direction_no_forward_kerr_geodesic",
+                    ],
                 ),
             ],
         },
@@ -311,6 +331,14 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
         problems.append("uhe_neutrino_source.sampling_mode must be uniform_coordinate_volume in H3-W5")
     if str(source.get("momentum_generator")) != "ProxyRadialMomentumGenerator":
         problems.append("uhe_neutrino_source.momentum_generator must be ProxyRadialMomentumGenerator in H3-W5")
+    if str(source.get("direction_model")) != "coordinate_radial_outward":
+        problems.append("uhe_neutrino_source.direction_model must be coordinate_radial_outward in H3-W5")
+    if float(source.get("direction_opening_angle_deg", 0.0)) < 0.0:
+        problems.append("uhe_neutrino_source.direction_opening_angle_deg must be non-negative")
+    try:
+        int(float(source.get("direction_seed", 0)))
+    except (TypeError, ValueError):
+        problems.append("uhe_neutrino_source.direction_seed must be an integer")
     try:
         energy_gev = parse_latex_number(source["energy_gev"])
         if energy_gev <= 0.0:

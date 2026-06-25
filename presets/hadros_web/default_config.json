@@ -70,6 +70,9 @@
     "run_name": "HADROS3_hadros_web_preview"
   },
   "uhe_neutrino_source": {
+    "direction_model": "coordinate_radial_outward",
+    "direction_opening_angle_deg": 0.0,
+    "direction_seed": 12345,
     "energy_gev": "10^{9}",
     "energy_model": "monoenergetic",
     "momentum_generator": "ProxyRadialMomentumGenerator",
@@ -80,7 +83,7 @@
     "random_seed": 12345,
     "sampling_mode": "uniform_coordinate_volume",
     "source_model": "polar_cone",
-    "status": "sampled_position_with_proxy_direction_no_forward_kerr_geodesic",
+    "status": "sampled_position_direction_energy_no_forward_kerr_geodesic",
     "theta_max_deg": 12,
     "theta_min_deg": 0
   }

@@ -32,6 +32,9 @@ def source_summary(records: list[dict[str, Any]], values: dict[str, dict[str, An
     phi_deg = [float(item["position"]["phi_deg"]) for item in records]
     weights = [float(item["source_weight"]) for item in records]
     pdfs = [float(item["source_sampling_pdf"]) for item in records]
+    direction_weights = [float(item["direction_weight"]) for item in records]
+    direction_sampling_pdfs = [float(item["direction_sampling_pdf"]) for item in records]
+    direction_physical_pdfs = [float(item["direction_physical_pdf"]) for item in records]
     return {
         "status": "ok",
         "n_samples": len(records),
@@ -44,6 +47,14 @@ def source_summary(records: list[dict[str, Any]], values: dict[str, dict[str, An
         "sampling_mode": values["uhe_neutrino_source"]["sampling_mode"],
         "momentum_generator": records[0]["momentum_generator"],
         "momentum_is_physical_kerr": bool(records[0]["momentum_is_physical_kerr"]),
+        "direction_generator": records[0]["direction_generator"],
+        "direction_model": records[0]["direction_model"],
+        "direction_sampling_pdf": direction_sampling_pdfs[0],
+        "direction_physical_pdf": direction_physical_pdfs[0],
+        "direction_weight": direction_weights[0],
+        "direction_weight_min": min(direction_weights),
+        "direction_weight_max": max(direction_weights),
+        "direction_weight_mean": sum(direction_weights) / len(direction_weights),
         "source_status": records[0]["source_status"],
         "r_min_sampled_rg": min(radii),
         "r_max_sampled_rg": max(radii),
@@ -115,7 +126,7 @@ def draw_source_preview(records: list[dict[str, Any]], values: dict[str, dict[st
     ax.add_patch(Circle((0.0, 0.0), 1.0, facecolor="black", edgecolor="white", linewidth=1.1, zorder=5))
     ax.text(0.0, 0.0, "BH", color="white", ha="center", va="center", fontsize=9, zorder=6)
     ax.text(-0.96 * lim, 0.88 * lim, f"UHE source samples: {len(records)}", color="#ffdf7e", fontsize=11, ha="left")
-    ax.text(-0.96 * lim, 0.82 * lim, "coordinate-volume polar_cone; proxy radial direction", color="#cbd5e1", fontsize=9, ha="left")
+    ax.text(-0.96 * lim, 0.82 * lim, "coordinate-volume polar_cone; coordinate radial outward direction", color="#cbd5e1", fontsize=9, ha="left")
     ax.set_xlim(-lim, lim)
     ax.set_ylim(-lim, lim)
     ax.set_aspect("equal", adjustable="box")

@@ -41,6 +41,18 @@ def test_polar_cone_sampler_respects_domains_and_weights() -> None:
         assert record["source_physical_pdf"] == record["source_sampling_pdf"]
         assert math.isfinite(record["source_weight"])
         assert record["source_weight"] == 1.0
+        assert record["direction_generator"] == "CoordinateRadialOutwardDirectionGenerator"
+        assert record["direction_model"] == "coordinate_radial_outward"
+        assert record["direction_local_components"] == {
+            "basis": "Boyer-Lindquist_coordinate_direction",
+            "dr": 1.0,
+            "dtheta": 0.0,
+            "dphi": 0.0,
+        }
+        assert record["direction_sampling_pdf"] == 1.0
+        assert record["direction_physical_pdf"] == 1.0
+        assert record["direction_weight"] == 1.0
+        assert record["emission_direction"]["direction_model"] == "coordinate_radial_outward"
         assert record["momentum_generator"] == "ProxyRadialMomentumGenerator"
         assert record["momentum_is_physical_kerr"] is False
         assert record["initial_momentum"]["four_momentum"] is None
@@ -59,6 +71,11 @@ def test_generate_uhe_source_products_and_provenance(tmp_path: Path) -> None:
     assert summary["source_sampler_active"] is True
     assert summary["source_model"] == "polar_cone"
     assert summary["source_volume_model"] == "coordinate_volume"
+    assert summary["direction_generator"] == "CoordinateRadialOutwardDirectionGenerator"
+    assert summary["direction_model"] == "coordinate_radial_outward"
+    assert summary["direction_sampling_pdf"] == 1.0
+    assert summary["direction_physical_pdf"] == 1.0
+    assert summary["direction_weight"] == 1.0
     assert summary["momentum_generator"] == "ProxyRadialMomentumGenerator"
     assert summary["momentum_is_physical_kerr"] is False
 
@@ -74,6 +91,11 @@ def test_generate_uhe_source_products_and_provenance(tmp_path: Path) -> None:
     provenance = json.loads(Path(render_summary["products"]["provenance"]).read_text(encoding="utf-8"))
     assert provenance["source_sampler"]["source_sampler_active"] is True
     assert provenance["source_sampler"]["source_model"] == "polar_cone"
+    assert provenance["source_sampler"]["direction_generator"] == "CoordinateRadialOutwardDirectionGenerator"
+    assert provenance["source_sampler"]["direction_model"] == "coordinate_radial_outward"
+    assert provenance["source_sampler"]["direction_sampling_pdf"] == 1.0
+    assert provenance["source_sampler"]["direction_physical_pdf"] == 1.0
+    assert provenance["source_sampler"]["direction_weight"] == 1.0
     assert provenance["source_sampler"]["momentum_is_physical_kerr"] is False
     assert provenance["source_sampler"]["forward_neutrino_geodesics_invoked"] is False
     assert provenance["source_sampler"]["optical_depth_dis_sampler_invoked"] is False

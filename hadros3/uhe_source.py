@@ -35,6 +35,9 @@ def validate_source_records(records: list[dict[str, Any]], values: dict[str, dic
         physical_pdf = float(record["source_physical_pdf"])
         sampling_pdf = float(record["source_sampling_pdf"])
         weight = float(record["source_weight"])
+        direction_sampling_pdf = float(record["direction_sampling_pdf"])
+        direction_physical_pdf = float(record["direction_physical_pdf"])
+        direction_weight = float(record["direction_weight"])
         if not (r_min <= r <= r_max):
             problems.append(f"sample {index} has r outside configured source volume")
         if not (theta_min <= theta <= theta_max):
@@ -47,6 +50,23 @@ def validate_source_records(records: list[dict[str, Any]], values: dict[str, dic
             problems.append(f"sample {index} has non-positive source_sampling_pdf")
         if not math.isfinite(weight):
             problems.append(f"sample {index} has non-finite source_weight")
+        if record["direction_model"] != "coordinate_radial_outward":
+            problems.append(f"sample {index} has unsupported direction_model")
+        direction = record["direction_local_components"]
+        if direction.get("basis") != "Boyer-Lindquist_coordinate_direction":
+            problems.append(f"sample {index} has unsupported direction basis")
+        if not (
+            float(direction.get("dr", 0.0)) > 0.0
+            and float(direction.get("dtheta", math.inf)) == 0.0
+            and float(direction.get("dphi", math.inf)) == 0.0
+        ):
+            problems.append(f"sample {index} does not encode coordinate radial outward direction")
+        if not (math.isfinite(direction_physical_pdf) and direction_physical_pdf > 0.0):
+            problems.append(f"sample {index} has non-positive direction_physical_pdf")
+        if not (math.isfinite(direction_sampling_pdf) and direction_sampling_pdf > 0.0):
+            problems.append(f"sample {index} has non-positive direction_sampling_pdf")
+        if not math.isfinite(direction_weight):
+            problems.append(f"sample {index} has non-finite direction_weight")
         if record["momentum_is_physical_kerr"] is not False:
             problems.append(f"sample {index} incorrectly marks H3-W5 proxy momentum as physical Kerr")
     return problems

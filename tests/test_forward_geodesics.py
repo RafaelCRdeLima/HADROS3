@@ -45,6 +45,8 @@ def test_forward_geodesics_consume_h3_w5_source_and_write_outputs(tmp_path: Path
     assert summary["forward_neutrino_geodesics_invoked"] is True
     assert summary["momentum_generator"] == "KerrNullMomentumGenerator"
     assert summary["momentum_is_physical_kerr"] is True
+    assert summary["direction_generator"] == "CoordinateRadialOutwardDirectionGenerator"
+    assert summary["direction_model"] == "coordinate_radial_outward"
     assert summary["n_samples_requested"] == 5
     assert summary["n_samples_propagated"] == 5
     assert summary["n_paths"] == 5
@@ -65,6 +67,14 @@ def test_forward_geodesics_consume_h3_w5_source_and_write_outputs(tmp_path: Path
         "stop_condition_statistics.csv",
     ]:
         assert (forward_dir / filename).exists()
+
+    first_path = json.loads((forward_dir / "uhe_neutrino_forward_paths.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    assert first_path["direction_model"] == "coordinate_radial_outward"
+    assert first_path["emission_direction"]["direction_local_components"]["dr"] == 1.0
+    momentum = first_path["initial_momentum"]["four_momentum"]
+    assert momentum["p_r"] > 0.0
+    assert momentum["p_theta"] == 0.0
+    assert momentum["p_phi"] == 0.0
 
 
 def test_forward_geodesic_segments_are_finite_and_auditable(tmp_path: Path) -> None:

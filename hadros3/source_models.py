@@ -10,7 +10,7 @@ from typing import Any
 from .config import parse_latex_number
 
 
-SOURCE_STATUS_PROXY = "sampled_position_with_proxy_direction_no_forward_kerr_geodesic"
+SOURCE_STATUS_EMISSION = "sampled_position_direction_energy_no_forward_kerr_geodesic"
 
 
 @dataclass(frozen=True)
@@ -27,6 +27,42 @@ class SourceConfig:
     random_seed: int
     sampling_mode: str
     momentum_generator: str
+    direction_model: str
+    direction_opening_angle_deg: float
+    direction_seed: int
+
+
+class InitialDirectionGenerator:
+    """Interface for physical emission directions produced by the source."""
+
+    name = "InitialDirectionGenerator"
+    direction_model = "abstract"
+
+    def sample(self, position: dict[str, float], energy_gev: float, sample_id: int) -> dict[str, Any]:
+        raise NotImplementedError
+
+
+class CoordinateRadialOutwardDirectionGenerator(InitialDirectionGenerator):
+    """Current H3-W5/H3-W6 behavior: outward Boyer-Lindquist coordinate radial direction."""
+
+    name = "CoordinateRadialOutwardDirectionGenerator"
+    direction_model = "coordinate_radial_outward"
+
+    def sample(self, position: dict[str, float], energy_gev: float, sample_id: int) -> dict[str, Any]:
+        return {
+            "direction_generator": self.name,
+            "direction_model": self.direction_model,
+            "direction_local_components": {
+                "basis": "Boyer-Lindquist_coordinate_direction",
+                "dr": 1.0,
+                "dtheta": 0.0,
+                "dphi": 0.0,
+            },
+            "direction_sampling_pdf": 1.0,
+            "direction_physical_pdf": 1.0,
+            "direction_weight": 1.0,
+            "status": "physical_source_direction_coordinate_radial_outward",
+        }
 
 
 class InitialMomentumGenerator:
@@ -93,6 +129,9 @@ def source_config_from_values(values: dict[str, dict[str, Any]]) -> SourceConfig
         random_seed=int(float(source["random_seed"])),
         sampling_mode=str(source["sampling_mode"]),
         momentum_generator=str(source["momentum_generator"]),
+        direction_model=str(source["direction_model"]),
+        direction_opening_angle_deg=float(source["direction_opening_angle_deg"]),
+        direction_seed=int(float(source["direction_seed"])),
     )
 
 
@@ -110,6 +149,12 @@ def _momentum_generator(config: SourceConfig) -> InitialMomentumGenerator:
     raise ValueError(f"unsupported H3-W5 momentum generator: {config.momentum_generator}")
 
 
+def _direction_generator(config: SourceConfig) -> InitialDirectionGenerator:
+    if config.direction_model == "coordinate_radial_outward":
+        return CoordinateRadialOutwardDirectionGenerator()
+    raise ValueError(f"unsupported H3-W5 direction model: {config.direction_model}")
+
+
 def sample_polar_cone(values: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     config = source_config_from_values(values)
     if config.source_model != "polar_cone":
@@ -125,6 +170,7 @@ def sample_polar_cone(values: dict[str, dict[str, Any]]) -> list[dict[str, Any]]
     sampling_pdf = 1.0 / volume
     rng = random.Random(config.random_seed)
     momentum = _momentum_generator(config)
+    direction_generator = _direction_generator(config)
     cos_min = math.cos(config.theta_min_rad)
     cos_max = math.cos(config.theta_max_rad)
     records: list[dict[str, Any]] = []
@@ -145,6 +191,7 @@ def sample_polar_cone(values: dict[str, dict[str, Any]]) -> list[dict[str, Any]]
             "phi_deg": math.degrees(phi_emit),
         }
         physical_pdf = sampling_pdf
+        direction = direction_generator.sample(position, config.energy_gev, sample_id)
         records.append(
             {
                 "source_sample_id": sample_id,
@@ -152,6 +199,13 @@ def sample_polar_cone(values: dict[str, dict[str, Any]]) -> list[dict[str, Any]]
                 "source_model": config.source_model,
                 "source_volume_model": "coordinate_volume",
                 "position": position,
+                "emission_direction": direction,
+                "direction_generator": direction["direction_generator"],
+                "direction_model": direction["direction_model"],
+                "direction_local_components": direction["direction_local_components"],
+                "direction_sampling_pdf": direction["direction_sampling_pdf"],
+                "direction_physical_pdf": direction["direction_physical_pdf"],
+                "direction_weight": direction["direction_weight"],
                 "E_nu_emit_gev": config.energy_gev,
                 "E_nu_inf_gev": None,
                 "initial_momentum": momentum.describe(position, config.energy_gev),
@@ -160,7 +214,7 @@ def sample_polar_cone(values: dict[str, dict[str, Any]]) -> list[dict[str, Any]]
                 "source_physical_pdf": physical_pdf,
                 "source_sampling_pdf": sampling_pdf,
                 "source_weight": physical_pdf / sampling_pdf,
-                "source_status": SOURCE_STATUS_PROXY,
+                "source_status": SOURCE_STATUS_EMISSION,
             }
         )
     return records

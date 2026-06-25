@@ -322,7 +322,7 @@ async function sampleUheSource() {{
     const result = await post("/api/sample-uhe-source", values);
     if (result.ok && result.data && result.data.source) {{
       state.values = values;
-      state.values.uhe_neutrino_source.status = "sampled_position_with_proxy_direction_no_forward_kerr_geodesic";
+      state.values.uhe_neutrino_source.status = "sampled_position_direction_energy_no_forward_kerr_geodesic";
       state.source_summary = result.data.source;
       state.outputs.uhe_source_samples_exists = true;
       state.outputs.uhe_source_summary_exists = true;
@@ -607,6 +607,15 @@ function renderBackendTable() {{
 }}
 function renderSourcePanel() {{
   const summary = state.source_summary;
+  const directionModel = state.values.uhe_neutrino_source.direction_model || "coordinate_radial_outward";
+  const directionOptions = [
+    ["coordinate_radial_outward", "Coordinate radial outward", true],
+    ["jet_axis_future", "Jet axis", false],
+    ["cone_emission_future", "Cone emission", false],
+    ["isotropic_local_future", "Isotropic local (future)", false],
+    ["custom_future", "Custom (future)", false],
+  ].map(([value, label, enabled]) => `<label class="toggle-row"><input type="radio" name="directionModelDisplay" value="${{value}}" ${{directionModel === value ? "checked" : ""}} disabled><span class="toggle-main"><span class="toggle-name">${{label}}</span><span class="toggle-help">${{enabled ? "Implemented in H3-W5." : "Future model."}}</span></span></label>`).join("");
+  const directionPanel = `<section><h2>Initial Direction</h2><div class="camera-controls-card">${{directionOptions}}</div></section>`;
   const sourceLinks = `<div class="output-link-grid">
     ${{state.outputs.uhe_source_samples_exists ? `<a href="${{outUrl("uhe_source_samples")}}" target="_blank">Samples<br><code>${{outPath("uhe_source_samples")}}</code></a>` : ""}}
     ${{state.outputs.uhe_source_summary_exists ? `<a href="${{outUrl("uhe_source_summary")}}" target="_blank">Summary CSV<br><code>${{outPath("uhe_source_summary")}}</code></a>` : ""}}
@@ -622,10 +631,13 @@ function renderSourcePanel() {{
     <div class="summary-item"><strong>source_sampling_pdf</strong>${{Number(summary.source_sampling_pdf).toExponential(4)}}</div>
     <div class="summary-item"><strong>source_physical_pdf</strong>${{Number(summary.source_physical_pdf).toExponential(4)}}</div>
     <div class="summary-item"><strong>source_weight</strong>${{summary.source_weight_mean}}</div>
+    <div class="summary-item"><strong>Direction</strong>${{summary.direction_model}}</div>
+    <div class="summary-item"><strong>Direction weight</strong>${{summary.direction_weight}}</div>
     <div class="summary-item"><strong>Momentum</strong>${{summary.momentum_generator}}</div>
     <div class="summary-item"><strong>Kerr physical?</strong>${{summary.momentum_is_physical_kerr}}</div>
   </div><p class="note"><strong>Sampler status:</strong> ${{summary.source_status}}</p>${{sourceLinks}}` : `<p class="note">Sampler inactive. Configure this tab and generate source samples through hadros-web.</p>`;
   return `<div class="source-panel">
+    ${{directionPanel}}
     <button type="button" id="uhe-source-button" class="source-action">Generate UHE Source Samples</button>
     ${{summaryHtml}}
   </div>`;
@@ -1019,7 +1031,7 @@ class Handler(BaseHTTPRequestHandler):
             output_dir = ROOT / run_output_dir(values)
             output_dir.mkdir(parents=True, exist_ok=True)
             ensure_output_layout(output_dir)
-            values["uhe_neutrino_source"]["status"] = "sampled_position_with_proxy_direction_no_forward_kerr_geodesic"
+            values["uhe_neutrino_source"]["status"] = "sampled_position_direction_energy_no_forward_kerr_geodesic"
             write_values(self.config_path, values)
             source_summary = generate_uhe_source_products(values, output_dir=output_dir)
             clear_forward_geodesics_outputs(output_dir)
@@ -1114,7 +1126,7 @@ def main() -> int:
         if not output_dir.is_absolute():
             output_dir = ROOT / output_dir
         ensure_output_layout(output_dir)
-        values["uhe_neutrino_source"]["status"] = "sampled_position_with_proxy_direction_no_forward_kerr_geodesic"
+        values["uhe_neutrino_source"]["status"] = "sampled_position_direction_energy_no_forward_kerr_geodesic"
         write_values(args.config, values)
         source_summary = generate_uhe_source_products(values, output_dir=output_dir)
         clear_forward_geodesics_outputs(output_dir)

@@ -29,6 +29,7 @@ def write_summary_csv(summary: dict[str, Any], path: Path) -> None:
         "n_samples_propagated",
         "n_paths",
         "n_segments",
+        "direction_model",
         "momentum_generator",
         "momentum_is_physical_kerr",
         "null_norm_max",

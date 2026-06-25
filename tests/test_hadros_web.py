@@ -20,6 +20,9 @@ def test_schema_exposes_hadros3_first_stage_controls() -> None:
         ("analytic_torus", "r_inner_rg"),
         ("polar_cone", "opening_angle_deg"),
         ("uhe_neutrino_source", "energy_gev"),
+        ("uhe_neutrino_source", "direction_model"),
+        ("uhe_neutrino_source", "direction_opening_angle_deg"),
+        ("uhe_neutrino_source", "direction_seed"),
         ("forward_geodesics", "geodesic_backend"),
         ("forward_geodesics", "n_samples_to_propagate"),
         ("interaction_sampler", "mode"),
@@ -99,6 +102,10 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source() -
 
     assert "Forward Geodesics" in html
     assert "Propagate Forward Geodesics" in html
+    assert "Initial Direction" in html
+    assert "Coordinate radial outward" in html
+    assert "Jet axis" in html
+    assert "Cone emission" in html
     assert "Input UHEsource/" in html
     assert "ForwardGeodesics/" in html
     assert "uhe_neutrino_forward_preview.png" in html

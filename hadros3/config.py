@@ -60,9 +60,19 @@ def schema() -> list[dict[str, Any]]:
                 field("observer_camera", "inclination_deg", "Inclination", 80.0, kind="number"),
                 field("observer_camera", "azimuth_deg", "Azimuth", 0.0, kind="number"),
                 field("observer_camera", "field_of_view_deg", "FOV", 25.0, kind="number"),
+                field("observer_camera", "pixel_width", "Pixels X", 512, kind="number"),
+                field("observer_camera", "pixel_height", "Pixels Y", 288, kind="number"),
                 field(
                     "observer_camera",
                     "resolution",
+                    "Camera resolution",
+                    "512x288",
+                    kind="text",
+                    visibility="INTERNAL",
+                ),
+                field(
+                    "observer_camera",
+                    "preview_final_resolution",
                     "Preview final resolution",
                     "512x288",
                     kind="select",
@@ -383,10 +393,40 @@ def deep_update(base: dict[str, Any], updates: dict[str, Any]) -> dict[str, Any]
     return out
 
 
+def _split_resolution(value: Any) -> tuple[int, int] | None:
+    text = str(value or "").strip().lower()
+    if "x" not in text:
+        return None
+    left, right = text.split("x", 1)
+    try:
+        nx = int(float(left))
+        ny = int(float(right))
+    except ValueError:
+        return None
+    if nx <= 0 or ny <= 0:
+        return None
+    return nx, ny
+
+
+def _normalize_camera_pixels(values: dict[str, Any], raw: dict[str, Any] | None = None) -> dict[str, Any]:
+    camera = values.setdefault("observer_camera", {})
+    raw_camera = (raw or {}).get("observer_camera", {}) if isinstance(raw, dict) else {}
+    if "pixel_width" not in raw_camera or "pixel_height" not in raw_camera:
+        parsed = _split_resolution(camera.get("resolution"))
+        if parsed is not None:
+            camera["pixel_width"], camera["pixel_height"] = parsed
+    try:
+        camera["resolution"] = f"{int(float(camera['pixel_width']))}x{int(float(camera['pixel_height']))}"
+    except (KeyError, TypeError, ValueError):
+        pass
+    return values
+
+
 def load_values(path: Path | None) -> dict[str, dict[str, Any]]:
     if path is None or not path.exists():
-        return defaults()
-    return deep_update(defaults(), json.loads(path.read_text(encoding="utf-8")))
+        return _normalize_camera_pixels(defaults())
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    return _normalize_camera_pixels(deep_update(defaults(), raw), raw)
 
 
 def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
@@ -412,6 +452,13 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
         problems.append("observer_camera.inclination_deg must satisfy 0 <= inclination <= 180")
     if str(cam["camera_preview_mode"]) not in {"analytic_geometry_only", "kerr_like_cuda", "full_kerr"}:
         problems.append("observer_camera.camera_preview_mode is unsupported")
+    try:
+        if int(float(cam.get("pixel_width", 0))) <= 0:
+            problems.append("observer_camera.pixel_width must be positive")
+        if int(float(cam.get("pixel_height", 0))) <= 0:
+            problems.append("observer_camera.pixel_height must be positive")
+    except (TypeError, ValueError):
+        problems.append("observer_camera pixel dimensions must be numeric")
     if float(torus["r_inner_rg"]) <= 0.0 or float(torus["r_outer_rg"]) <= float(torus["r_inner_rg"]):
         problems.append("analytic_torus requires 0 < r_inner_rg < r_outer_rg")
     if not (float(torus["r_inner_rg"]) <= float(torus["r_peak_rg"]) <= float(torus["r_outer_rg"])):
@@ -497,13 +544,14 @@ def flatten_for_legacy_camera(values: dict[str, dict[str, Any]]) -> dict[str, An
     camera = values["observer_camera"]
     bh = values["black_hole"]
     torus = values["analytic_torus"]
+    camera_resolution = f"{int(float(camera.get('pixel_width', 512)))}x{int(float(camera.get('pixel_height', 288)))}"
     return {
         "black_hole_mass_msun": float(bh["mass_msun"]),
         "spin": float(bh["spin_a"]),
         "camera_theta_deg": float(camera["inclination_deg"]),
         "camera_fov_deg": float(camera["field_of_view_deg"]),
         "camera_r_obs_rg": float(camera["observer_distance_rg"]),
-        "camera_resolution": str(camera["resolution"]),
+        "camera_resolution": camera_resolution,
         "preview_resolution": str(camera["preview_resolution"]),
         "torus_r0_rg": float(torus["r_peak_rg"]),
         "torus_r_inner_rg": float(torus["r_inner_rg"]),

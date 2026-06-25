@@ -368,7 +368,7 @@ const previewNavModeNormal = [
   ["celestial_plus_torus_volume", "físico"],
   ["paint_swatch_disk", "paint_swatch_disk = diagnostic visual test, not physical torus emission"],
 ];
-let previewResolution = state.values.observer_camera.resolution || "512x288";
+let previewResolution = state.values.observer_camera.preview_final_resolution || "512x288";
 let previewInteractiveResolution = state.values.observer_camera.preview_resolution || "256x144";
 let previewSkyMode = "texture";
 let previewGeodesicModel = state.values.observer_camera.camera_preview_mode === "full_kerr" ? "full_kerr" : "kerr_like";
@@ -412,6 +412,11 @@ function collect() {{
     const section = el.dataset.section, key = el.dataset.key;
     values[section][key] = coerce(fields[`${{section}}.${{key}}`], el.value, el.checked);
   }});
+  const px = Number(values.observer_camera.pixel_width);
+  const py = Number(values.observer_camera.pixel_height);
+  if (Number.isFinite(px) && Number.isFinite(py) && px > 0 && py > 0) {{
+    values.observer_camera.resolution = `${{Math.round(px)}}x${{Math.round(py)}}`;
+  }}
   return values;
 }}
 function bindNumberInputs() {{
@@ -743,6 +748,9 @@ async function loadSavedCameraPreview(manual = true) {{
   values.observer_camera.inclination_deg = Number(camera.camera.inclination_deg ?? values.observer_camera.inclination_deg);
   values.observer_camera.azimuth_deg = Number(camera.camera.azimuth_deg ?? values.observer_camera.azimuth_deg);
   values.observer_camera.field_of_view_deg = Number(camera.camera.fov_deg ?? values.observer_camera.field_of_view_deg);
+  values.observer_camera.preview_final_resolution = previewResolution;
+  values.observer_camera.preview_resolution = previewInteractiveResolution;
+  values.observer_camera.preview_nav_mode = previewNavMode;
   state.values = values;
   lastCameraMtime = camera.mtime || lastCameraMtime;
   render();
@@ -1399,8 +1407,10 @@ class Handler(BaseHTTPRequestHandler):
             return
         if self.path == "/api/last-camera":
             info = discover_original_hadros()
+            local_path = ROOT / "configs" / "cameras" / "last_camera.json"
             raw = info.get("components", {}).get("last_camera_config")
-            path = Path(raw) if raw else None
+            original_path = Path(raw) if raw else None
+            path = local_path if local_path.exists() else original_path
             if path is None or not path.exists():
                 self._send(200, json.dumps({"exists": False, "path": str(path) if path else None}, indent=2), "application/json")
                 return

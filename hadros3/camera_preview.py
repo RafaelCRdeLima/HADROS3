@@ -121,7 +121,9 @@ def _interactive_make_command(
     """Build the same interactive preview command used by HADROS config-web."""
     options = preview_options or {}
     mode = str(values["observer_camera"].get("camera_preview_mode", "kerr_like_cuda"))
-    preview_nx, preview_ny = _resolution(str(options.get("previewResolution", values["observer_camera"].get("resolution", "512x288"))))
+    preview_nx, preview_ny = _resolution(
+        str(options.get("previewResolution", values["observer_camera"].get("preview_final_resolution", "512x288")))
+    )
     interactive_nx, interactive_ny = _resolution(
         str(options.get("previewInteractiveResolution", values["observer_camera"].get("preview_resolution", "256x144")))
     )
@@ -315,7 +317,9 @@ def _camera_preview_args(
     preview_options: dict[str, Any] | None = None,
 ) -> tuple[list[str], str, Path | None, dict[str, Any]]:
     mode = str(values["observer_camera"].get("camera_preview_mode", "analytic_geometry_only"))
-    nx, ny = _resolution(str(values["observer_camera"]["preview_resolution"]))
+    nx, ny = _resolution(
+        str((preview_options or {}).get("previewResolution", values["observer_camera"].get("preview_final_resolution", "512x288")))
+    )
     r_max = str(max(float(values["polar_cone"]["r_max_rg"]), float(values["analytic_torus"]["r_outer_rg"]), 80.0))
     torus_h = str(float(values["analytic_torus"]["r_peak_rg"]) * math.tan(math.radians(float(values["analytic_torus"]["half_opening_angle_deg"]))))
     nav_mode = _preview_nav_mode(values, preview_options)
@@ -461,9 +465,16 @@ def available_backends() -> dict[str, Any]:
     }
 
 
-def _draw_analytic_camera_preview(values: dict[str, dict[str, Any]], path: Path, message: str | None = None) -> None:
+def _draw_analytic_camera_preview(
+    values: dict[str, dict[str, Any]],
+    path: Path,
+    message: str | None = None,
+    preview_options: dict[str, Any] | None = None,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    nx, ny = _resolution(str(values["observer_camera"]["preview_resolution"]))
+    nx, ny = _resolution(
+        str((preview_options or {}).get("previewResolution", values["observer_camera"].get("preview_final_resolution", "512x288")))
+    )
     spin = float(values["black_hole"]["spin_a"])
     fov = float(values["observer_camera"]["field_of_view_deg"])
     inc = float(values["observer_camera"]["inclination_deg"])
@@ -539,7 +550,7 @@ def render_camera_preview(
 
     if mode == "analytic_geometry_only":
         message = "Analytic geometry-only observer view; no Kerr CUDA backend invoked."
-        _draw_analytic_camera_preview(values, png_path, None)
+        _draw_analytic_camera_preview(values, png_path, None, preview_options=preview_options)
     else:
         cuda_info = backends.get(mode, {})
         geodesic_model = "full_kerr" if mode == "full_kerr" else "kerr_like"
@@ -548,7 +559,7 @@ def render_camera_preview(
             status = "fallback"
             fallback_used = True
             message = "HADROS3 CUDA preview unavailable: bin/hadros3_geodesic_preview_cuda was not found."
-            _draw_analytic_camera_preview(values, png_path, message)
+            _draw_analytic_camera_preview(values, png_path, message, preview_options=preview_options)
         else:
             try:
                 env = os.environ.copy()
@@ -574,17 +585,17 @@ def render_camera_preview(
                 detail = (exc.stdout or str(exc)).strip().splitlines()
                 detail_text = detail[-1] if detail else str(exc)
                 message = f"HADROS3 CUDA preview unavailable: {detail_text}"
-                _draw_analytic_camera_preview(values, png_path, message)
+                _draw_analytic_camera_preview(values, png_path, message, preview_options=preview_options)
             except subprocess.TimeoutExpired as exc:
                 status = "fallback"
                 fallback_used = True
                 message = f"HADROS3 CUDA preview unavailable: timed out after {exc.timeout} seconds."
-                _draw_analytic_camera_preview(values, png_path, message)
+                _draw_analytic_camera_preview(values, png_path, message, preview_options=preview_options)
             except Exception as exc:
                 status = "fallback"
                 fallback_used = True
                 message = f"HADROS3 CUDA preview unavailable: {exc}"
-                _draw_analytic_camera_preview(values, png_path, message)
+                _draw_analytic_camera_preview(values, png_path, message, preview_options=preview_options)
 
     summary = {
         "status": status,

@@ -56,6 +56,8 @@
     "field_of_view_deg": 61,
     "inclination_deg": 81,
     "observer_distance_rg": 60,
+    "pixel_height": 288,
+    "pixel_width": 512,
     "preview_backend": "hadros_geodesic_preview_headless",
     "preview_quality": "high",
     "preview_resolution": "256x144",

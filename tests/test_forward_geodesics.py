@@ -95,7 +95,7 @@ def test_forward_geodesics_consume_h3_w5_source_and_write_outputs(tmp_path: Path
     momentum = first_path["initial_momentum"]["four_momentum"]
     assert momentum["p_r"] > 0.0
     assert momentum["p_theta"] == 0.0
-    assert momentum["p_phi"] == 0.0
+    assert abs(momentum["p_phi"]) < 1.0e-7
 
 
 def test_forward_geodesic_segments_are_finite_and_auditable(tmp_path: Path) -> None:

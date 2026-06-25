@@ -142,3 +142,25 @@ name, for example:
 ```text
 output/HADROS3_hadros_web_preview/
 ```
+
+
+## Development Environment
+
+Install the development dependencies:
+
+```bash
+make install-dev
+```
+
+Run the full development validation:
+
+```bash
+make validate
+```
+
+This builds the C++ backends and then runs the official HADROS3 checks:
+
+```bash
+make cpp
+make check
+```

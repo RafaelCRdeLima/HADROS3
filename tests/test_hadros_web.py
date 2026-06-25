@@ -91,7 +91,8 @@ def test_render_hadros_web_writes_first_stage_products(tmp_path: Path) -> None:
     assert provenance["camera_preview"]["requested_mode"] in {"analytic_geometry_only", "kerr_like_cuda", "full_kerr"}
 
 
-def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source() -> None:
+def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("hadros_web.ROOT", tmp_path)
     values = defaults()
     payload = dashboard_payload(values, Path("presets/hadros_web/default_config.json"))
     html = render_html(values, Path("presets/hadros_web/default_config.json"))

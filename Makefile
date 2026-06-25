@@ -1,4 +1,5 @@
 PYTHON ?= python3
+PIP ?= $(PYTHON) -m pip
 HOST ?= 127.0.0.1
 PORT ?= 8877
 
@@ -10,10 +11,12 @@ NVCCFLAGS ?= -O3 -std=c++17
 CPP_INCLUDES := -Icpp/include
 KERR_PORT_SRC := cpp/src/kerr/kerr_metric.cpp cpp/src/kerr/kerr_geodesic.cpp cpp/src/cascade/kerr_local_tetrad.cpp cpp/src/cascade/packet_kerr_null_propagator.cpp
 
-.PHONY: help cpp hadros3-forward-geodesics hadros3-geodesic-preview-cuda hadros-web render-hadros-web render-camera-preview launch-camera-preview sample-uhe-source propagate-forward-geodesics sample-dis-interactions serve-hadros-web check clean
+.PHONY: help install-dev test cpp hadros3-forward-geodesics hadros3-geodesic-preview-cuda hadros-web render-hadros-web render-camera-preview launch-camera-preview sample-uhe-source propagate-forward-geodesics sample-dis-interactions serve-hadros-web check validate clean
 
 help:
 	@echo "HADROS3 commands:"
+	@echo "  make install-dev       Install development dependencies"
+	@echo "  make test              Run the Python test suite"
 	@echo "  make hadros-web        Serve the HADROS3 web control dashboard"
 	@echo "  make render-hadros-web Render the HADROS3 geometry/configuration preview and exit"
 	@echo "  make render-camera-preview Render only the HADROS3 camera preview"
@@ -24,13 +27,21 @@ help:
 	@echo "  make propagate-forward-geodesics Generate H3-W6 forward geodesics through hadros-web"
 	@echo "  make sample-dis-interactions Generate H3-W7 DIS interaction samples through hadros-web"
 	@echo "  make serve-hadros-web  Alias for make hadros-web"
-	@echo "  make check             Run Python syntax checks"
+	@echo "  make check             Run syntax checks and the Python test suite"
+	@echo "  make validate          Build C++ backends and run full checks"
 	@echo "  make clean             Remove generated previews and Python caches"
 	@echo ""
 	@echo "Variables:"
 	@echo "  PYTHON=$(PYTHON)"
+	@echo "  PIP=$(PIP)"
 	@echo "  HOST=$(HOST)"
 	@echo "  PORT=$(PORT)"
+
+install-dev:
+	$(PIP) install -r requirements-dev.txt
+
+test:
+	$(PYTHON) -m pytest tests
 
 cpp: bin/hadros3_forward_geodesics
 
@@ -80,7 +91,12 @@ serve-hadros-web:
 	$(MAKE) hadros-web
 
 check:
-	$(PYTHON) -m py_compile hadros_web.py hadros3/*.py tests/test_hadros_web.py tests/test_uhe_source.py tests/test_forward_geodesics.py tests/test_dis_sampler.py
+	$(PYTHON) -m py_compile hadros_web.py hadros3/*.py
+	$(PYTHON) -m pytest tests
+
+validate:
+	$(MAKE) cpp
+	$(MAKE) check
 
 clean:
 	rm -rf output

@@ -1040,7 +1040,6 @@ function renderDisPanel() {{
   </div></section>`;
   const configHtml = `<section><h2>Configuration</h2>
     <div class="camera-controls-card"><h3>Medium</h3>
-      ${{disInput("dis_backend")}}
       ${{disInput("medium_model")}}
       ${{disInput("medium_velocity_model")}}
       ${{disInput("density_floor_g_cm3")}}

@@ -390,6 +390,7 @@ def generate_dis_interaction_products(values: dict[str, dict[str, Any]], *, run_
     n_oob_sigma = 0
     n_static_fallback = 0
     n_segments_used_total = 0
+    cdf_normalized = True
     for path in forward_paths:
         event_id = str(path["event_id"])
         source_sample_id = int(path["source_sample_id"])
@@ -436,6 +437,9 @@ def generate_dis_interaction_products(values: dict[str, dict[str, Any]], *, run_
                 }
             )
         probability = interaction_probability(tau_total)
+        if tau_total > 0.0:
+            cdf_total = sum(float(entry["d_tau_nuN"]) for entry in segment_tau_records)
+            cdf_normalized = cdf_normalized and abs(cdf_total / tau_total - 1.0) <= 1.0e-10
         accepted_flag = bool(tau_total > 0.0 and rng.random() < probability and len(accepted) < config.max_interactions)
         source = source_map.get(source_sample_id, {})
         source_weight = float(source.get("source_weight", 1.0))
@@ -538,6 +542,13 @@ def generate_dis_interaction_products(values: dict[str, dict[str, Any]], *, run_
     report_path = output_dir / "dis_optical_depth_report.json"
     summary = {
         "status": "ok",
+        "backend_language": "Python",
+        "backend_executable": "hadros3.dis_sampler",
+        "backend_version_or_git_commit": "python-prototype",
+        "dis_backend": "python_prototype",
+        "cpp_backend_used": False,
+        "cuda_backend_used": False,
+        "python_prototype_used": True,
         "optical_depth_dis_sampler_invoked": True,
         "dis_model": config.dis_model,
         "medium_model": config.medium_model,
@@ -587,12 +598,19 @@ def generate_dis_interaction_products(values: dict[str, dict[str, Any]], *, run_
         **summary,
         "validations": {
             "rho_non_negative": all(record["max_rho_g_cm3"] >= 0.0 for record in path_records),
+            "n_baryon_non_negative": all(
+                record.get("candidate_n_baryon_cm3", 0.0) >= 0.0 for record in candidates if "candidate_n_baryon_cm3" in record
+            ),
             "sigma_non_negative": all(record["max_sigma_cm2"] >= 0.0 for record in path_records),
             "d_tau_non_negative": all(record["max_d_tau"] >= 0.0 for record in path_records),
             "tau_non_negative": all(record["tau_nuN_total"] >= 0.0 for record in path_records),
             "probability_bounds": all(0.0 <= record["interaction_probability"] <= 1.0 for record in path_records),
+            "cdf_normalized": cdf_normalized,
             "observer_bridge_inactive": True,
             "expensive_event_generation_inactive": True,
+            "powheg_inactive": True,
+            "pythia_inactive": True,
+            "geant4_inactive": True,
         },
     }
     write_jsonl(path_depths_path, path_records)

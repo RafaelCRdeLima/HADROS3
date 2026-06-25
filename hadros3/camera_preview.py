@@ -1,8 +1,9 @@
 """Integration layer for HADROS3 camera preview backends.
 
-This module reuses the validated HADROS geodesic preview binaries when they are
-available. It never runs source sampling, forward neutrino propagation, DIS, or
-expensive event generation.
+The CUDA preview is ported into HADROS3 as ``bin/hadros3_geodesic_preview_cuda``
+when CUDA is available. Legacy CPU/OpenGL preview discovery still records the
+neighboring HADROS checkout, but the CUDA camera path does not require it at
+runtime.
 """
 
 from __future__ import annotations
@@ -31,6 +32,9 @@ import numpy as np
 from .render import kerr_horizon_radius_rg
 from .reuse import discover_original_hadros
 
+HADROS3_ROOT = Path(__file__).resolve().parents[1]
+HADROS3_CUDA_PREVIEW_BIN = HADROS3_ROOT / "bin" / "hadros3_geodesic_preview_cuda"
+
 
 def _resolution(value: str) -> tuple[int, int]:
     text = str(value).strip().lower()
@@ -49,6 +53,10 @@ def _component_path(name: str) -> Path | None:
     return Path(raw)
 
 
+def _self_contained_cuda_preview_bin() -> Path:
+    return HADROS3_CUDA_PREVIEW_BIN
+
+
 def _original_hadros_root() -> Path | None:
     info = discover_original_hadros()
     raw = info.get("preferred_root")
@@ -65,9 +73,27 @@ def _space_safe_runtime_dir(output_dir: Path) -> Path:
     return Path("/tmp") / f"hadros3_camera_preview_{digest}"
 
 
+def _preview_nav_mode(values: dict[str, dict[str, Any]], options: dict[str, Any] | None = None) -> str:
+    raw = (options or {}).get("previewNavMode", values.get("observer_camera", {}).get("preview_nav_mode", "celestial_plus_torus_volume"))
+    nav_mode = str(raw)
+    if nav_mode not in {
+        "celestial_plus_torus_volume",
+        "detailed",
+        "paint_swatch_disk",
+        "first_hit_disk_debug",
+        "opaque_disk_debug",
+        "disk_radius_debug",
+        "hit_reason",
+        "hit_distance_debug",
+        "volume_emissivity_debug",
+    }:
+        nav_mode = "celestial_plus_torus_volume"
+    return nav_mode
+
+
 def _interactive_make_command(
     values: dict[str, dict[str, Any]], output_dir: Path, preview_options: dict[str, Any] | None = None
-) -> tuple[list[str], str, str, Path | None]:
+) -> tuple[list[str], str, str, Path | None, dict[str, Any]]:
     """Build the same interactive preview command used by HADROS config-web."""
     options = preview_options or {}
     mode = str(values["observer_camera"].get("camera_preview_mode", "kerr_like_cuda"))
@@ -81,19 +107,7 @@ def _interactive_make_command(
     backend = "cpu" if mode == "analytic_geometry_only" else "cuda"
     quality = str(options.get("previewQuality", values["observer_camera"].get("preview_quality", "medium")))
     sky_mode = str(options.get("previewSkyMode", "texture"))
-    nav_mode = str(options.get("previewNavMode", "celestial_plus_torus_volume"))
-    if nav_mode not in {
-        "celestial_plus_torus_volume",
-        "detailed",
-        "paint_swatch_disk",
-        "first_hit_disk_debug",
-        "opaque_disk_debug",
-        "disk_radius_debug",
-        "hit_reason",
-        "hit_distance_debug",
-        "volume_emissivity_debug",
-    }:
-        nav_mode = "celestial_plus_torus_volume"
+    nav_mode = _preview_nav_mode(values, options)
     preview_r_max_rg = max(
         float(values["polar_cone"]["r_max_rg"]),
         float(values["analytic_torus"]["r_outer_rg"]),
@@ -106,6 +120,8 @@ def _interactive_make_command(
     disk_r_in = float(values["analytic_torus"]["r_inner_rg"])
     disk_r_out = float(values["analytic_torus"]["r_outer_rg"])
     disk_thickness = max(0.02, 0.02 * float(values["analytic_torus"]["r_peak_rg"]))
+    torus_alpha = 0.09
+    funnel_enabled = bool(values["polar_cone"]["enabled"])
     torus_h = float(values["analytic_torus"]["r_peak_rg"]) * math.tan(
         math.radians(float(values["analytic_torus"]["half_opening_angle_deg"]))
     )
@@ -116,6 +132,95 @@ def _interactive_make_command(
         interactive_nx = min(interactive_nx, 256)
         interactive_ny = min(interactive_ny, 144)
         quality = "medium"
+
+    if backend == "cuda":
+        cuda_bin = _self_contained_cuda_preview_bin()
+        command = [
+            str(cuda_bin),
+            "--out",
+            str(preview_output_dir / "geodesic_preview_cuda.ppm"),
+            "--nx",
+            str(preview_nx),
+            "--ny",
+            str(preview_ny),
+            "--interactive-nx",
+            str(interactive_nx),
+            "--interactive-ny",
+            str(interactive_ny),
+            "--quality",
+            quality,
+            "--allow-expensive-preview",
+            allow_expensive,
+            "--nav-mode",
+            nav_mode,
+            "--aspect-mode",
+            "window",
+            "--sky-mode",
+            sky_mode,
+            "--sky",
+            "assets/sky/eso0932a.ppm",
+            "--geodesic-model",
+            geodesic_model,
+            "--spin",
+            f"{float(values['black_hole']['spin_a']):.12g}",
+            "--spin-convention",
+            "thorne",
+            "--inclination",
+            f"{float(values['observer_camera']['inclination_deg']):.12g}",
+            "--fov",
+            f"{float(values['observer_camera']['field_of_view_deg']):.12g}",
+            "--r-obs",
+            f"{float(values['observer_camera']['observer_distance_rg']):.12g}",
+            "--r-max",
+            f"{preview_r_max_rg:.12g}",
+            "--disk-r-in",
+            f"{disk_r_in:.12g}",
+            "--disk-r-out",
+            f"{disk_r_out:.12g}",
+            "--disk-thickness",
+            f"{disk_thickness:.12g}",
+            "--near-clip",
+            "1.0",
+            "--disk-geometry",
+            "thin_disk",
+            "--disk-hit-mode",
+            "first_hit",
+            "--torus-r0",
+            f"{float(values['analytic_torus']['r_peak_rg']):.12g}",
+            "--torus-sigma-r",
+            f"{torus_sigma:.12g}",
+            "--torus-h",
+            f"{torus_h:.12g}",
+            "--torus-alpha",
+            f"{torus_alpha:.12g}",
+            "--torus-max-alpha-step",
+            "0.055",
+            "--torus-emissivity-cutoff",
+            "1e-8",
+            "--funnel",
+            "1" if funnel_enabled else "0",
+            "--funnel-theta",
+            f"{float(values['polar_cone']['opening_angle_deg']):.12g}",
+            "--funnel-width",
+            "8",
+            "--funnel-alpha",
+            "0.07",
+            "--funnel-brightness",
+            "0.85",
+            "--opaque-structures",
+            opaque_structures,
+            "--live",
+            "1",
+            "--vsync",
+            "0",
+            "--rot-speed",
+            "55",
+            "--zoom-speed",
+            "18",
+            "--fov-speed",
+            "35",
+        ]
+        return command, geodesic_model, backend, None, {"nav_mode": nav_mode}
 
     hadros_root = _original_hadros_root()
     command = [
@@ -158,8 +263,8 @@ def _interactive_make_command(
         f"PREVIEW_TORUS_R0_RG={float(values['analytic_torus']['r_peak_rg']):.12g}",
         f"PREVIEW_TORUS_SIGMA_R_RG={torus_sigma:.12g}",
         f"PREVIEW_TORUS_H_RG={torus_h:.12g}",
-        "PREVIEW_TORUS_ALPHA=0.09",
-        "PREVIEW_FUNNEL_ENABLED=1" if bool(values["polar_cone"]["enabled"]) else "PREVIEW_FUNNEL_ENABLED=0",
+        f"PREVIEW_TORUS_ALPHA={torus_alpha:.12g}",
+        "PREVIEW_FUNNEL_ENABLED=1" if funnel_enabled else "PREVIEW_FUNNEL_ENABLED=0",
         f"PREVIEW_FUNNEL_THETA_DEG={float(values['polar_cone']['opening_angle_deg']):.12g}",
         "PREVIEW_FUNNEL_WIDTH_DEG=8",
         "PREVIEW_FUNNEL_ALPHA=0.07",
@@ -168,19 +273,31 @@ def _interactive_make_command(
         "PREVIEW_ZOOM_SPEED=18",
         "PREVIEW_FOV_SPEED=35",
     ]
-    return command, geodesic_model, backend, hadros_root
+    return command, geodesic_model, backend, hadros_root, {"nav_mode": nav_mode}
 
 
-def _camera_preview_args(values: dict[str, dict[str, Any]], output_path: Path, *, interactive: bool) -> tuple[list[str], str, Path | None]:
+def _camera_preview_args(
+    values: dict[str, dict[str, Any]],
+    output_path: Path,
+    *,
+    interactive: bool,
+    preview_options: dict[str, Any] | None = None,
+) -> tuple[list[str], str, Path | None, dict[str, Any]]:
     mode = str(values["observer_camera"].get("camera_preview_mode", "analytic_geometry_only"))
     nx, ny = _resolution(str(values["observer_camera"]["preview_resolution"]))
     r_max = str(max(float(values["polar_cone"]["r_max_rg"]), float(values["analytic_torus"]["r_outer_rg"]), 80.0))
     torus_h = str(float(values["analytic_torus"]["r_peak_rg"]) * math.tan(math.radians(float(values["analytic_torus"]["half_opening_angle_deg"]))))
+    nav_mode = _preview_nav_mode(values, preview_options)
+    disk_r_in = float(values["analytic_torus"]["r_inner_rg"])
+    disk_r_out = float(values["analytic_torus"]["r_outer_rg"])
+    disk_thickness = max(0.02, 0.02 * float(values["analytic_torus"]["r_peak_rg"]))
+    torus_alpha = 0.09
+    funnel_enabled = bool(values["polar_cone"]["enabled"])
     if mode in {"kerr_like_cuda", "full_kerr"}:
-        cuda_bin = _component_path("geodesic_preview_cuda_bin")
+        cuda_bin = _self_contained_cuda_preview_bin()
         geodesic_model = "full_kerr" if mode == "full_kerr" else "kerr_like"
         command = [
-            str(cuda_bin) if cuda_bin is not None else "",
+            str(cuda_bin),
             "--nx",
             str(nx),
             "--ny",
@@ -208,7 +325,7 @@ def _camera_preview_args(values: dict[str, dict[str, Any]], output_path: Path, *
             "--r-max",
             r_max,
             "--nav-mode",
-            "celestial_plus_torus_volume",
+            nav_mode,
             "--aspect-mode",
             "window" if interactive else "fixed",
             "--sky-mode",
@@ -221,8 +338,20 @@ def _camera_preview_args(values: dict[str, dict[str, Any]], output_path: Path, *
             str(0.5 * (float(values["analytic_torus"]["r_outer_rg"]) - float(values["analytic_torus"]["r_inner_rg"]))),
             "--torus-h",
             torus_h,
+            "--torus-alpha",
+            f"{torus_alpha:.12g}",
+            "--disk-geometry",
+            "thin_disk",
+            "--disk-hit-mode",
+            "first_hit",
+            "--disk-r-in",
+            f"{disk_r_in:.12g}",
+            "--disk-r-out",
+            f"{disk_r_out:.12g}",
+            "--disk-thickness",
+            f"{disk_thickness:.12g}",
             "--funnel",
-            "1" if bool(values["polar_cone"]["enabled"]) else "0",
+            "1" if funnel_enabled else "0",
             "--funnel-theta",
             str(values["polar_cone"]["opening_angle_deg"]),
             "--funnel-width",
@@ -234,7 +363,7 @@ def _camera_preview_args(values: dict[str, dict[str, Any]], output_path: Path, *
             command += ["--live", "1", "--vsync", "0", "--rot-speed", "55", "--zoom-speed", "18", "--fov-speed", "35"]
         else:
             command.insert(1, "--headless")
-        return command, geodesic_model, cuda_bin
+        return command, geodesic_model, cuda_bin, {"nav_mode": nav_mode}
 
     cpu_bin = _component_path("geodesic_preview_bin")
     command = [
@@ -262,13 +391,13 @@ def _camera_preview_args(values: dict[str, dict[str, Any]], output_path: Path, *
     ]
     if not interactive:
         command.insert(1, "--headless")
-    return command, "legacy_cpu_geodesic_preview", cpu_bin
+    return command, "legacy_cpu_geodesic_preview", cpu_bin, {"nav_mode": nav_mode}
 
 
 def available_backends() -> dict[str, Any]:
-    cuda = _component_path("geodesic_preview_cuda_bin")
+    cuda = _self_contained_cuda_preview_bin()
     cpu = _component_path("geodesic_preview_bin")
-    cuda_ok = cuda is not None and cuda.exists() and cuda.is_file()
+    cuda_ok = cuda.exists() and cuda.is_file()
     cpu_ok = cpu is not None and cpu.exists() and cpu.is_file()
     return {
         "analytic_geometry_only": {
@@ -278,13 +407,13 @@ def available_backends() -> dict[str, Any]:
         },
         "kerr_like_cuda": {
             "available": cuda_ok,
-            "backend": str(cuda) if cuda is not None else None,
-            "reason": "Reuses HADROS hadros_geodesic_preview_cuda with --geodesic-model kerr_like.",
+            "backend": str(cuda),
+            "reason": "Uses self-contained HADROS3 bin/hadros3_geodesic_preview_cuda with --geodesic-model kerr_like.",
         },
         "full_kerr": {
             "available": cuda_ok,
-            "backend": str(cuda) if cuda is not None else None,
-            "reason": "Reuses HADROS hadros_geodesic_preview_cuda with --geodesic-model full_kerr.",
+            "backend": str(cuda),
+            "reason": "Uses self-contained HADROS3 bin/hadros3_geodesic_preview_cuda with --geodesic-model full_kerr.",
         },
         "legacy_cpu_geodesic_preview": {
             "available": cpu_ok,
@@ -345,7 +474,13 @@ def _ppm_to_png(ppm_path: Path, png_path: Path) -> None:
     plt.imsave(png_path, data)
 
 
-def render_camera_preview(values: dict[str, dict[str, Any]], *, root: Path, output_dir: Path) -> dict[str, Any]:
+def render_camera_preview(
+    values: dict[str, dict[str, Any]],
+    *,
+    root: Path,
+    output_dir: Path,
+    preview_options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     mode = str(values["observer_camera"].get("camera_preview_mode", "analytic_geometry_only"))
     png_path = output_dir / "hadros3_camera_preview.png"
@@ -360,6 +495,9 @@ def render_camera_preview(values: dict[str, dict[str, Any]], *, root: Path, outp
     cuda_used = False
     full_kerr_used = False
     backend_used = "hadros3_analytic_camera_placeholder"
+    camera_preview_cuda_self_contained = mode in {"kerr_like_cuda", "full_kerr"}
+    camera_preview_external_hadros_used = False
+    preview_metadata = {"nav_mode": _preview_nav_mode(values, preview_options)}
 
     if mode == "analytic_geometry_only":
         message = "Analytic geometry-only observer view; no Kerr CUDA backend invoked."
@@ -367,11 +505,11 @@ def render_camera_preview(values: dict[str, dict[str, Any]], *, root: Path, outp
     else:
         cuda_info = backends.get(mode, {})
         geodesic_model = "full_kerr" if mode == "full_kerr" else "kerr_like"
-        command, _, cuda_bin = _camera_preview_args(values, ppm_path, interactive=False)
-        if not cuda_info.get("available") or not cuda_bin.exists():
+        command, _, cuda_bin, preview_metadata = _camera_preview_args(values, ppm_path, interactive=False, preview_options=preview_options)
+        if not cuda_info.get("available") or cuda_bin is None or not cuda_bin.exists():
             status = "fallback"
             fallback_used = True
-            message = f"{mode} requested, but HADROS CUDA preview binary was not found."
+            message = "HADROS3 CUDA preview unavailable: bin/hadros3_geodesic_preview_cuda was not found."
             _draw_analytic_camera_preview(values, png_path, message)
         else:
             try:
@@ -391,23 +529,23 @@ def render_camera_preview(values: dict[str, dict[str, Any]], *, root: Path, outp
                 backend_used = str(cuda_bin)
                 cuda_used = True
                 full_kerr_used = mode == "full_kerr"
-                message = f"Rendered with reused HADROS CUDA backend: {geodesic_model}."
+                message = f"Rendered with self-contained HADROS3 CUDA preview: {geodesic_model}."
             except subprocess.CalledProcessError as exc:
                 status = "fallback"
                 fallback_used = True
                 detail = (exc.stdout or str(exc)).strip().splitlines()
                 detail_text = detail[-1] if detail else str(exc)
-                message = f"{mode} requested, but HADROS CUDA preview could not run: {detail_text}"
+                message = f"HADROS3 CUDA preview unavailable: {detail_text}"
                 _draw_analytic_camera_preview(values, png_path, message)
             except subprocess.TimeoutExpired as exc:
                 status = "fallback"
                 fallback_used = True
-                message = f"{mode} requested, but HADROS CUDA preview timed out after {exc.timeout} seconds."
+                message = f"HADROS3 CUDA preview unavailable: timed out after {exc.timeout} seconds."
                 _draw_analytic_camera_preview(values, png_path, message)
             except Exception as exc:
                 status = "fallback"
                 fallback_used = True
-                message = f"{mode} requested, but HADROS CUDA preview could not run: {exc}"
+                message = f"HADROS3 CUDA preview unavailable: {exc}"
                 _draw_analytic_camera_preview(values, png_path, message)
 
     summary = {
@@ -415,6 +553,8 @@ def render_camera_preview(values: dict[str, dict[str, Any]], *, root: Path, outp
         "requested_mode": mode,
         "backend_used": backend_used,
         "cuda_used": cuda_used,
+        "camera_preview_cuda_self_contained": camera_preview_cuda_self_contained,
+        "camera_preview_external_hadros_used": camera_preview_external_hadros_used,
         "full_kerr_used": full_kerr_used,
         "fallback_used": fallback_used,
         "message": message,
@@ -428,6 +568,7 @@ def render_camera_preview(values: dict[str, dict[str, Any]], *, root: Path, outp
             "performance_log": str(output_dir / "performance_log.txt") if (output_dir / "performance_log.txt").exists() else None,
         },
     }
+    summary.update(preview_metadata)
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return summary
 
@@ -447,18 +588,26 @@ def launch_interactive_camera_preview(
     log_path = interactive_dir / "camera_preview_interactive.log"
     summary_path = output_dir / "hadros3_camera_preview_interactive_summary.json"
     mode = str(values["observer_camera"].get("camera_preview_mode", "analytic_geometry_only"))
-    command, geodesic_model, backend, hadros_root = _interactive_make_command(values, output_dir, preview_options)
+    command, geodesic_model, backend, hadros_root, preview_metadata = _interactive_make_command(values, output_dir, preview_options)
     backends = available_backends()
     status = "launched"
     message = (
-        "Launched the original HADROS make geodesic_preview target. "
-        "Use arrows/mouse to orbit, +/- or mouse wheel to change distance, [] to change FOV, "
+        "Launched the HADROS3 self-contained CUDA preview."
+        if backend == "cuda"
+        else "Launched the original HADROS make geodesic_preview target. "
+    ) + (
+        " Use arrows/mouse to orbit, +/- or mouse wheel to change distance, [] to change FOV, "
         "A/D to change spin, R to render, S to save when supported, and Q/Esc to quit."
     )
     pid = None
     fallback_used = mode == "analytic_geometry_only"
     fallback_reason = "CPU/OpenGL HADROS preview requested by analytic_geometry_only mode." if fallback_used else None
-    if hadros_root is None or not (hadros_root / "Makefile").exists():
+    if backend == "cuda" and not Path(command[0]).exists():
+        status = "unavailable"
+        fallback_used = True
+        fallback_reason = "HADROS3 CUDA preview unavailable: bin/hadros3_geodesic_preview_cuda was not found."
+        message = fallback_reason
+    elif backend != "cuda" and (hadros_root is None or not (hadros_root / "Makefile").exists()):
         status = "unavailable"
         message = "Original HADROS checkout with Makefile was not found next to HADROS3."
     else:
@@ -474,7 +623,9 @@ def launch_interactive_camera_preview(
         "requested_mode": mode,
         "geodesic_model": geodesic_model,
         "backend_used": backend,
-        "backend_launcher": "original_hadros_make_geodesic_preview",
+        "backend_launcher": "hadros3_geodesic_preview_cuda" if backend == "cuda" else "original_hadros_make_geodesic_preview",
+        "camera_preview_cuda_self_contained": backend == "cuda",
+        "camera_preview_external_hadros_used": backend != "cuda",
         "original_hadros_root": str(hadros_root) if hadros_root is not None else None,
         "cuda_requested": backend == "cuda",
         "full_kerr_requested": mode == "full_kerr",
@@ -492,5 +643,6 @@ def launch_interactive_camera_preview(
         "available_backends": backends,
         "reused_hadros_components": discover_original_hadros(),
     }
+    summary.update(preview_metadata)
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return summary

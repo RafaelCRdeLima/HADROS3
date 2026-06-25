@@ -47,14 +47,6 @@ def schema() -> list[dict[str, Any]]:
             "tab": "Camera",
             "fields": [
                 field("observer_camera", "camera_model", "Camera model", "reused_hadros_kerr_camera", kind="select", options=["reused_hadros_kerr_camera"]),
-                field(
-                    "observer_camera",
-                    "camera_preview_mode",
-                    "Camera preview mode",
-                    "kerr_like_cuda",
-                    kind="select",
-                    options=["analytic_geometry_only", "kerr_like_cuda", "full_kerr"],
-                ),
                 field("observer_camera", "observer_distance_rg", "Observer distance", 60.0, kind="number"),
                 field("observer_camera", "inclination_deg", "Inclination", 80.0, kind="number"),
                 field("observer_camera", "azimuth_deg", "Azimuth", 0.0, kind="number"),

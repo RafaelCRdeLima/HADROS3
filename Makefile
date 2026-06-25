@@ -4,10 +4,13 @@ PORT ?= 8877
 
 CXX ?= g++
 CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -pedantic
+NVCC_CANDIDATE := $(shell command -v nvcc 2>/dev/null)
+NVCC ?= $(if $(NVCC_CANDIDATE),$(NVCC_CANDIDATE),nvcc)
+NVCCFLAGS ?= -O3 -std=c++17
 CPP_INCLUDES := -Icpp/include
 KERR_PORT_SRC := cpp/src/kerr/kerr_metric.cpp cpp/src/kerr/kerr_geodesic.cpp cpp/src/cascade/kerr_local_tetrad.cpp cpp/src/cascade/packet_kerr_null_propagator.cpp
 
-.PHONY: help cpp hadros3-forward-geodesics hadros-web render-hadros-web render-camera-preview launch-camera-preview sample-uhe-source propagate-forward-geodesics sample-dis-interactions serve-hadros-web check clean
+.PHONY: help cpp hadros3-forward-geodesics hadros3-geodesic-preview-cuda hadros-web render-hadros-web render-camera-preview launch-camera-preview sample-uhe-source propagate-forward-geodesics sample-dis-interactions serve-hadros-web check clean
 
 help:
 	@echo "HADROS3 commands:"
@@ -17,6 +20,7 @@ help:
 	@echo "  make launch-camera-preview Open the original HADROS interactive camera preview"
 	@echo "  make sample-uhe-source Generate H3-W5 UHE source samples through hadros-web"
 	@echo "  make cpp               Build HADROS3 C++ physics backends"
+	@echo "  make hadros3-geodesic-preview-cuda Build self-contained HADROS3 CUDA camera preview if CUDA is available"
 	@echo "  make propagate-forward-geodesics Generate H3-W6 forward geodesics through hadros-web"
 	@echo "  make sample-dis-interactions Generate H3-W7 DIS interaction samples through hadros-web"
 	@echo "  make serve-hadros-web  Alias for make hadros-web"
@@ -31,6 +35,21 @@ help:
 cpp: bin/hadros3_forward_geodesics
 
 hadros3-forward-geodesics: bin/hadros3_forward_geodesics
+
+hadros3-geodesic-preview-cuda:
+	@mkdir -p bin
+	@if command -v $(NVCC) >/dev/null 2>&1; then \
+	  echo "[hadros3_geodesic_preview_cuda] Building self-contained CUDA preview renderer"; \
+	  if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists glfw3; then \
+	    $(NVCC) $(NVCCFLAGS) -DHADROS_CUDA_PREVIEW_GLFW cpp/cuda/hadros3_geodesic_preview_cuda.cu -o bin/hadros3_geodesic_preview_cuda $$(pkg-config --cflags --libs glfw3) -lGL; \
+	  else \
+	    echo "[hadros3_geodesic_preview_cuda] GLFW not found; building headless CUDA preview renderer"; \
+	    $(NVCC) $(NVCCFLAGS) cpp/cuda/hadros3_geodesic_preview_cuda.cu -o bin/hadros3_geodesic_preview_cuda; \
+	  fi; \
+	else \
+	  echo "[hadros3_geodesic_preview_cuda] nvcc not found: $(NVCC)"; \
+	  echo "[hadros3_geodesic_preview_cuda] HADROS3 CUDA preview unavailable; camera preview will use fallback."; \
+	fi
 
 bin/hadros3_forward_geodesics: cpp/apps/hadros3_forward_geodesics.cpp $(KERR_PORT_SRC) cpp/include/geodesic_state.hpp cpp/include/kerr_metric.hpp cpp/include/kerr_metric_derivatives.hpp cpp/include/kerr_geodesic.hpp cpp/include/hadros/cascade/kerr_local_tetrad.hpp cpp/include/hadros/cascade/packet_kerr_null_propagator.hpp cpp/include/hadros/cascade/types.hpp
 	@mkdir -p bin

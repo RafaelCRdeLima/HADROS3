@@ -372,7 +372,7 @@ let previewResolution = state.values.observer_camera.resolution || "512x288";
 let previewInteractiveResolution = state.values.observer_camera.preview_resolution || "256x144";
 let previewSkyMode = "texture";
 let previewGeodesicModel = state.values.observer_camera.camera_preview_mode === "full_kerr" ? "full_kerr" : "kerr_like";
-let previewNavMode = "celestial_plus_torus_volume";
+let previewNavMode = state.values.observer_camera.preview_nav_mode || "celestial_plus_torus_volume";
 let previewCelestialRadiusRs = "40";
 let previewPhysicalTorus = true;
 let previewOpaqueStructures = false;
@@ -439,7 +439,7 @@ async function renderProducts() {{
 async function renderCameraPreview() {{
   const button = document.querySelector("#camera-preview-button");
   button.disabled = true;
-  try {{ await post("/api/render-camera-preview", collect()); }}
+  try {{ await postCameraPreview("/api/render-camera-preview"); }}
   finally {{ button.disabled = false; }}
 }}
 async function sampleUheSource() {{
@@ -802,7 +802,11 @@ function bindHadrosCameraPanel() {{
     values.observer_camera.camera_preview_mode = previewGeodesicModel === "full_kerr" ? "full_kerr" : "kerr_like_cuda";
     state.values = values;
   }};
-  get("cameraPreviewNavMode").onchange = event => previewNavMode = event.target.value;
+  get("cameraPreviewNavMode").onchange = event => {{
+    previewNavMode = event.target.value;
+    state.values.observer_camera.preview_nav_mode = previewNavMode;
+    render();
+  }};
   get("cameraPreviewCelestialRadius").oninput = event => previewCelestialRadiusRs = event.target.value || "40";
   get("previewPhysicalTorus").oninput = event => previewPhysicalTorus = event.target.checked;
   get("previewOpaqueStructures").oninput = event => previewOpaqueStructures = event.target.checked;
@@ -837,7 +841,14 @@ function renderBackendTable() {{
     `<tr><td>${{mode}}</td><td class="${{info.available ? "ok" : "pending"}}">${{info.available ? "available" : "unavailable"}}</td><td>${{info.backend || ""}}</td></tr>`
   ).join("");
   const summary = state.camera_summary;
-  const summaryHtml = summary ? `<p class="note">Camera preview: <strong>${{summary.status}}</strong> / mode <code>${{summary.requested_mode}}</code><br>${{summary.message || ""}}</p>` : `<p class="note">No camera preview summary yet.</p>`;
+  const summaryHtml = summary ? `<p class="note">Camera preview: <strong>${{summary.status}}</strong> / mode <code>${{summary.requested_mode}}</code><br>${{summary.message || ""}}</p>
+  <div class="summary-grid">
+    <div class="summary-item"><strong>backend_used</strong><code>${{summary.backend_used || "pending"}}</code></div>
+    <div class="summary-item"><strong>cuda_used</strong>${{String(summary.cuda_used)}}</div>
+    <div class="summary-item"><strong>fallback_used</strong>${{String(summary.fallback_used)}}</div>
+    <div class="summary-item"><strong>camera_preview_cuda_self_contained</strong>${{String(summary.camera_preview_cuda_self_contained)}}</div>
+    <div class="summary-item"><strong>camera_preview_external_hadros_used</strong>${{String(summary.camera_preview_external_hadros_used)}}</div>
+  </div>` : `<p class="note">No camera preview summary yet.</p>`;
   return `${{summaryHtml}}<table class="backend-table"><thead><tr><th>Mode</th><th>Status</th><th>Backend</th></tr></thead><tbody>${{rows}}</tbody></table>`;
 }}
 function renderSourcePanel() {{
@@ -1422,7 +1433,7 @@ class Handler(BaseHTTPRequestHandler):
             output_dir = camera_preview_dir(run_dir)
             output_dir.mkdir(parents=True, exist_ok=True)
             write_values(self.config_path, values)
-            summary = render_camera_preview(values, root=ROOT, output_dir=output_dir)
+            summary = render_camera_preview(values, root=ROOT, output_dir=output_dir, preview_options=preview_options)
             self._send(200, json.dumps(summary, indent=2, sort_keys=True) + "\n", "application/json")
             return
         if self.path == "/api/sample-uhe-source":

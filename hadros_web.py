@@ -309,7 +309,7 @@ def render_html(values: dict[str, dict[str, Any]], config_path: Path) -> str:
     body {{ font-family: system-ui, sans-serif; margin: 0; background: #eef2f6; color: #18202a; }}
     header {{ padding: 18px 24px 16px; background: #000; color: white; display: grid; place-items: center; text-align: center; }}
     .brand {{ display: grid; justify-items: center; gap: 8px; }}
-    .brand-logo {{ width: min(520px, 82vw); height: 160px; object-fit: contain; display: block; }}
+    .brand-logo {{ width: min(1040px, 82vw); height: auto; max-height: 320px; object-fit: contain; display: block; }}
     main {{ max-width: 1680px; margin: 0 auto; padding: 18px; display: grid; grid-template-columns: 240px minmax(420px, 560px) minmax(560px, 1fr); gap: 18px; align-items: start; }}
     nav {{ background: white; border: 1px solid #d6dce5; border-radius: 6px; padding: 10px; position: sticky; top: 14px; }}
     .tab-button {{ display: block; width: 100%; text-align: left; margin: 0 0 6px; border-color: #d6dce5; background: #f8fafc; color: #18202a; }}
@@ -1086,8 +1086,6 @@ function renderDisPanel() {{
     ${{state.outputs.dis_interaction_candidates_exists ? `<a href="${{outUrl("dis_interaction_candidates")}}" target="_blank">Interaction candidates<br><code>${{outPath("dis_interaction_candidates")}}</code></a>` : ""}}
     ${{state.outputs.dis_accepted_interactions_exists ? `<a href="${{outUrl("dis_accepted_interactions")}}" target="_blank">Accepted interactions<br><code>${{outPath("dis_accepted_interactions")}}</code></a>` : ""}}
     ${{state.outputs.dis_optical_depth_report_exists ? `<a href="${{outUrl("dis_optical_depth_report")}}" target="_blank">Optical-depth report<br><code>${{outPath("dis_optical_depth_report")}}</code></a>` : ""}}
-    ${{state.outputs.dis_tau_preview_exists ? `<img src="${{outUrl("dis_tau_preview")}}?v=${{disPreviewVersion}}" alt="DIS tau preview">` : ""}}
-    ${{state.outputs.dis_interaction_locations_exists ? `<img src="${{outUrl("dis_interaction_locations")}}?v=${{disPreviewVersion}}" alt="DIS interaction locations">` : ""}}
   </div></section>`;
   return `<div class="source-panel">
     ${{inputHtml}}
@@ -1140,7 +1138,12 @@ function renderContextPanel() {{
       : state.outputs.dis_interaction_locations_exists
       ? `<img src="${{outUrl("dis_interaction_locations")}}?v=${{disPreviewVersion}}" alt="DIS interaction locations">`
       : `<div class="context-empty">No DIS interaction map generated yet.</div>`;
-    return `<aside class="panel"><h2>DIS Interaction Map</h2><div class="context-figure">${{figure}}</div></aside>`;
+    const diagnosticCards = [
+      state.outputs.dis_tau_preview_exists ? `<figure class="diagnostic-plot-card"><figcaption>DIS tau preview</figcaption><a href="${{outUrl("dis_tau_preview")}}" target="_blank"><img src="${{outUrl("dis_tau_preview")}}?v=${{disPreviewVersion}}" alt="DIS tau preview"></a></figure>` : "",
+      state.outputs.dis_interaction_locations_exists ? `<figure class="diagnostic-plot-card"><figcaption>DIS interaction locations 2D</figcaption><a href="${{outUrl("dis_interaction_locations")}}" target="_blank"><img src="${{outUrl("dis_interaction_locations")}}?v=${{disPreviewVersion}}" alt="DIS interaction locations 2D"></a></figure>` : "",
+    ].filter(Boolean).join("");
+    const diagnostics = diagnosticCards ? `<section><h2>Diagnostics</h2><div class="diagnostic-card-grid">${{diagnosticCards}}</div></section>` : "";
+    return `<aside class="panel"><h2>DIS Interaction Map</h2><div class="context-figure">${{figure}}</div>${{diagnostics}}</aside>`;
   }}
   return "";
 }}

@@ -275,10 +275,34 @@ def draw_interaction_locations(accepted: list[dict[str, Any]], segments: list[di
     r_outer = float(torus["r_outer_rg"])
     r_peak = float(torus["r_peak_rg"])
     half_height = r_peak * math.tan(math.radians(float(torus["half_opening_angle_deg"])))
-    ax.add_patch(plt.Circle((0.0, 0.0), r_outer, color="#f97316", alpha=0.12))
-    ax.add_patch(plt.Circle((0.0, 0.0), r_inner, color="#f8fafc", alpha=1.0))
+    for sign in (-1.0, 1.0):
+        ax.fill_between(
+            [sign * r_inner, sign * r_outer],
+            [-half_height, -half_height],
+            [half_height, half_height],
+            color="#f97316",
+            alpha=0.12,
+            zorder=1,
+        )
+        ax.plot([sign * r_inner, sign * r_outer], [half_height, half_height], color="#fb923c", alpha=0.55, linewidth=1.0)
+        ax.plot([sign * r_inner, sign * r_outer], [-half_height, -half_height], color="#fb923c", alpha=0.55, linewidth=1.0)
+        ax.plot([sign * r_inner, sign * r_inner], [-half_height, half_height], color="#fb923c", alpha=0.55, linewidth=1.0)
+        ax.plot([sign * r_outer, sign * r_outer], [-half_height, half_height], color="#fb923c", alpha=0.55, linewidth=1.0)
+    cone = values["polar_cone"]
+    if bool(cone["enabled"]):
+        opening = math.radians(float(cone["opening_angle_deg"]))
+        r_min = float(cone["r_min_rg"])
+        r_max = float(cone["r_max_rg"])
+        signs = (1.0, -1.0) if str(cone["draw_mode"]) == "bipolar_funnel" else (1.0,)
+        for sign in signs:
+            polygon = [
+                (-r_min * math.sin(opening), sign * r_min * math.cos(opening)),
+                (-r_max * math.sin(opening), sign * r_max * math.cos(opening)),
+                (r_max * math.sin(opening), sign * r_max * math.cos(opening)),
+                (r_min * math.sin(opening), sign * r_min * math.cos(opening)),
+            ]
+            ax.add_patch(plt.Polygon(polygon, closed=True, facecolor="#60a5fa", edgecolor="#bfdbfe", alpha=0.10, linewidth=1.0, zorder=1))
     ax.add_patch(plt.Circle((0.0, 0.0), 1.0, color="black", alpha=0.95))
-    ax.axhspan(-half_height, half_height, color="#f97316", alpha=0.08)
     if accepted:
         xs, zs, colors = [], [], []
         for record in accepted:
@@ -302,7 +326,7 @@ def draw_interaction_locations(accepted: list[dict[str, Any]], segments: list[di
     plt.close(fig)
 
 
-def write_interaction_locations_html(accepted: list[dict[str, Any]], output_path: Path) -> None:
+def write_interaction_locations_html(accepted: list[dict[str, Any]], values: dict[str, dict[str, Any]], output_path: Path) -> None:
     points = [
         {
             "x": _xyz(float(row["interaction_r_rg"]), float(row["interaction_theta_rad"]), float(row["interaction_phi_rad"]))[0],
@@ -313,6 +337,24 @@ def write_interaction_locations_html(accepted: list[dict[str, Any]], output_path
         for row in accepted
     ]
     payload = json.dumps(points)
+    torus = values["analytic_torus"]
+    cone = values["polar_cone"]
+    geometry = {
+        "torus": {
+            "rInner": float(torus["r_inner_rg"]),
+            "rOuter": float(torus["r_outer_rg"]),
+            "rPeak": float(torus["r_peak_rg"]),
+            "halfOpeningRad": math.radians(float(torus["half_opening_angle_deg"])),
+        },
+        "cone": {
+            "enabled": bool(cone["enabled"]),
+            "openingRad": math.radians(float(cone["opening_angle_deg"])),
+            "rMin": float(cone["r_min_rg"]),
+            "rMax": float(cone["r_max_rg"]),
+            "bipolar": str(cone["draw_mode"]) == "bipolar_funnel",
+        },
+    }
+    geometry_payload = json.dumps(geometry)
     output_path.write_text(
         f"""<!doctype html>
 <html><head><meta charset="utf-8"><title>HADROS3 DIS Interaction Locations</title>
@@ -320,6 +362,7 @@ def write_interaction_locations_html(accepted: list[dict[str, Any]], output_path
 <body><canvas id="canvas" width="1200" height="760"></canvas><div class="note">DIS interaction locations in the HADROS3 coordinate frame. Drag to rotate, wheel to zoom. Accepted interactions: {len(points)}</div>
 <script>
 const points = {payload};
+const geometry = {geometry_payload};
 const c = document.getElementById("canvas"), ctx = c.getContext("2d");
 let yaw = 0.72, pitch = 0.38, zoom = 1.0, dragging = false, lastX = 0, lastY = 0;
 function rotate(p) {{
@@ -333,13 +376,59 @@ function draw() {{
   ctx.clearRect(0,0,c.width,c.height);
   ctx.fillStyle = "#101318"; ctx.fillRect(0,0,c.width,c.height);
   const rotated = points.map(rotate).sort((a,b) => a.y - b.y);
-  const lim = Math.max(5, ...points.flatMap(p => [Math.abs(p.x), Math.abs(p.y), Math.abs(p.z)])) * 1.25 / zoom;
+  const geometryLimit = Math.max(geometry.torus.rOuter, geometry.cone.rMax || 0);
+  const pointLimit = points.length ? Math.max(...points.flatMap(p => [Math.abs(p.x), Math.abs(p.y), Math.abs(p.z)])) : 0;
+  const lim = Math.max(5, pointLimit, geometryLimit) * 1.25 / zoom;
   const sx = x => c.width * (0.5 + 0.42 * x / lim);
   const sy = z => c.height * (0.5 - 0.42 * z / lim);
+  const project = p => {{
+    const rp = rotate({{x: p.x, y: p.y, z: p.z, energy: 0}});
+    return {{x: sx(rp.x), y: sy(rp.z), depth: rp.y}};
+  }};
+  const polyline = pts => {{
+    if (!pts.length) return;
+    const first = project(pts[0]);
+    ctx.beginPath(); ctx.moveTo(first.x, first.y);
+    for (const p of pts.slice(1)) {{
+      const q = project(p);
+      ctx.lineTo(q.x, q.y);
+    }}
+    ctx.stroke();
+  }};
+  const ring = (radius, z = 0) => Array.from({{length: 145}}, (_, i) => {{
+    const a = 2 * Math.PI * i / 144;
+    return {{x: radius * Math.cos(a), y: radius * Math.sin(a), z}};
+  }});
+  const coneEdge = (sign, side) => {{
+    const a = geometry.cone.openingRad;
+    const s = Math.sin(a) * side;
+    const c0 = Math.cos(a) * sign;
+    return [
+      {{x: geometry.cone.rMin * s, y: 0, z: geometry.cone.rMin * c0}},
+      {{x: geometry.cone.rMax * s, y: 0, z: geometry.cone.rMax * c0}},
+    ];
+  }};
   ctx.strokeStyle = "#334155"; ctx.lineWidth = 1;
   for (let i=-4;i<=4;i++) {{
     ctx.beginPath(); ctx.moveTo(sx(-lim), sy(i*lim/4)); ctx.lineTo(sx(lim), sy(i*lim/4)); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(sx(i*lim/4), sy(-lim)); ctx.lineTo(sx(i*lim/4), sy(lim)); ctx.stroke();
+  }}
+  const torusHalfHeight = geometry.torus.rPeak * Math.tan(geometry.torus.halfOpeningRad);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = "rgba(251,146,60,0.78)";
+  polyline(ring(geometry.torus.rOuter, 0));
+  polyline(ring(geometry.torus.rInner, 0));
+  ctx.lineWidth = 1.2;
+  ctx.strokeStyle = "rgba(251,146,60,0.36)";
+  polyline(ring(geometry.torus.rOuter, torusHalfHeight));
+  polyline(ring(geometry.torus.rOuter, -torusHalfHeight));
+  polyline(ring(geometry.torus.rPeak, torusHalfHeight));
+  polyline(ring(geometry.torus.rPeak, -torusHalfHeight));
+  if (geometry.cone.enabled) {{
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "rgba(96,165,250,0.82)";
+    polyline(coneEdge(1, 1)); polyline(coneEdge(1, -1));
+    if (geometry.cone.bipolar) {{ polyline(coneEdge(-1, 1)); polyline(coneEdge(-1, -1)); }}
   }}
   ctx.fillStyle = "black"; ctx.beginPath(); ctx.arc(sx(0), sy(0), Math.max(4, 0.55*c.width/lim), 0, 2*Math.PI); ctx.fill();
   for (const p of rotated) {{
@@ -350,6 +439,7 @@ function draw() {{
   }}
   ctx.fillStyle="#e5e7eb"; ctx.font="20px system-ui"; ctx.fillText("HADROS3 DIS Interaction Locations", 18, 32);
   ctx.font="14px system-ui"; ctx.fillText(`yaw=${{yaw.toFixed(2)}} pitch=${{pitch.toFixed(2)}} zoom=${{zoom.toFixed(2)}}`, 18, 54);
+  ctx.fillText(`torus Rin=${{geometry.torus.rInner.toFixed(1)}} Rout=${{geometry.torus.rOuter.toFixed(1)}} rg; cone=${{(geometry.cone.openingRad*180/Math.PI).toFixed(1)}} deg`, 18, 76);
 }}
 c.addEventListener("mousedown", e => {{ dragging = true; lastX = e.clientX; lastY = e.clientY; }});
 window.addEventListener("mouseup", () => dragging = false);
@@ -628,7 +718,7 @@ def _generate_dis_interaction_products_python(values: dict[str, dict[str, Any]],
     _write_summary_csv(summary_csv_path, summary)
     draw_tau_preview(path_records, tau_preview_path)
     draw_interaction_locations(accepted, segments, values, locations_path)
-    write_interaction_locations_html(accepted, locations_html_path)
+    write_interaction_locations_html(accepted, values, locations_html_path)
     return summary
 
 
@@ -788,7 +878,7 @@ def generate_dis_interaction_products_cpp(values: dict[str, dict[str, Any]], *, 
     _write_summary_csv(output_dir / "dis_summary.csv", summary)
     draw_tau_preview(path_records, tau_preview_path)
     draw_interaction_locations(accepted, segments, values, locations_path)
-    write_interaction_locations_html(accepted, locations_html_path)
+    write_interaction_locations_html(accepted, values, locations_html_path)
     return summary
 
 

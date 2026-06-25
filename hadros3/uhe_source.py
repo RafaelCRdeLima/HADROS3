@@ -32,6 +32,12 @@ def validate_source_records(records: list[dict[str, Any]], values: dict[str, dic
         r = float(position["r_rg"])
         theta = float(position["theta_deg"])
         phi = float(position["phi_rad"])
+        if float(record["x_emit_r"]) != r:
+            problems.append(f"sample {index} x_emit_r does not match position.r_rg")
+        if float(record["x_emit_theta"]) != float(position["theta_rad"]):
+            problems.append(f"sample {index} x_emit_theta does not match position.theta_rad")
+        if float(record["x_emit_phi"]) != phi:
+            problems.append(f"sample {index} x_emit_phi does not match position.phi_rad")
         physical_pdf = float(record["source_physical_pdf"])
         sampling_pdf = float(record["source_sampling_pdf"])
         weight = float(record["source_weight"])

@@ -35,6 +35,9 @@ def test_polar_cone_sampler_respects_domains_and_weights() -> None:
         assert 3.0 <= position["r_rg"] <= 9.0
         assert 2.0 <= position["theta_deg"] <= 20.0
         assert 0.0 <= position["phi_rad"] < 2.0 * math.pi
+        assert record["x_emit_r"] == position["r_rg"]
+        assert record["x_emit_theta"] == position["theta_rad"]
+        assert record["x_emit_phi"] == position["phi_rad"]
         assert record["E_nu_emit_gev"] == 1.0e12
         assert record["source_physical_pdf"] > 0.0
         assert record["source_sampling_pdf"] > 0.0
@@ -53,6 +56,22 @@ def test_polar_cone_sampler_respects_domains_and_weights() -> None:
         assert record["direction_physical_pdf"] == 1.0
         assert record["direction_weight"] == 1.0
         assert record["emission_direction"]["direction_model"] == "coordinate_radial_outward"
+        for key in [
+            "x_emit_r",
+            "x_emit_theta",
+            "x_emit_phi",
+            "E_nu_emit_gev",
+            "direction_model",
+            "emission_direction",
+            "direction_local_components",
+            "direction_sampling_pdf",
+            "direction_physical_pdf",
+            "direction_weight",
+            "source_sampling_pdf",
+            "source_physical_pdf",
+            "source_weight",
+        ]:
+            assert key in record
         assert record["momentum_generator"] == "ProxyRadialMomentumGenerator"
         assert record["momentum_is_physical_kerr"] is False
         assert record["initial_momentum"]["four_momentum"] is None
@@ -96,6 +115,7 @@ def test_generate_uhe_source_products_and_provenance(tmp_path: Path) -> None:
     assert provenance["source_sampler"]["direction_sampling_pdf"] == 1.0
     assert provenance["source_sampler"]["direction_physical_pdf"] == 1.0
     assert provenance["source_sampler"]["direction_weight"] == 1.0
+    assert provenance["source_sampler"]["four_momentum_sampled_in_source"] is False
     assert provenance["source_sampler"]["momentum_is_physical_kerr"] is False
     assert provenance["source_sampler"]["forward_neutrino_geodesics_invoked"] is False
     assert provenance["source_sampler"]["optical_depth_dis_sampler_invoked"] is False

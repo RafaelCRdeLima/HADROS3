@@ -117,6 +117,9 @@ def test_forward_geodesic_validation_report_and_stop_statistics(tmp_path: Path) 
     assert validation["killing_energy_max_error"] <= values["forward_geodesics"]["killing_energy_tolerance"]
     assert validation["lz_max_error"] <= values["forward_geodesics"]["lz_tolerance"]
     assert validation["validation_pass"] is True
+    summary_path = tmp_path / "ForwardGeodesics" / "uhe_neutrino_forward_summary.json"
+    summary_json = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary_json["direction_model"] == "coordinate_radial_outward"
     stop_csv = (tmp_path / "ForwardGeodesics" / "stop_condition_statistics.csv").read_text(encoding="utf-8")
     assert "stop_condition,count,fraction" in stop_csv
     assert "outer_escape_radius" in stop_csv

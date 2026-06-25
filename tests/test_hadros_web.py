@@ -106,6 +106,10 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source() -
     assert "Coordinate radial outward" in html
     assert "Jet axis" in html
     assert "Cone emission" in html
+    assert "The UHE source samples emission position, energy and direction." in html
+    assert "The Kerr four-momentum is not sampled here" in html
+    assert "Uses</strong>position + energy + emission_direction" in html
+    assert "Builds</strong>Kerr null four-momentum" in html
     assert "Input UHEsource/" in html
     assert "ForwardGeodesics/" in html
     assert "uhe_neutrino_forward_preview.png" in html

@@ -607,7 +607,8 @@ function renderBackendTable() {{
 }}
 function renderSourcePanel() {{
   const summary = state.source_summary;
-  const directionModel = state.values.uhe_neutrino_source.direction_model || "coordinate_radial_outward";
+  const sourceValues = state.values.uhe_neutrino_source;
+  const directionModel = sourceValues.direction_model || "coordinate_radial_outward";
   const directionOptions = [
     ["coordinate_radial_outward", "Coordinate radial outward", true],
     ["jet_axis_future", "Jet axis", false],
@@ -615,7 +616,17 @@ function renderSourcePanel() {{
     ["isotropic_local_future", "Isotropic local (future)", false],
     ["custom_future", "Custom (future)", false],
   ].map(([value, label, enabled]) => `<label class="toggle-row"><input type="radio" name="directionModelDisplay" value="${{value}}" ${{directionModel === value ? "checked" : ""}} disabled><span class="toggle-main"><span class="toggle-name">${{label}}</span><span class="toggle-help">${{enabled ? "Implemented in H3-W5." : "Future model."}}</span></span></label>`).join("");
-  const directionPanel = `<section><h2>Initial Direction</h2><div class="camera-controls-card">${{directionOptions}}</div></section>`;
+  const directionStatus = directionModel === "coordinate_radial_outward" ? "implemented" : "future";
+  const directionPanel = `<section><h2>Initial Direction</h2>
+    <p class="note">The UHE source samples emission position, energy and direction.<br>The Kerr four-momentum is not sampled here; it is constructed later by Forward Geodesics from position + energy + direction.</p>
+    <div class="summary-grid">
+      <div class="summary-item"><strong>direction_model</strong>${{directionModel}}</div>
+      <div class="summary-item"><strong>direction_opening_angle_deg</strong>${{sourceValues.direction_opening_angle_deg}}</div>
+      <div class="summary-item"><strong>direction_seed</strong>${{sourceValues.direction_seed}}</div>
+      <div class="summary-item"><strong>Model status</strong><span class="${{directionStatus === "implemented" ? "ok" : "pending"}}">${{directionStatus}}</span></div>
+    </div>
+    <div class="camera-controls-card">${{directionOptions}}</div>
+  </section>`;
   const sourceLinks = `<div class="output-link-grid">
     ${{state.outputs.uhe_source_samples_exists ? `<a href="${{outUrl("uhe_source_samples")}}" target="_blank">Samples<br><code>${{outPath("uhe_source_samples")}}</code></a>` : ""}}
     ${{state.outputs.uhe_source_summary_exists ? `<a href="${{outUrl("uhe_source_summary")}}" target="_blank">Summary CSV<br><code>${{outPath("uhe_source_summary")}}</code></a>` : ""}}
@@ -649,6 +660,9 @@ function renderForwardPanel() {{
   const inputStatus = `<div class="summary-grid">
     <div class="summary-item"><strong>Input UHEsource/</strong><span class="${{sourceFound ? "ok" : "pending"}}">${{sourceFound ? "found" : "missing"}}</span></div>
     <div class="summary-item"><strong>Input samples</strong><code>${{outPath("uhe_source_samples")}}</code></div>
+    <div class="summary-item"><strong>Input</strong><code>UHEsource/uhe_neutrino_source_samples.jsonl</code></div>
+    <div class="summary-item"><strong>Uses</strong>position + energy + emission_direction</div>
+    <div class="summary-item"><strong>Builds</strong>Kerr null four-momentum <code>p_mu</code></div>
   </div>`;
   const forwardLinks = `<div class="output-link-grid">
     ${{state.outputs.forward_preview_exists ? `<a href="${{outUrl("forward_preview")}}" target="_blank">Preview PNG<br><code>${{outPath("forward_preview")}}</code></a>` : ""}}

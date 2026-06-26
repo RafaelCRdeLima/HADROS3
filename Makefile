@@ -11,7 +11,7 @@ NVCCFLAGS ?= -O3 -std=c++17
 CPP_INCLUDES := -Icpp/include
 KERR_PORT_SRC := cpp/src/kerr/kerr_metric.cpp cpp/src/kerr/kerr_geodesic.cpp cpp/src/cascade/kerr_local_tetrad.cpp cpp/src/cascade/packet_kerr_null_propagator.cpp
 
-.PHONY: help install-dev test cpp hadros3-forward-geodesics hadros3-dis-sampler hadros3-observer-bridge hadros3-powheg-driver hadros3-geodesic-preview-cuda powheg-fetch powheg-build powheg-smoke powheg hadros-web render-hadros-web render-camera-preview launch-camera-preview sample-uhe-source propagate-forward-geodesics sample-dis-interactions observer-bridge serve-hadros-web check validate clean
+.PHONY: help install-dev test cpp hadros3-forward-geodesics hadros3-dis-sampler hadros3-observer-bridge hadros3-powheg-driver hadros3-geodesic-preview-cuda powheg-fetch powheg-build powheg-smoke powheg hadros-web render-hadros-web render-camera-preview launch-camera-preview sample-uhe-source propagate-forward-geodesics sample-dis-interactions observer-bridge serve-hadros-web release-software release-physics release-pipeline theory check validate clean
 
 help:
 	@echo "HADROS3 commands:"
@@ -34,6 +34,10 @@ help:
 	@echo "  make propagate-forward-geodesics Generate H3-W6 forward geodesics through hadros-web"
 	@echo "  make sample-dis-interactions Generate H3-W7 DIS interaction samples through hadros-web"
 	@echo "  make observer-bridge   Generate H3-W8 Observer Bridge scoring products through hadros-web"
+	@echo "  make release-software  Increment software_version and rebuild the Theory PDF"
+	@echo "  make release-physics   Increment physics_version/theory_version and rebuild the Theory PDF"
+	@echo "  make release-pipeline PIPELINE=H3-W9b Update pipeline_version and rebuild the Theory PDF"
+	@echo "  make theory            Rebuild docs/Theory/HADROS3_Physics_Theory.pdf"
 	@echo "  make serve-hadros-web  Alias for make hadros-web"
 	@echo "  make check             Run syntax checks and the Python test suite"
 	@echo "  make validate          Build C++ backends and run full checks"
@@ -130,6 +134,25 @@ observer-bridge:
 
 serve-hadros-web:
 	$(MAKE) hadros-web
+
+release-software:
+	$(PYTHON) scripts/release/update_version.py --software
+	$(MAKE) theory
+
+release-physics:
+	$(PYTHON) scripts/release/update_version.py --physics
+	$(MAKE) theory
+
+release-pipeline:
+	@if [ -z "$(PIPELINE)" ]; then echo "PIPELINE is required, for example: make release-pipeline PIPELINE=H3-W9b"; exit 2; fi
+	$(PYTHON) scripts/release/update_version.py --pipeline $(PIPELINE)
+	$(MAKE) theory
+
+theory:
+	cd docs/Theory && pdflatex -interaction=nonstopmode HADROS3_Physics_Theory.tex
+	cd docs/Theory && pdflatex -interaction=nonstopmode HADROS3_Physics_Theory.tex
+	cd docs/Theory && pdflatex -interaction=nonstopmode HADROS3_Physics_Theory.tex
+	rm -f docs/Theory/HADROS3_Physics_Theory.aux docs/Theory/HADROS3_Physics_Theory.out docs/Theory/HADROS3_Physics_Theory.toc docs/Theory/HADROS3_Physics_Theory.log
 
 check:
 	$(PYTHON) -m py_compile hadros_web.py hadros3/*.py

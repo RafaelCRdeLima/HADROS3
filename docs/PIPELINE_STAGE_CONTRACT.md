@@ -275,6 +275,49 @@ approximations, physical models, statistical weights, proxies, physical
 statistics, or physical backends must update the relevant scientific release
 versions and the Theory PDF.
 
+Scientific release versions must be changed through:
+
+```bash
+make release-software
+make release-physics
+make release-pipeline PIPELINE=H3-W9b
+```
+
+These targets call `scripts/release/update_version.py`, which is the official
+way to edit `VERSION.json`. It updates release date and git commit metadata and
+keeps the Theory LaTeX metadata synchronized before rebuilding the PDF.
+
+Use:
+
+```text
+make release-software
+```
+
+for infrastructure, UI, dashboard, build-system, test, documentation, or visual
+diagnostic changes that do not change implemented physics.
+
+Use:
+
+```text
+make release-physics
+```
+
+for changes to equations, approximations, physical models, statistical weights,
+proxies, physical statistics, or physical backends.
+
+Use:
+
+```text
+make release-pipeline PIPELINE=...
+```
+
+when a new physical stage becomes the most advanced implemented stage. After
+any release update, run:
+
+```bash
+make validate
+```
+
 ## Presets And Runtime State
 
 Static presets, including:

@@ -82,6 +82,23 @@ theory_version
   -> tracks the documented implemented physics in the Theory PDF
 ```
 
+Use the release-management targets to update these values:
+
+```bash
+make release-software
+make release-physics
+make release-pipeline PIPELINE=H3-W9b
+make validate
+```
+
+Use `make release-software` for infrastructure, UI, build-system, test, or
+documentation releases that do not change implemented physics. Use
+`make release-physics` when equations, physical models, proxies, weights,
+statistics, or physical backends change. Use `make release-pipeline PIPELINE=...`
+when a new physical stage becomes the most advanced implemented pipeline stage.
+Each release target rebuilds the Theory PDF; always run `make validate`
+afterward.
+
 Render the preview/configuration products directly and exit:
 
 ```bash

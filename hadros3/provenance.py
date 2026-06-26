@@ -49,9 +49,7 @@ def _scientific_release(root: Path, git_commit: str | None) -> dict[str, Any]:
     version_path = root / "VERSION.json"
     try:
         payload = json.loads(version_path.read_text(encoding="utf-8"))
-        for key in DEFAULT_SCIENTIFIC_RELEASE:
-            if key in payload:
-                release[key] = payload[key]
+        release.update(payload)
     except Exception:
         pass
     release["git_commit"] = git_commit

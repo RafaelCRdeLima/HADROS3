@@ -17,6 +17,9 @@ from typing import Any
 
 from .config import validate_values
 from .forward_geodesics import kerr_covariant_metric_components
+from .medium_model import analytic_torus_density_g_cm3 as shared_analytic_torus_density_g_cm3
+from .medium_model import medium_metadata
+from .medium_renderer import MediumRenderer
 from .paths import DIS_DIR, dis_dir, forward_geodesics_dir, uhe_source_dir
 
 
@@ -138,22 +141,7 @@ def rg_to_cm(mass_msun: float) -> float:
 
 
 def analytic_torus_density_g_cm3(r_rg: float, theta_rad: float, values: dict[str, dict[str, Any]], *, density_floor_g_cm3: float = 0.0) -> float:
-    torus = values["analytic_torus"]
-    r_inner = float(torus["r_inner_rg"])
-    r_outer = float(torus["r_outer_rg"])
-    r_peak = float(torus["r_peak_rg"])
-    half_angle = math.radians(float(torus["half_opening_angle_deg"]))
-    density_norm = float(torus["density_norm_g_cm3"])
-    if r_rg < r_inner or r_rg > r_outer:
-        return 0.0
-    theta_width = max(half_angle, 1.0e-6)
-    radial_width = max(0.5 * (r_outer - r_inner), 1.0e-6)
-    radial_profile = math.exp(-0.5 * ((r_rg - r_peak) / radial_width) ** 2)
-    theta_profile = math.exp(-0.5 * ((theta_rad - 0.5 * math.pi) / theta_width) ** 2)
-    rho = density_norm * radial_profile * theta_profile
-    if rho <= 0.0:
-        return 0.0
-    return max(rho, density_floor_g_cm3)
+    return shared_analytic_torus_density_g_cm3(r_rg, theta_rad, values, density_floor_g_cm3=density_floor_g_cm3)
 
 
 def zamo_or_static_local_energy_gev(segment: dict[str, Any], spin_a: float, medium_velocity_model: str) -> tuple[float, bool]:
@@ -323,74 +311,26 @@ def draw_interaction_locations(accepted: list[dict[str, Any]], segments: list[di
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    from matplotlib.colors import LogNorm
 
     fig, ax = plt.subplots(figsize=(7.6, 7.0), facecolor="#f8fafc")
     config = dis_config_from_values(values)
     torus = values["analytic_torus"]
     r_inner = float(torus["r_inner_rg"])
     r_outer = float(torus["r_outer_rg"])
-    half_angle = math.radians(float(torus["half_opening_angle_deg"]))
     limit = max(float(values["forward_geodesics"]["outer_radius_rg"]) * 0.35, r_outer * 1.25, 5.0)
-    n_r = 220
-    n_z = 260
-    r_axis = [limit * i / (n_r - 1) for i in range(n_r)]
-    z_axis = [-limit + 2.0 * limit * i / (n_z - 1) for i in range(n_z)]
-    density_grid: list[list[float]] = []
-    positive: list[float] = []
-    for z in z_axis:
-        row: list[float] = []
-        for cylindrical_r in r_axis:
-            radius = math.hypot(cylindrical_r, z)
-            theta = math.atan2(cylindrical_r, z) if radius > 0.0 else 0.0
-            rho = analytic_torus_density_g_cm3(radius, theta, values, density_floor_g_cm3=config.density_floor_g_cm3)
-            row.append(rho)
-            if rho > 0.0:
-                positive.append(rho)
-        density_grid.append(row)
-    if positive:
-        image = ax.imshow(
-            density_grid,
-            origin="lower",
-            extent=[min(r_axis), max(r_axis), min(z_axis), max(z_axis)],
-            aspect="equal",
-            cmap="magma",
-            norm=LogNorm(vmin=max(min(positive), 1.0e-30), vmax=max(positive)),
-            alpha=0.78,
-            zorder=0,
-        )
-        cbar = fig.colorbar(image, ax=ax, shrink=0.82)
-        cbar.set_label(r"$\rho$ [g cm$^{-3}$]")
-        contour_levels = [max(positive) * factor for factor in (1.0e-4, 1.0e-3, 1.0e-2, 1.0e-1)]
-        ax.contour(
-            r_axis,
-            z_axis,
-            density_grid,
-            levels=[level for level in contour_levels if min(positive) < level < max(positive)],
-            colors="#f8fafc",
-            linewidths=0.55,
-            alpha=0.64,
-            zorder=2,
-        )
+    MediumRenderer.draw_density_map_Rz(
+        ax,
+        values,
+        limit_rg=limit,
+        density_floor_g_cm3=config.density_floor_g_cm3,
+        n_r=220,
+        n_z=260,
+        add_colorbar_to=fig,
+    )
     for segment in segments[:: max(1, len(segments) // 900)]:
         r0, z0 = _rz(float(segment["r_start_rg"]), float(segment["theta_start_rad"]))
         r1, z1 = _rz(float(segment["r_end_rg"]), float(segment["theta_end_rad"]))
         ax.plot([r0, r1], [z0, z1], color="#93c5fd", alpha=0.18, linewidth=0.55, zorder=3)
-    ax.add_patch(plt.Circle((0.0, 0.0), r_inner, fill=False, edgecolor="#38bdf8", linestyle="--", linewidth=1.2, alpha=0.85, label="hard radial cuts"))
-    ax.add_patch(plt.Circle((0.0, 0.0), r_outer, fill=False, edgecolor="#38bdf8", linestyle="--", linewidth=1.2, alpha=0.85))
-    ray_length = r_outer * 1.15
-    for sign in (-1.0, 1.0):
-        theta = 0.5 * math.pi + sign * half_angle
-        for x_sign in (-1.0, 1.0):
-            ax.plot(
-                [0.0, x_sign * ray_length * math.sin(theta)],
-                [0.0, ray_length * math.cos(theta)],
-                color="#fde047",
-                linestyle=":",
-                linewidth=0.9,
-                alpha=0.8,
-                label="Gaussian width angle" if sign < 0.0 and x_sign < 0.0 else None,
-            )
     cone = values["polar_cone"]
     if bool(cone["enabled"]):
         opening = math.radians(float(cone["opening_angle_deg"]))
@@ -416,7 +356,7 @@ def draw_interaction_locations(accepted: list[dict[str, Any]], segments: list[di
         scatter = ax.scatter(xs, zs, c=colors, s=28, cmap="viridis", edgecolors="black", linewidths=0.25, zorder=5)
         cbar = fig.colorbar(scatter, ax=ax, shrink=0.82)
         cbar.set_label(r"accepted point $\rho$ [g cm$^{-3}$]")
-    ax.set_title(f"DIS interaction locations on sampler density field\naccepted={len(accepted)}")
+    ax.set_title(f"DIS interaction locations on MediumRenderer density field\naccepted={len(accepted)}")
     ax.set_xlabel(r"$R=r\sin\theta$ [$r_g$]")
     ax.set_ylabel(r"$z$ [$r_g$]")
     ax.set_xlim(0.0, limit)
@@ -871,61 +811,22 @@ def draw_medium_density_map(
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    from matplotlib.colors import LogNorm
-    from matplotlib.patches import Circle
 
     config = dis_config_from_values(values)
     torus = values["analytic_torus"]
-    r_inner = float(torus["r_inner_rg"])
     r_outer = float(torus["r_outer_rg"])
-    half_angle = math.radians(float(torus["half_opening_angle_deg"]))
     limit = max(r_outer * 1.35, 5.0)
-    n_r = 280
-    n_z = 360
-    r_axis = [limit * i / (n_r - 1) for i in range(n_r)]
-    z_axis = [-limit + 2.0 * limit * i / (n_z - 1) for i in range(n_z)]
-    density_grid: list[list[float]] = []
-    positive: list[float] = []
-    for z in z_axis:
-        row: list[float] = []
-        for cylindrical_r in r_axis:
-            radius = math.hypot(cylindrical_r, z)
-            theta = math.atan2(cylindrical_r, z) if radius > 0.0 else 0.0
-            rho = analytic_torus_density_g_cm3(radius, theta, values, density_floor_g_cm3=config.density_floor_g_cm3)
-            row.append(rho)
-            if rho > 0.0:
-                positive.append(rho)
-        density_grid.append(row)
 
     fig, ax = plt.subplots(figsize=(8.6, 7.8), facecolor="#f8fafc")
-    if positive:
-        image = ax.imshow(
-            density_grid,
-            origin="lower",
-            extent=[min(r_axis), max(r_axis), min(z_axis), max(z_axis)],
-            aspect="equal",
-            cmap="magma",
-            norm=LogNorm(vmin=max(min(positive), 1.0e-30), vmax=max(positive)),
-        )
-        cbar = fig.colorbar(image, ax=ax, shrink=0.82)
-        cbar.set_label(r"$\rho$ [g cm$^{-3}$]")
-        contour_levels = [max(positive) * factor for factor in (1.0e-4, 1.0e-3, 1.0e-2, 1.0e-1)]
-        ax.contour(r_axis, z_axis, density_grid, levels=[level for level in contour_levels if min(positive) < level < max(positive)], colors="#f8fafc", linewidths=0.55, alpha=0.65)
-    else:
-        ax.imshow(density_grid, origin="lower", extent=[min(r_axis), max(r_axis), min(z_axis), max(z_axis)], aspect="equal", cmap="Greys")
-
-    ax.add_patch(Circle((0.0, 0.0), r_inner, fill=False, edgecolor="#38bdf8", linestyle="--", linewidth=1.4, label="hard radial cuts"))
-    ax.add_patch(Circle((0.0, 0.0), r_outer, fill=False, edgecolor="#38bdf8", linestyle="--", linewidth=1.4))
-    for sign in (-1.0, 1.0):
-        theta = 0.5 * math.pi + sign * half_angle
-        ax.plot(
-            [0.0, limit * math.sin(theta)],
-            [0.0, limit * math.cos(theta)],
-            color="#fde047",
-            linestyle=":",
-            linewidth=1.1,
-            label="Gaussian width angle" if sign < 0.0 else None,
-        )
+    MediumRenderer.draw_density_map_Rz(
+        ax,
+        values,
+        limit_rg=limit,
+        density_floor_g_cm3=config.density_floor_g_cm3,
+        n_r=280,
+        n_z=360,
+        add_colorbar_to=fig,
+    )
     if segments:
         for segment in segments[:: max(1, len(segments) // 1100)]:
             r0 = float(segment["r_start_rg"])
@@ -1013,6 +914,8 @@ def generate_dis_diagnostics(values: dict[str, dict[str, Any]], *, run_output_di
     report = {
         "diagnostics_generated": True,
         "medium_density_map_generated": True,
+        "medium_renderer_used": True,
+        **medium_metadata(),
         "density_model_has_hard_radial_cut": True,
         "density_model_theta_profile": "gaussian",
         "density_model_theta_is_hard_cut": False,
@@ -1069,6 +972,8 @@ def generate_dis_diagnostics(values: dict[str, dict[str, Any]], *, run_output_di
             {
                 "diagnostics_generated": True,
                 "medium_density_map_generated": True,
+                "medium_renderer_used": True,
+                **medium_metadata(),
                 "density_model_has_hard_radial_cut": True,
                 "density_model_theta_profile": "gaussian",
                 "density_model_theta_is_hard_cut": False,
@@ -1451,6 +1356,8 @@ def _generate_dis_interaction_products_python(values: dict[str, dict[str, Any]],
         "medium_velocity_model": config.medium_velocity_model,
         "medium_velocity_physics_risk": True,
         "density_model": "analytic_torus_density_v1",
+        "medium_renderer_used": True,
+        **medium_metadata(),
         "sigma_table_path": str(provider.table_path),
         "sigma_table_rows": len(provider.table),
         "sigma_table_is_compact_builtin_adapter": False,

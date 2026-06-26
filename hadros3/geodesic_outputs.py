@@ -9,6 +9,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from .medium_renderer import MediumRenderer
+
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/hadros3_mplconfig")
 Path(os.environ["MPLCONFIGDIR"]).mkdir(parents=True, exist_ok=True)
 
@@ -285,8 +287,6 @@ def draw_forward_geometry_3d(
     r_peak = float(torus["r_peak_rg"])
     r_inner = float(torus["r_inner_rg"])
     r_outer = float(torus["r_outer_rg"])
-    torus_radial_minor = max(0.05, 0.5 * (r_outer - r_inner))
-    torus_vertical_minor = max(0.05, r_peak * math.tan(math.radians(float(torus["half_opening_angle_deg"]))))
     cone_opening = math.radians(float(cone["opening_angle_deg"]))
     cone_r_min = float(cone["r_min_rg"])
     cone_r_max = float(cone["r_max_rg"])
@@ -341,42 +341,8 @@ def draw_forward_geometry_3d(
         ax.plot(xs, ys, color=color, linewidth=0.75, alpha=0.50)
         ax.text(xs[-1], ys[-1], label, fontsize=8, color=color)
 
-    torus_fill_outer = []
-    torus_fill_inner = []
-    for idx in range(128):
-        angle = 2.0 * math.pi * idx / 128
-        torus_fill_outer.append(project((r_outer * math.cos(angle), r_outer * math.sin(angle), torus_vertical_minor * 0.22)))
-        torus_fill_inner.append(project((r_inner * math.cos(angle), r_inner * math.sin(angle), -torus_vertical_minor * 0.22)))
-    ax.add_patch(Polygon(torus_fill_outer, closed=True, facecolor="#f97316", edgecolor="none", alpha=0.10, zorder=1))
-    ax.add_patch(Polygon(torus_fill_inner, closed=True, facecolor="#f7f8fb", edgecolor="none", alpha=0.96, zorder=2))
-    for v_idx in range(0, 32, 4):
-        v_angle = 2.0 * math.pi * v_idx / 32
-        ring = []
-        for u_idx in range(97):
-            u_angle = 2.0 * math.pi * u_idx / 96
-            ring.append(
-                (
-                    (r_peak + torus_radial_minor * math.cos(v_angle)) * math.cos(u_angle),
-                    (r_peak + torus_radial_minor * math.cos(v_angle)) * math.sin(u_angle),
-                    torus_vertical_minor * math.sin(v_angle),
-                )
-            )
-        xs, ys = projected_line(ring)
-        ax.plot(xs, ys, color="#c2410c", linewidth=0.7, alpha=0.35, zorder=3)
-    for u_idx in range(0, 96, 12):
-        u_angle = 2.0 * math.pi * u_idx / 96
-        tube = []
-        for v_idx in range(33):
-            v_angle = 2.0 * math.pi * v_idx / 32
-            tube.append(
-                (
-                    (r_peak + torus_radial_minor * math.cos(v_angle)) * math.cos(u_angle),
-                    (r_peak + torus_radial_minor * math.cos(v_angle)) * math.sin(u_angle),
-                    torus_vertical_minor * math.sin(v_angle),
-                )
-            )
-        xs, ys = projected_line(tube)
-        ax.plot(xs, ys, color="#9a3412", linewidth=0.55, alpha=0.25, zorder=3)
+    medium_rings = MediumRenderer.proxy_shell_rings(values)
+    MediumRenderer.draw_shell_3d_proxy(ax, values, project, color="#64748b", zorder=3)
 
     for sign in (1.0, -1.0) if cone.get("draw_mode") == "bipolar_funnel" else (1.0,):
         outer_ring = []
@@ -479,12 +445,13 @@ def draw_forward_geometry_3d(
     ax.set_xlabel("orthographic x / r_g")
     ax.set_ylabel("orthographic y / r_g")
     ax.grid(True, color="#cbd5e1", alpha=0.42, linewidth=0.55)
-    ax.set_title("Forward neutrino geodesics in HADROS3 geometry", pad=16)
+    ax.set_title("Forward neutrino geodesics with MediumRenderer density contours", pad=16)
     ax.text(
         0.02,
         0.02,
         (
-            f"BH horizon sphere, analytic torus, bipolar polar cone\n"
+            f"BH horizon, MediumRenderer density contours, polar cone\n"
+            f"medium: hard radial shell; Gaussian angular profile, not a hard angular boundary\n"
             f"observer FOV={math.degrees(fov):g} deg, displayed paths={len(default_event_ids)}/{len(paths)}"
         ),
         transform=ax.transAxes,
@@ -507,7 +474,20 @@ def draw_forward_geometry_3d(
             "r_outer_rg": r_outer,
             "r_peak_rg": r_peak,
             "half_opening_angle_deg": float(torus["half_opening_angle_deg"]),
-            "surface": "elliptical analytic torus",
+            "surface": "MediumRenderer density-level proxy rings",
+        },
+        "medium_renderer": {
+            **MediumRenderer.metadata(),
+            "density_level_rings": [
+                {
+                    "points_xyz_rg": [list(point) for point in ring["points"]],
+                    "alpha": ring["alpha"],
+                    "density_relative": ring["density_relative"],
+                    "hard_radial_cut": ring["hard_radial_cut"],
+                    "label": ring["label"],
+                }
+                for ring in medium_rings
+            ],
         },
         "polar_cone": {
             "enabled": bool(cone["enabled"]),
@@ -578,7 +558,7 @@ def write_forward_geometry_html(payload: dict[str, Any], path: Path) -> None:
       <div class="hud">
         <strong>Forward Geodesics Geometry</strong>
         Drag to rotate. Wheel to zoom.<br>
-        BH, analytic torus, polar cones, UHE source, observer FOV and forward neutrino paths.
+        BH, MediumRenderer density contours, polar cones, UHE source, observer FOV and forward neutrino paths.
       </div>
     </div>
     <div class="path-controls">
@@ -679,30 +659,6 @@ def write_forward_geometry_html(payload: dict[str, Any], path: Path) -> None:
       ctx.restore();
     }
 
-    function torusRing(v) {
-      const out = [];
-      const R = data.analytic_torus.r_peak_rg;
-      const a = Math.max(0.05, 0.5 * (data.analytic_torus.r_outer_rg - data.analytic_torus.r_inner_rg));
-      const b = Math.max(0.05, R * Math.tan(data.analytic_torus.half_opening_angle_deg * Math.PI / 180));
-      for (let i = 0; i <= 128; i++) {
-        const u = 2 * Math.PI * i / 128;
-        out.push([(R + a * Math.cos(v)) * Math.cos(u), (R + a * Math.cos(v)) * Math.sin(u), b * Math.sin(v)]);
-      }
-      return out;
-    }
-
-    function torusTube(u) {
-      const out = [];
-      const R = data.analytic_torus.r_peak_rg;
-      const a = Math.max(0.05, 0.5 * (data.analytic_torus.r_outer_rg - data.analytic_torus.r_inner_rg));
-      const b = Math.max(0.05, R * Math.tan(data.analytic_torus.half_opening_angle_deg * Math.PI / 180));
-      for (let i = 0; i <= 48; i++) {
-        const v = 2 * Math.PI * i / 48;
-        out.push([(R + a * Math.cos(v)) * Math.cos(u), (R + a * Math.cos(v)) * Math.sin(u), b * Math.sin(v)]);
-      }
-      return out;
-    }
-
     function coneRing(sign, radius) {
       const out = [];
       const theta = data.polar_cone.opening_angle_deg * Math.PI / 180;
@@ -759,8 +715,9 @@ def write_forward_geometry_html(payload: dict[str, Any], path: Path) -> None:
         }
       }
 
-      for (let i = 0; i < 8; i++) line(torusRing(2 * Math.PI * i / 8), "#c2410c", 1, 0.42);
-      for (let i = 0; i < 12; i++) line(torusTube(2 * Math.PI * i / 12), "#9a3412", 0.8, 0.30);
+      for (const ring of (data.medium_renderer.density_level_rings || [])) {
+        line(ring.points_xyz_rg, ring.hard_radial_cut ? "#475569" : "#64748b", ring.hard_radial_cut ? 1.1 : 0.75, Math.max(0.05, ring.alpha || 0.12));
+      }
 
       const observer = data.observer.position_xyz_rg;
       const corners = data.fov_frustum.corner_xyz_rg;
@@ -792,6 +749,7 @@ def write_forward_geometry_html(payload: dict[str, Any], path: Path) -> None:
       ctx.fillText("HADROS3 Forward Geodesics Interactive Geometry", 18, 30);
       ctx.font = "12px system-ui, sans-serif";
       ctx.fillText(`FOV=${data.fov_frustum.field_of_view_deg} deg, displayed paths=${displayedPathLimit}/${data.forward_geodesics.n_paths}, segments=${data.forward_geodesics.n_segments}, zoom=${zoom.toFixed(2)}`, 18, 50);
+      ctx.fillText("MediumRenderer: hard radial shell + Gaussian angular density levels; no hard angular boundary", 18, 70);
     }
 
     canvas.addEventListener("mousedown", (event) => {

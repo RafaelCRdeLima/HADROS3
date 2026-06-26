@@ -127,6 +127,10 @@ def test_observer_bridge_scores_all_dis_interactions_without_modifying_dis(tmp_p
     assert summary["observer_bridge_camera_view_generated"] is True
     assert summary["camera_view_projection_model"] == "geometric_pinhole_proxy"
     assert summary["camera_view_projection_physics_risk"] is True
+    assert summary["not_ray_traced"] is True
+    assert summary["medium_renderer_used"] is True
+    assert summary["density_model_theta_is_hard_cut"] is False
+    assert summary["half_opening_angle_interpretation"] == "gaussian_width_not_boundary"
     assert summary["camera_view_candidates_plotted"] == 3
     assert 0 <= summary["camera_view_candidates_inside_fov"] <= 3
     assert summary["camera_view_top_n"] == 5
@@ -135,6 +139,8 @@ def test_observer_bridge_scores_all_dis_interactions_without_modifying_dis(tmp_p
     assert report["observer_bridge_camera_view_generated"] is True
     assert report["camera_view_projection_model"] == "geometric_pinhole_proxy"
     assert report["camera_view_projection_physics_risk"] is True
+    assert report["not_ray_traced"] is True
+    assert report["medium_renderer_used"] is True
 
     candidates = [json.loads(line) for line in (bridge_dir / "observer_bridge_candidates.jsonl").read_text(encoding="utf-8").splitlines()]
     assert len(candidates) == 3
@@ -176,6 +182,10 @@ def test_observer_bridge_provenance_is_scoring_only(tmp_path: Path) -> None:
     assert provenance["observer_bridge"]["observer_bridge_camera_view_generated"] is True
     assert provenance["observer_bridge"]["camera_view_projection_model"] == "geometric_pinhole_proxy"
     assert provenance["observer_bridge"]["camera_view_projection_physics_risk"] is True
+    assert provenance["observer_bridge"]["not_ray_traced"] is True
+    assert provenance["observer_bridge"]["medium_renderer_used"] is True
+    assert provenance["observer_bridge"]["density_model_theta_is_hard_cut"] is False
+    assert provenance["observer_bridge"]["half_opening_angle_interpretation"] == "gaussian_width_not_boundary"
     assert provenance["observer_bridge"]["camera_view_candidates_plotted"] == 3
     assert 0 <= provenance["observer_bridge"]["camera_view_candidates_inside_fov"] <= 3
     assert provenance["observer_bridge"]["camera_view_top_n"] == 5

@@ -57,6 +57,9 @@ def test_forward_geodesics_consume_h3_w5_source_and_write_outputs(tmp_path: Path
     assert summary["uses_kerr_metric"] is True
     assert summary["uses_christoffel_or_hamiltonian"] is True
     assert summary["coordinate_radial_preview"] is False
+    assert summary["medium_renderer_used"] is True
+    assert summary["density_model_theta_is_hard_cut"] is False
+    assert summary["half_opening_angle_interpretation"] == "gaussian_width_not_boundary"
     assert summary["direction_generator"] == "CoordinateRadialOutwardDirectionGenerator"
     assert summary["direction_model"] == "coordinate_radial_outward"
     assert summary["n_samples_requested"] == 5
@@ -88,6 +91,14 @@ def test_forward_geodesics_consume_h3_w5_source_and_write_outputs(tmp_path: Path
     assert summary["products"]["forward_geometry_3d"].endswith("uhe_neutrino_forward_geometry_3d.png")
     assert summary["products"]["forward_geometry_3d_json"].endswith("uhe_neutrino_forward_geometry_3d.json")
     assert summary["products"]["forward_geometry_3d_html"].endswith("uhe_neutrino_forward_geometry_3d.html")
+    geometry_payload = json.loads((forward_dir / "uhe_neutrino_forward_geometry_3d.json").read_text(encoding="utf-8"))
+    assert geometry_payload["medium_renderer"]["medium_renderer_used"] is True
+    assert geometry_payload["medium_renderer"]["density_model_theta_is_hard_cut"] is False
+    assert geometry_payload["analytic_torus"]["surface"] == "MediumRenderer density-level proxy rings"
+    geometry_html = (forward_dir / "uhe_neutrino_forward_geometry_3d.html").read_text(encoding="utf-8")
+    assert "MediumRenderer density contours" in geometry_html
+    assert "hard radial shell + Gaussian angular density levels" in geometry_html
+    assert "torusRing" not in geometry_html
 
     first_path = json.loads((forward_dir / "uhe_neutrino_forward_paths.jsonl").read_text(encoding="utf-8").splitlines()[0])
     assert first_path["direction_model"] == "coordinate_radial_outward"

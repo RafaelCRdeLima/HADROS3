@@ -20,6 +20,7 @@ from .geodesic_outputs import (
     write_summary_csv,
 )
 from .geodesic_validation import validate_forward_products
+from .medium_renderer import MediumRenderer
 from .paths import FORWARD_GEODESICS_DIR, forward_geodesics_dir, uhe_source_dir
 from .source_models import IsotropicLocalDirectionGenerator, KerrNullMomentumGenerator
 
@@ -1059,6 +1060,7 @@ def generate_forward_geodesic_products(values: dict[str, dict[str, Any]], *, run
         "uses_kerr_metric": True,
         "uses_christoffel_or_hamiltonian": True,
         "coordinate_radial_preview": False,
+        **MediumRenderer.metadata(),
         "strong_field_diagnostic": None,
         "validation_errors": validation_errors,
         **validation_report,
@@ -1223,6 +1225,7 @@ def generate_forward_geodesic_products_cpp(values: dict[str, dict[str, Any]], *,
             "uses_kerr_metric": True,
             "uses_christoffel_or_hamiltonian": True,
             "coordinate_radial_preview": False,
+            **MediumRenderer.metadata(),
             "validation_errors": validation_errors,
             **validation_report,
             "optical_depth_dis_sampler_invoked": False,

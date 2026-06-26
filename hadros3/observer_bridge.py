@@ -14,6 +14,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from .config import validate_values
+from .medium_renderer import MediumRenderer
 from .paths import observer_bridge_dir, run_metadata_dir
 from .provenance import write_json
 
@@ -129,23 +130,8 @@ def _project_camera(point: Vec3, values: dict[str, dict[str, Any]]) -> tuple[flo
 
 
 def _draw_projected_structure(ax: Any, values: dict[str, dict[str, Any]]) -> None:
-    torus = values.get("analytic_torus", {})
     cone = values.get("polar_cone", {})
-    r_inner = float(torus.get("r_inner_rg", 6.0))
-    r_outer = float(torus.get("r_outer_rg", 18.0))
-    r_peak = float(torus.get("r_peak_rg", 10.0))
-    theta_width = math.radians(float(torus.get("half_opening_angle_deg", 18.0)))
-    phi_values = [2.0 * math.pi * i / 160.0 for i in range(160)]
-    theta_values = [math.pi / 2.0, math.pi / 2.0 - theta_width, math.pi / 2.0 + theta_width]
-    for radius, alpha, linewidth in [(r_inner, 0.32, 0.9), (r_peak, 0.42, 1.0), (r_outer, 0.32, 0.9)]:
-        for theta in theta_values:
-            pts = [_project_camera(_spherical(radius, theta, phi), values) for phi in phi_values]
-            xs = [pt[0] for pt in pts if pt[2]]
-            ys = [pt[1] for pt in pts if pt[2]]
-            if xs:
-                ax.scatter(xs, ys, s=2.0, color="0.55", alpha=alpha, linewidths=0)
-                if theta == math.pi / 2.0:
-                    ax.plot(xs, ys, color="0.45", alpha=alpha, linewidth=linewidth)
+    MediumRenderer.draw_camera_projection_proxy(ax, values, lambda point: _project_camera(point, values))
     if bool(cone.get("enabled", True)):
         theta_c = math.radians(float(cone.get("opening_angle_deg", 22.0)))
         r_min = float(cone.get("r_min_rg", 2.2))
@@ -314,6 +300,8 @@ def _draw_camera_view(candidates: list[dict[str, Any]], ranked: list[dict[str, A
         "observer_bridge_camera_view_generated": True,
         "camera_view_projection_model": "geometric_pinhole_proxy",
         "camera_view_projection_physics_risk": True,
+        "not_ray_traced": True,
+        **MediumRenderer.metadata(),
         "camera_view_candidates_plotted": len(projections),
         "camera_view_candidates_inside_fov": len(inside_rows),
         "camera_view_top_n": top_n,
@@ -379,6 +367,14 @@ def _augment_summary(summary: dict[str, Any], output_dir: Path) -> dict[str, Any
             "observer_bridge_camera_view_generated": summary.get("observer_bridge_camera_view_generated", False),
             "camera_view_projection_model": summary.get("camera_view_projection_model"),
             "camera_view_projection_physics_risk": summary.get("camera_view_projection_physics_risk"),
+            "not_ray_traced": summary.get("not_ray_traced", True),
+            "medium_renderer_used": summary.get("medium_renderer_used", False),
+            "medium_model": summary.get("medium_model"),
+            "density_model": summary.get("density_model"),
+            "density_model_has_hard_radial_cut": summary.get("density_model_has_hard_radial_cut"),
+            "density_model_theta_profile": summary.get("density_model_theta_profile"),
+            "density_model_theta_is_hard_cut": summary.get("density_model_theta_is_hard_cut"),
+            "half_opening_angle_interpretation": summary.get("half_opening_angle_interpretation"),
             "camera_view_candidates_plotted": summary.get("camera_view_candidates_plotted", 0),
             "camera_view_candidates_inside_fov": summary.get("camera_view_candidates_inside_fov", 0),
             "camera_view_top_n": summary.get("camera_view_top_n", 0),

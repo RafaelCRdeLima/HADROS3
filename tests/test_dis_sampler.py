@@ -7,8 +7,9 @@ from pathlib import Path
 import pytest
 
 from hadros3.config import defaults
-from hadros3.dis_sampler import SigmaNuNProvider, constant_density_tau, generate_dis_interaction_products, generate_gbw_iim_comparison, interaction_probability
+from hadros3.dis_sampler import SigmaNuNProvider, analytic_torus_density_g_cm3, constant_density_tau, generate_dis_interaction_products, generate_gbw_iim_comparison, interaction_probability
 from hadros3.forward_geodesics import generate_forward_geodesic_products
+from hadros3.medium_renderer import MediumRenderer
 from hadros3.uhe_source import generate_uhe_source_products
 
 
@@ -79,6 +80,24 @@ def test_sigma_provider_reads_original_hadros_tables() -> None:
     assert gbw.energy_max_gev == 1.0e14
     assert math.isclose(gbw.sigma_cm2(1.0e3), 2.6022e-35)
     assert math.isclose(iim.sigma_cm2(1.0e3), 9.45275e-38)
+
+
+def test_medium_renderer_density_matches_dis_sampler_python_model() -> None:
+    values = _values()
+    torus = values["analytic_torus"]
+    r_inner = float(torus["r_inner_rg"])
+    r_outer = float(torus["r_outer_rg"])
+    r_peak = float(torus["r_peak_rg"])
+    theta_width = math.radians(float(torus["half_opening_angle_deg"]))
+
+    for radius in [r_inner, r_peak, r_outer, 0.5 * (r_inner + r_outer)]:
+        for theta in [0.5 * math.pi, 0.5 * math.pi + theta_width, 0.5 * math.pi + 2.0 * theta_width]:
+            assert MediumRenderer.density(radius, theta, values) == analytic_torus_density_g_cm3(radius, theta, values)
+
+    assert MediumRenderer.density(r_inner - 1.0e-4, 0.5 * math.pi, values) == 0.0
+    assert MediumRenderer.density(r_outer + 1.0e-4, 0.5 * math.pi, values) == 0.0
+    assert MediumRenderer.density(r_peak, 0.5 * math.pi + 2.0 * theta_width, values) > 0.0
+    assert MediumRenderer.metadata()["density_model_theta_is_hard_cut"] is False
 
 
 def test_dis_sampler_consumes_source_and_forward_outputs(tmp_path: Path) -> None:
@@ -175,9 +194,11 @@ def test_dis_sampler_consumes_source_and_forward_outputs(tmp_path: Path) -> None
     diagnostics = json.loads((dis_dir / "dis_diagnostics_report.json").read_text(encoding="utf-8"))
     assert diagnostics["diagnostics_generated"] is True
     assert diagnostics["medium_density_map_generated"] is True
+    assert diagnostics["medium_renderer_used"] is True
     assert diagnostics["density_model_has_hard_radial_cut"] is True
     assert diagnostics["density_model_theta_profile"] == "gaussian"
     assert diagnostics["density_model_theta_is_hard_cut"] is False
+    assert diagnostics["half_opening_angle_interpretation"] == "gaussian_width_not_boundary"
     assert diagnostics["interaction_points_outside_medium"] == 0
     assert diagnostics["n_paths"] == 5
     assert diagnostics["n_segments"] > 0

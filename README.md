@@ -44,6 +44,12 @@ HADROS3 vendors the visual assets used by the original config-web under
 `assets/`: `assets/logo/Hadros_logo.png` and the sky panorama in
 `assets/sky/eso0932a.{jpg,ppm}`. The dashboard serves these through `/assets/`.
 
+New pipeline stages should follow the documented stage contract in
+[`docs/PIPELINE_STAGE_CONTRACT.md`](docs/PIPELINE_STAGE_CONTRACT.md). The
+contract covers the `inputs -> run() -> outputs -> diagnostics -> provenance`
+pattern for future stages without requiring refactors of the existing H3-W5
+through H3-W8 layers.
+
 Render the preview/configuration products directly and exit:
 
 ```bash

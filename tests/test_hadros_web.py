@@ -145,6 +145,7 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert payload["outputs"]["paths"]["observer_bridge_visibility_map"] == "ObserverBridge/observer_bridge_visibility_map.png"
     assert payload["outputs"]["paths"]["observer_bridge_ranked_events_png"] == "ObserverBridge/observer_bridge_ranked_events.png"
     assert payload["outputs"]["paths"]["observer_bridge_geometry_3d_html"] == "ObserverBridge/observer_bridge_geometry_3d.html"
+    assert payload["outputs"]["paths"]["observer_bridge_camera_view"] == "ObserverBridge/observer_bridge_camera_view.png"
     assert payload["outputs"]["paths"]["dis_summary_json"] == "DIS/dis_summary.json"
     assert payload["outputs"]["paths"]["uhe_source_sampling_uniformity"] == "UHEsource/uhe_source_sampling_uniformity.png"
     assert payload["outputs"]["paths"]["uhe_source_sampling_uniformity_report"] == "UHEsource/uhe_source_sampling_uniformity_report.json"
@@ -227,3 +228,5 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert "observer_bridge_visibility_map.png" in html
     assert "observer_bridge_ranked_events.png" in html
     assert "observer_bridge_geometry_3d.html" in html
+    assert "observer_bridge_camera_view.png" in html
+    assert "Observer Camera View" in html

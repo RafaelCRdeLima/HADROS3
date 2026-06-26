@@ -120,8 +120,21 @@ def test_observer_bridge_scores_all_dis_interactions_without_modifying_dis(tmp_p
         "observer_bridge_visibility_map.png",
         "observer_bridge_ranked_events.png",
         "observer_bridge_geometry_3d.html",
+        "observer_bridge_camera_view.png",
     ]:
         assert (bridge_dir / filename).exists()
+
+    assert summary["observer_bridge_camera_view_generated"] is True
+    assert summary["camera_view_projection_model"] == "geometric_pinhole_proxy"
+    assert summary["camera_view_projection_physics_risk"] is True
+    assert summary["camera_view_candidates_plotted"] == 3
+    assert 0 <= summary["camera_view_candidates_inside_fov"] <= 3
+    assert summary["camera_view_top_n"] == 5
+
+    report = json.loads((bridge_dir / "observer_bridge_report.json").read_text(encoding="utf-8"))
+    assert report["observer_bridge_camera_view_generated"] is True
+    assert report["camera_view_projection_model"] == "geometric_pinhole_proxy"
+    assert report["camera_view_projection_physics_risk"] is True
 
     candidates = [json.loads(line) for line in (bridge_dir / "observer_bridge_candidates.jsonl").read_text(encoding="utf-8").splitlines()]
     assert len(candidates) == 3
@@ -160,4 +173,10 @@ def test_observer_bridge_provenance_is_scoring_only(tmp_path: Path) -> None:
     assert provenance["observer_bridge"]["pythia_invoked"] is False
     assert provenance["observer_bridge"]["geant4_invoked"] is False
     assert provenance["observer_bridge"]["photon_transport_invoked"] is False
+    assert provenance["observer_bridge"]["observer_bridge_camera_view_generated"] is True
+    assert provenance["observer_bridge"]["camera_view_projection_model"] == "geometric_pinhole_proxy"
+    assert provenance["observer_bridge"]["camera_view_projection_physics_risk"] is True
+    assert provenance["observer_bridge"]["camera_view_candidates_plotted"] == 3
+    assert 0 <= provenance["observer_bridge"]["camera_view_candidates_inside_fov"] <= 3
+    assert provenance["observer_bridge"]["camera_view_top_n"] == 5
     assert provenance["disabled_expensive_or_future_stages"]["observer_bridge_active_filter"] == "active_H3_W8_scoring_only"

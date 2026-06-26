@@ -117,6 +117,7 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
     bridge_visibility_map_path = bridge_dir / "observer_bridge_visibility_map.png"
     bridge_ranked_png_path = bridge_dir / "observer_bridge_ranked_events.png"
     bridge_geometry_3d_html_path = bridge_dir / "observer_bridge_geometry_3d.html"
+    bridge_camera_view_path = bridge_dir / "observer_bridge_camera_view.png"
     html_path = web_dir / "index.html"
 
     camera_summary: dict[str, Any] | None = None
@@ -271,6 +272,7 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "observer_bridge_visibility_map": bridge_visibility_map_path.exists(),
                 "observer_bridge_ranked_events_png": bridge_ranked_png_path.exists(),
                 "observer_bridge_geometry_3d_html": bridge_geometry_3d_html_path.exists(),
+                "observer_bridge_camera_view": bridge_camera_view_path.exists(),
             },
             "summary": observer_bridge_summary,
             "links": {
@@ -285,6 +287,7 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "observer_bridge_visibility_map": rel(bridge_visibility_map_path, output_dir),
                 "observer_bridge_ranked_events_png": rel(bridge_ranked_png_path, output_dir),
                 "observer_bridge_geometry_3d_html": rel(bridge_geometry_3d_html_path, output_dir),
+                "observer_bridge_camera_view": rel(bridge_camera_view_path, output_dir),
             },
         },
         "pipeline_status": [
@@ -368,6 +371,7 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             "observer_bridge_visibility_map_exists": bridge_visibility_map_path.exists(),
             "observer_bridge_ranked_events_png_exists": bridge_ranked_png_path.exists(),
             "observer_bridge_geometry_3d_html_exists": bridge_geometry_3d_html_path.exists(),
+            "observer_bridge_camera_view_exists": bridge_camera_view_path.exists(),
             "provenance_exists": provenance_path.exists(),
             "config_exists": config_output_path.exists(),
             "render_summary_exists": render_summary_path.exists(),
@@ -441,6 +445,7 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "observer_bridge_visibility_map": rel(bridge_visibility_map_path, output_dir),
                 "observer_bridge_ranked_events_png": rel(bridge_ranked_png_path, output_dir),
                 "observer_bridge_geometry_3d_html": rel(bridge_geometry_3d_html_path, output_dir),
+                "observer_bridge_camera_view": rel(bridge_camera_view_path, output_dir),
                 "provenance": rel(provenance_path, output_dir),
                 "render_summary": rel(render_summary_path, output_dir),
                 "html_summary": rel(html_path, output_dir),
@@ -576,6 +581,7 @@ function setObserverBridgeOutputs(exists) {{
   state.outputs.observer_bridge_visibility_map_exists = exists;
   state.outputs.observer_bridge_ranked_events_png_exists = exists;
   state.outputs.observer_bridge_geometry_3d_html_exists = exists;
+  state.outputs.observer_bridge_camera_view_exists = exists;
 }}
 function inputFor(field, value) {{
   if (field.kind === "select") {{
@@ -1407,6 +1413,10 @@ function renderObserverBridgePanel() {{
     <div class="summary-item"><strong>physics_weight</strong><code>${{summary.physics_weight_definition}}</code></div>
     <div class="summary-item"><strong>observer_weight</strong><code>${{summary.observer_weight_definition}}</code></div>
     <div class="summary-item"><strong>final score</strong><code>${{summary.final_observation_score_definition}}</code></div>
+    <div class="summary-item"><strong>camera view plotted</strong>${{summary.camera_view_candidates_plotted || 0}}</div>
+    <div class="summary-item"><strong>camera view inside FOV</strong>${{summary.camera_view_candidates_inside_fov || 0}}</div>
+    <div class="summary-item"><strong>camera view top N</strong>${{summary.camera_view_top_n || 0}}</div>
+    <div class="summary-item"><strong>camera projection</strong><code>${{summary.camera_view_projection_model || "geometric_pinhole_proxy"}}</code></div>
     <div class="summary-item"><strong>proxy_physics_risk</strong>${{String(summary.proxy_physics_risk)}}</div>
   </div></section>` : `<section><h2>Results</h2><p class="note">No Observer Bridge scores yet.</p></section>`;
   const links = `<section><h2>Outputs</h2><div class="output-link-grid">
@@ -1493,6 +1503,7 @@ function renderContextPanel() {{
       ? `<img src="${{outUrl("observer_bridge_map")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge candidate map">`
       : `<div class="context-empty">No Observer Bridge diagnostics generated yet.</div>`;
     const diagnosticCards = [
+      state.outputs.observer_bridge_camera_view_exists ? `<figure class="diagnostic-plot-card"><figcaption>Observer Camera View</figcaption><a href="${{outUrl("observer_bridge_camera_view")}}" target="_blank"><img src="${{outUrl("observer_bridge_camera_view")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge camera view"></a></figure>` : "",
       state.outputs.observer_bridge_map_exists ? `<figure class="diagnostic-plot-card"><figcaption>Candidate map</figcaption><a href="${{outUrl("observer_bridge_map")}}" target="_blank"><img src="${{outUrl("observer_bridge_map")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge map"></a></figure>` : "",
       state.outputs.observer_bridge_score_distribution_exists ? `<figure class="diagnostic-plot-card"><figcaption>Score distribution</figcaption><a href="${{outUrl("observer_bridge_score_distribution")}}" target="_blank"><img src="${{outUrl("observer_bridge_score_distribution")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge score distribution"></a></figure>` : "",
       state.outputs.observer_bridge_weight_breakdown_exists ? `<figure class="diagnostic-plot-card"><figcaption>Weight breakdown</figcaption><a href="${{outUrl("observer_bridge_weight_breakdown")}}" target="_blank"><img src="${{outUrl("observer_bridge_weight_breakdown")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge weight breakdown"></a></figure>` : "",
@@ -1603,6 +1614,8 @@ function renderOutputsPanel() {{
     ${{link(out.observer_bridge_summary_exists, "observer_bridge_summary", "Observer Bridge summary CSV")}}
     ${{link(out.observer_bridge_report_exists, "observer_bridge_report", "Observer Bridge report")}}
     ${{link(out.observer_bridge_geometry_3d_html_exists, "observer_bridge_geometry_3d_html", "Observer Bridge geometry HTML")}}
+    ${{link(out.observer_bridge_camera_view_exists, "observer_bridge_camera_view", "Observer Bridge camera view")}}
+    ${{out.observer_bridge_camera_view_exists ? `<img src="${{outUrl("observer_bridge_camera_view")}}" alt="Observer Bridge camera view">` : ""}}
     ${{link(out.observer_bridge_map_exists, "observer_bridge_map", "Observer Bridge map")}}
     ${{out.observer_bridge_map_exists ? `<img src="${{outUrl("observer_bridge_map")}}" alt="Observer Bridge map">` : ""}}
     ${{link(out.observer_bridge_score_distribution_exists, "observer_bridge_score_distribution", "Observer Bridge score distribution")}}

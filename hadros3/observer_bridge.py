@@ -22,6 +22,9 @@ ROOT = Path(__file__).resolve().parents[1]
 OBSERVER_BRIDGE_CPP_EXECUTABLE = ROOT / "bin" / "hadros3_observer_bridge"
 
 
+Vec3 = tuple[float, float, float]
+
+
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     if not path.exists():
@@ -51,6 +54,110 @@ def _rz(row: dict[str, Any]) -> tuple[float, float]:
     r = _score(row, "interaction_r_rg")
     theta = _score(row, "interaction_theta_rad")
     return r * math.sin(theta), r * math.cos(theta)
+
+
+def _vec_add(a: Vec3, b: Vec3) -> Vec3:
+    return (a[0] + b[0], a[1] + b[1], a[2] + b[2])
+
+
+def _vec_sub(a: Vec3, b: Vec3) -> Vec3:
+    return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
+
+
+def _vec_mul(a: Vec3, scale: float) -> Vec3:
+    return (a[0] * scale, a[1] * scale, a[2] * scale)
+
+
+def _dot(a: Vec3, b: Vec3) -> float:
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+
+def _cross(a: Vec3, b: Vec3) -> Vec3:
+    return (
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    )
+
+
+def _norm(a: Vec3) -> float:
+    return math.sqrt(max(_dot(a, a), 0.0))
+
+
+def _unit(a: Vec3) -> Vec3:
+    n = _norm(a)
+    if n <= 0.0:
+        return (0.0, 0.0, 0.0)
+    return (a[0] / n, a[1] / n, a[2] / n)
+
+
+def _spherical(r: float, theta: float, phi: float) -> Vec3:
+    st = math.sin(theta)
+    return (r * st * math.cos(phi), r * st * math.sin(phi), r * math.cos(theta))
+
+
+def _camera_frame(values: dict[str, dict[str, Any]]) -> tuple[Vec3, Vec3, Vec3, Vec3]:
+    camera = values.get("observer_camera", {})
+    r_obs = float(camera.get("observer_distance_rg", 60.0))
+    inc = math.radians(float(camera.get("inclination_deg", 80.0)))
+    azi = math.radians(float(camera.get("azimuth_deg", 0.0)))
+    observer = _spherical(r_obs, inc, azi)
+    forward = _unit(_vec_mul(observer, -1.0))
+    world_up = (0.0, 0.0, 1.0)
+    right = _unit(_cross(forward, world_up))
+    if _norm(right) <= 0.0:
+        right = (1.0, 0.0, 0.0)
+    up = _unit(_cross(right, forward))
+    return observer, forward, right, up
+
+
+def _project_camera(point: Vec3, values: dict[str, dict[str, Any]]) -> tuple[float, float, bool]:
+    observer, forward, right, up = _camera_frame(values)
+    camera = values.get("observer_camera", {})
+    width = max(1.0, float(camera.get("pixel_width", 512)))
+    height = max(1.0, float(camera.get("pixel_height", 288)))
+    fov_x = math.radians(max(1.0e-9, float(camera.get("field_of_view_deg", 25.0))))
+    tan_x = math.tan(0.5 * fov_x)
+    tan_y = tan_x * height / width
+    direction = _vec_sub(point, observer)
+    z_cam = _dot(direction, forward)
+    if z_cam <= 0.0:
+        return 0.0, 0.0, False
+    x_ndc = (_dot(direction, right) / z_cam) / tan_x
+    y_ndc = (_dot(direction, up) / z_cam) / tan_y
+    return x_ndc, y_ndc, abs(x_ndc) <= 1.0 and abs(y_ndc) <= 1.0
+
+
+def _draw_projected_structure(ax: Any, values: dict[str, dict[str, Any]]) -> None:
+    torus = values.get("analytic_torus", {})
+    cone = values.get("polar_cone", {})
+    r_inner = float(torus.get("r_inner_rg", 6.0))
+    r_outer = float(torus.get("r_outer_rg", 18.0))
+    r_peak = float(torus.get("r_peak_rg", 10.0))
+    theta_width = math.radians(float(torus.get("half_opening_angle_deg", 18.0)))
+    phi_values = [2.0 * math.pi * i / 160.0 for i in range(160)]
+    theta_values = [math.pi / 2.0, math.pi / 2.0 - theta_width, math.pi / 2.0 + theta_width]
+    for radius, alpha, linewidth in [(r_inner, 0.32, 0.9), (r_peak, 0.42, 1.0), (r_outer, 0.32, 0.9)]:
+        for theta in theta_values:
+            pts = [_project_camera(_spherical(radius, theta, phi), values) for phi in phi_values]
+            xs = [pt[0] for pt in pts if pt[2]]
+            ys = [pt[1] for pt in pts if pt[2]]
+            if xs:
+                ax.scatter(xs, ys, s=2.0, color="0.55", alpha=alpha, linewidths=0)
+                if theta == math.pi / 2.0:
+                    ax.plot(xs, ys, color="0.45", alpha=alpha, linewidth=linewidth)
+    if bool(cone.get("enabled", True)):
+        theta_c = math.radians(float(cone.get("opening_angle_deg", 22.0)))
+        r_min = float(cone.get("r_min_rg", 2.2))
+        r_max = float(cone.get("r_max_rg", 40.0))
+        for theta in [theta_c, math.pi - theta_c]:
+            for phi in [2.0 * math.pi * i / 24.0 for i in range(24)]:
+                pts = [_project_camera(_spherical(radius, theta, phi), values) for radius in (r_min, r_max)]
+                if pts[0][2] and pts[1][2]:
+                    ax.plot([pts[0][0], pts[1][0]], [pts[0][1], pts[1][1]], color="0.62", alpha=0.18, linewidth=0.8)
+    bh_x, bh_y, bh_inside = _project_camera((0.0, 0.0, 0.0), values)
+    if bh_inside:
+        ax.scatter([bh_x], [bh_y], s=230, color="0.02", edgecolors="0.75", linewidths=1.0, zorder=5, label="black hole proxy")
 
 
 def _draw_map(rows: list[dict[str, Any]], path: Path, title: str, color_key: str = "final_observation_score") -> None:
@@ -119,6 +226,100 @@ def _draw_ranked(rows: list[dict[str, Any]], path: Path, max_ranked: int) -> Non
     plt.close(fig)
 
 
+def _draw_camera_view(candidates: list[dict[str, Any]], ranked: list[dict[str, Any]], values: dict[str, dict[str, Any]], path: Path, top_n: int) -> dict[str, int | bool | str]:
+    top_ids = {str(row.get("interaction_id") or row.get("event_id")) for row in ranked[:top_n]}
+    projections: list[dict[str, Any]] = []
+    for row in candidates:
+        point = _spherical(_score(row, "interaction_r_rg"), _score(row, "interaction_theta_rad"), _score(row, "interaction_phi_rad"))
+        x_ndc, y_ndc, inside = _project_camera(point, values)
+        row_id = str(row.get("interaction_id") or row.get("event_id"))
+        projections.append(
+            {
+                "x": x_ndc,
+                "y": y_ndc,
+                "inside": inside,
+                "score": _score(row, "final_observation_score"),
+                "top": row_id in top_ids,
+            }
+        )
+    inside_rows = [row for row in projections if row["inside"]]
+    outside_rows = [row for row in projections if not row["inside"]]
+    max_score = max([row["score"] for row in projections], default=0.0)
+
+    fig, ax = plt.subplots(figsize=(9.0, 5.4), dpi=150)
+    ax.set_facecolor("#f4f5f7")
+    _draw_projected_structure(ax, values)
+    if outside_rows:
+        ax.scatter(
+            [row["x"] for row in outside_rows],
+            [row["y"] for row in outside_rows],
+            s=12,
+            color="#64748b",
+            alpha=0.16,
+            linewidths=0,
+            label="outside FOV candidates",
+            clip_on=False,
+        )
+    if inside_rows:
+        sizes = [30.0 + 170.0 * math.sqrt(row["score"] / max_score) if max_score > 0.0 else 34.0 for row in inside_rows]
+        colors = [row["score"] for row in inside_rows]
+        scatter = ax.scatter(
+            [row["x"] for row in inside_rows],
+            [row["y"] for row in inside_rows],
+            s=sizes,
+            c=colors,
+            cmap="magma",
+            alpha=0.86,
+            edgecolors="white",
+            linewidths=0.55,
+            label="inside FOV candidates",
+            zorder=6,
+        )
+        fig.colorbar(scatter, ax=ax, label="final_observation_score")
+    top_rows = [row for row in projections if row["top"] and row["inside"]]
+    if top_rows:
+        ax.scatter(
+            [row["x"] for row in top_rows],
+            [row["y"] for row in top_rows],
+            s=[210.0 + 120.0 * math.sqrt(row["score"] / max_score) if max_score > 0.0 else 230.0 for row in top_rows],
+            facecolors="none",
+            edgecolors="#22c55e",
+            linewidths=1.8,
+            label=f"top {top_n} ranked",
+            zorder=7,
+        )
+    ax.set_xlim(-1.08, 1.08)
+    ax.set_ylim(-1.08, 1.08)
+    ax.set_aspect("equal", adjustable="box")
+    ax.add_patch(plt.Rectangle((-1, -1), 2, 2, fill=False, edgecolor="#111827", linewidth=1.2))
+    ax.axhline(0.0, color="0.72", linewidth=0.8)
+    ax.axvline(0.0, color="0.72", linewidth=0.8)
+    ax.set_xlabel("camera x / tan(FOV_x/2)")
+    ax.set_ylabel("camera y / tan(FOV_y/2)")
+    ax.set_title("Observer Camera View - geometric pinhole proxy")
+    ax.legend(loc="upper right", fontsize=8, framealpha=0.92)
+    ax.text(
+        0.02,
+        0.055,
+        "Gray structures are diagnostic projections, not ray-traced emission.",
+        transform=ax.transAxes,
+        fontsize=8,
+        color="#475569",
+        bbox={"boxstyle": "round,pad=0.2", "facecolor": "#f4f5f7", "edgecolor": "none", "alpha": 0.9},
+    )
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+    return {
+        "observer_bridge_camera_view_generated": True,
+        "camera_view_projection_model": "geometric_pinhole_proxy",
+        "camera_view_projection_physics_risk": True,
+        "camera_view_candidates_plotted": len(projections),
+        "camera_view_candidates_inside_fov": len(inside_rows),
+        "camera_view_top_n": top_n,
+    }
+
+
 def _write_geometry_html(rows: list[dict[str, Any]], path: Path) -> None:
     points = []
     for row in rows:
@@ -162,6 +363,7 @@ def _augment_summary(summary: dict[str, Any], output_dir: Path) -> dict[str, Any
             "observer_bridge_visibility_map": str(output_dir / "observer_bridge_visibility_map.png"),
             "observer_bridge_ranked_events_png": str(output_dir / "observer_bridge_ranked_events.png"),
             "observer_bridge_geometry_3d_html": str(output_dir / "observer_bridge_geometry_3d.html"),
+            "observer_bridge_camera_view": str(output_dir / "observer_bridge_camera_view.png"),
         }
     )
     summary.update(
@@ -174,6 +376,12 @@ def _augment_summary(summary: dict[str, Any], output_dir: Path) -> dict[str, Any
             "observer_bridge_visibility_map_generated": True,
             "observer_bridge_ranked_events_png_generated": True,
             "observer_bridge_geometry_3d_html_generated": True,
+            "observer_bridge_camera_view_generated": summary.get("observer_bridge_camera_view_generated", False),
+            "camera_view_projection_model": summary.get("camera_view_projection_model"),
+            "camera_view_projection_physics_risk": summary.get("camera_view_projection_physics_risk"),
+            "camera_view_candidates_plotted": summary.get("camera_view_candidates_plotted", 0),
+            "camera_view_candidates_inside_fov": summary.get("camera_view_candidates_inside_fov", 0),
+            "camera_view_top_n": summary.get("camera_view_top_n", 0),
             "bridge_mode": summary.get("bridge_mode", "scoring_only"),
             "observer_bridge_stage_status": "observer_bridge_scored_no_event_generation",
             "powheg_invoked": False,
@@ -221,6 +429,8 @@ def generate_observer_bridge_products(values: dict[str, dict[str, Any]], *, run_
     _draw_map(candidates, output_dir / "observer_bridge_visibility_map.png", "Observer Bridge FOV visibility", "camera_fov_weight")
     _draw_ranked(ranked, output_dir / "observer_bridge_ranked_events.png", max_ranked)
     _write_geometry_html(candidates, output_dir / "observer_bridge_geometry_3d.html")
+    camera_view = _draw_camera_view(candidates, ranked, values, output_dir / "observer_bridge_camera_view.png", min(5, max_ranked))
+    summary.update(camera_view)
 
     summary = _augment_summary(summary, output_dir)
     write_json(summary_path, summary)

@@ -161,6 +161,7 @@ def ensure_output_layout(run_output: Path) -> None:
             "observer_bridge_visibility_map.png",
             "observer_bridge_ranked_events.png",
             "observer_bridge_geometry_3d.html",
+            "observer_bridge_camera_view.png",
         ],
         DASHBOARD_DIR: [
             "index.html",

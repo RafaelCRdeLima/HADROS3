@@ -55,6 +55,19 @@ The official reference for implemented HADROS3 physics is
 new physical stages must update it with the implemented equations, weights,
 approximations, outputs, and risks.
 
+## Scientific Documentation
+
+HADROS3 documentation follows this hierarchy:
+
+```text
+README
+  -> how to use the project
+docs/PIPELINE_STAGE_CONTRACT.md
+  -> how to develop new stages
+docs/Theory/HADROS3_Physics_Theory.pdf
+  -> official reference for implemented physics
+```
+
 Render the preview/configuration products directly and exit:
 
 ```bash

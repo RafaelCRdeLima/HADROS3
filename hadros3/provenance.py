@@ -14,6 +14,17 @@ from . import __version__
 from .reuse import discover_original_hadros
 
 
+THEORY_VERSION = "1.0"
+THEORY_DOCUMENT = "docs/Theory/HADROS3_Physics_Theory.pdf"
+THEORY_SOURCE_DOCUMENT = "docs/Theory/HADROS3_Physics_Theory.tex"
+THEORY_COMPATIBLE_HADROS3_COMMIT = "1d99515"
+THEORY_GENERATION_DATE = "2026-06-26"
+THEORY_PIPELINE_VERSION = "H3-W9a"
+THEORY_IMPLEMENTATION_STATUS = "implemented_through_H3_W9a_powheg_dry_run"
+THEORY_IMPLEMENTED_STAGES = ["H3-W5", "H3-W6", "H3-W7", "H3-W8", "H3-W9a"]
+THEORY_PLANNED_STAGES = ["H3-W9b", "H3-W10", "H3-W11", "H3-W12", "H3-W13"]
+
+
 def _git_commit(root: Path) -> str | None:
     try:
         return subprocess.check_output(
@@ -39,6 +50,21 @@ def build_provenance(
     observer_bridge_summary: dict[str, Any] | None = None,
     powheg_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    created_utc = datetime.now(timezone.utc).isoformat()
+    git_commit = _git_commit(root)
+    theory_metadata = {
+        "theory_document": THEORY_DOCUMENT,
+        "theory_source_document": THEORY_SOURCE_DOCUMENT,
+        "theory_version": THEORY_VERSION,
+        "theory_commit": git_commit,
+        "theory_compatible_hadros3_commit": THEORY_COMPATIBLE_HADROS3_COMMIT,
+        "theory_generation_date": THEORY_GENERATION_DATE,
+        "theory_recorded_in_provenance_utc": created_utc,
+        "theory_pipeline_version": THEORY_PIPELINE_VERSION,
+        "theory_implementation_status": THEORY_IMPLEMENTATION_STATUS,
+        "theory_implemented_stages": THEORY_IMPLEMENTED_STAGES,
+        "theory_planned_stages": THEORY_PLANNED_STAGES,
+    }
     source_active = bool(source_summary and source_summary.get("source_sampler_active"))
     forward_active = bool(forward_geodesic_summary and forward_geodesic_summary.get("forward_neutrino_geodesics_invoked"))
     dis_active = bool(dis_summary and dis_summary.get("optical_depth_dis_sampler_invoked"))
@@ -113,9 +139,14 @@ def build_provenance(
     return {
         "hadros3_stage": "H3-W0_to_H3-W9a_powheg_dry_run" if powheg_active else ("H3-W0_to_H3-W8_observer_bridge_scoring" if observer_bridge_active else ("H3-W0_to_H3-W7_dis_interaction_sampler" if dis_active else ("H3-W0_to_H3-W6_forward_neutrino_geodesics" if forward_active else ("H3-W0_to_H3-W5_hadros_web_uhe_source_shell" if source_active else "H3-W0_to_H3-W4_hadros_web_geometry_shell")))),
         "status": "powheg_jobs_prepared_no_lhe" if powheg_active else ("observer_bridge_scored_no_event_generation" if observer_bridge_active else ("dis_interactions_sampled_no_observer_bridge" if dis_active else ("forward_geodesics_propagated_no_interactions" if forward_active else ("uhe_source_sampled_no_expensive_events" if source_active else "geometry_configured_no_expensive_events")))),
-        "created_utc": datetime.now(timezone.utc).isoformat(),
+        "created_utc": created_utc,
         "hadros3_version": __version__,
-        "git_commit": _git_commit(root),
+        "git_commit": git_commit,
+        "theory_document": theory_metadata["theory_document"],
+        "theory_version": theory_metadata["theory_version"],
+        "theory_commit": theory_metadata["theory_commit"],
+        "theory_generation_date": theory_metadata["theory_generation_date"],
+        "scientific_theory": theory_metadata,
         "python": sys.version,
         "platform": platform.platform(),
         "parameters": values,

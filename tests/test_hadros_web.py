@@ -105,6 +105,11 @@ def test_render_hadros_web_writes_first_stage_products(tmp_path: Path) -> None:
     assert provenance["disabled_expensive_or_future_stages"]["powheg"] == "disabled"
     assert provenance["camera_preview"]["requested_mode"] in {"analytic_geometry_only", "kerr_like_cuda", "full_kerr"}
     assert provenance["camera_preview"]["medium_renderer_used"] is False
+    assert provenance["theory_document"] == "docs/Theory/HADROS3_Physics_Theory.pdf"
+    assert provenance["theory_version"] == "1.0"
+    assert provenance["theory_commit"]
+    assert provenance["theory_generation_date"]
+    assert provenance["scientific_theory"]["theory_pipeline_version"] == "H3-W9a"
 
 
 def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp_path: Path, monkeypatch) -> None:

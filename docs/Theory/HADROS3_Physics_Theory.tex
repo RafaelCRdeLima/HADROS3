@@ -29,6 +29,11 @@
 \newcommand{\cm}{\mathrm{cm}}
 \newcommand{\gcm}{\mathrm{g\,cm^{-3}}}
 \newcommand{\sigmanun}{\sigma_{\nu N}}
+\newcommand{\TheoryVersion}{1.0}
+\newcommand{\TheoryCompatibleCommit}{1d99515}
+\newcommand{\TheoryGenerationDate}{2026-06-26}
+\newcommand{\TheoryPipelineVersion}{H3-W9a}
+\newcommand{\TheoryImplementationStatus}{implemented through H3-W9a POWHEG dry-run preparation}
 
 \begin{document}
 
@@ -41,7 +46,7 @@
 \vfill
 {\large Implemented theory through H3-W9a POWHEG dry-run preparation\par}
 \vspace{0.5cm}
-{\large \today\par}
+{\large \TheoryGenerationDate\par}
 \vfill
 \begin{minipage}{0.82\textwidth}
 \small
@@ -58,6 +63,76 @@ implementation.
 \end{minipage}
 \end{titlepage}
 
+\chapter*{Official Physics Reference}
+\addcontentsline{toc}{chapter}{Official Physics Reference}
+
+This document is the official reference describing the physics currently
+implemented in HADROS3.
+
+If any discrepancy is found between the implementation and this document, either:
+\begin{itemize}
+\item the implementation must be corrected; or
+\item this document must be updated.
+\end{itemize}
+Such discrepancies must never be ignored.
+
+The scientific traceability chain for implemented physics is
+\begin{equation}
+\mathrm{code}
+\rightarrow
+\mathrm{provenance}
+\rightarrow
+\mathrm{Theory\ PDF}.
+\end{equation}
+Each simulation provenance record must identify the theory version that
+describes its physical and statistical assumptions.
+
+\clearpage
+\chapter*{Theory Version Information}
+\addcontentsline{toc}{chapter}{Theory Version Information}
+
+\begin{longtable}{>{\raggedright\arraybackslash}p{0.34\textwidth}
+                  >{\raggedright\arraybackslash}p{0.52\textwidth}}
+\toprule
+Field & Value \\
+\midrule
+\endfirsthead
+\toprule
+Field & Value \\
+\midrule
+\endhead
+Theory Version & \TheoryVersion \\
+Compatible HADROS3 commit & \TheoryCompatibleCommit \\
+Document generation date & \TheoryGenerationDate \\
+Pipeline version & \TheoryPipelineVersion \\
+Current implementation status & \TheoryImplementationStatus \\
+\bottomrule
+\end{longtable}
+
+\begin{longtable}{>{\raggedright\arraybackslash}p{0.35\textwidth}
+                  >{\raggedright\arraybackslash}p{0.45\textwidth}}
+\toprule
+Stage & Theory status \\
+\midrule
+\endfirsthead
+\toprule
+Stage & Theory status \\
+\midrule
+\endhead
+H3-W5 UHE Source & implemented and documented \\
+H3-W6 Forward Geodesics & implemented and documented \\
+H3-W7 DIS Interaction Sampler & implemented and documented \\
+H3-W8 Observer Bridge & implemented/proxy and documented \\
+H3-W9a POWHEG Dry Run & implemented/dry run and documented \\
+H3-W9b POWHEG Real Run & planned, not documented as implemented \\
+H3-W10 PYTHIA & planned, not documented as implemented \\
+H3-W11 GEANT4 & planned, not documented as implemented \\
+H3-W12 Photon Transport & planned, not documented as implemented \\
+H3-W13 Spectra & planned, not documented as implemented \\
+\bottomrule
+\end{longtable}
+
+\clearpage
 \tableofcontents
 
 \chapter*{Scope and Notation}
@@ -868,6 +943,15 @@ For H3-W9a, POWHEG is active only as dry-run preparation:
 \begin{equation}
 \code{status}=\code{powheg_jobs_prepared_no_lhe}.
 \end{equation}
+The provenance also records the scientific theory reference for the run:
+\begin{align}
+\code{theory_document} &= \code{docs/Theory/HADROS3_Physics_Theory.pdf},\\
+\code{theory_version} &= \code{\TheoryVersion},\\
+\code{theory_commit} &= \code{runtime git commit},\\
+\code{theory_generation_date} &= \code{runtime provenance timestamp}.
+\end{align}
+These fields connect each generated result to the theory document that describes
+the implemented physical and statistical assumptions.
 
 \section{Weight chain}
 

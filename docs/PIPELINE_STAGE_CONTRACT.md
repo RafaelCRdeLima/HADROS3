@@ -205,6 +205,46 @@ theory PDF, the PDF must be updated in the same commit or in a separate commit
 immediately before the physics change. Planned or proposed physics must not be
 documented as implemented until it is part of the official pipeline.
 
+Every new physical implementation must also update:
+
+```text
+Theory Version
+Compatible HADROS3 commit
+implemented-stage table
+provenance theory fields
+```
+
+The theory document uses `major.minor` versioning:
+
+```text
+major
+```
+
+is incremented when the implemented physics changes incompatibly, for example a
+breaking change to DIS optical depth, geodesic propagation, physical weights, or
+medium semantics.
+
+```text
+minor
+```
+
+is incremented when a new physical stage, physical backend, or formulation is
+implemented in a backward-compatible way.
+
+Examples:
+
+```text
+1.0 -> 1.1  Observer Bridge implemented
+1.1 -> 1.2  POWHEG real run implemented
+1.2 -> 2.0  incompatible DIS or geodesic physics change
+```
+
+Changes limited to UI, dashboard controls, plots, infrastructure, build system,
+tests, formatting, or visual diagnostics do not need to increment the Theory
+Version unless they alter equations, approximations, weights, physical models,
+statistics, proxies, or physical backends. Such commits should say explicitly
+that the Theory Version did not need to change.
+
 ## Presets And Runtime State
 
 Static presets, including:

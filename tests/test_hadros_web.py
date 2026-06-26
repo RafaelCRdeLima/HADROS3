@@ -76,7 +76,7 @@ def test_geometry_preview_context_is_available_on_geometry_tabs() -> None:
     assert 'const geometryPreviewTabs = new Set(["Camera", "Black Hole", "Torus / Medium", "Funnel / Cone"]);' in html
     assert "geometryPreviewTabs.has(activeTab)" in html
     assert "DIS Interaction Map" in html
-    assert "Observer Bridge Geometry" in html
+    assert "Observer Camera Overlay" in html
     assert "Forward Geodesics Geometry" in html
     assert "UHE Source Samples" in html
 
@@ -147,6 +147,7 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert payload["outputs"]["paths"]["observer_bridge_ranked_events_png"] == "ObserverBridge/observer_bridge_ranked_events.png"
     assert payload["outputs"]["paths"]["observer_bridge_geometry_3d_html"] == "ObserverBridge/observer_bridge_geometry_3d.html"
     assert payload["outputs"]["paths"]["observer_bridge_camera_view"] == "ObserverBridge/observer_bridge_camera_view.png"
+    assert payload["outputs"]["paths"]["observer_bridge_camera_overlay"] == "ObserverBridge/observer_bridge_camera_overlay.png"
     assert payload["outputs"]["paths"]["dis_summary_json"] == "DIS/dis_summary.json"
     assert payload["outputs"]["paths"]["uhe_source_sampling_uniformity"] == "UHEsource/uhe_source_sampling_uniformity.png"
     assert payload["outputs"]["paths"]["uhe_source_sampling_uniformity_report"] == "UHEsource/uhe_source_sampling_uniformity_report.json"
@@ -230,4 +231,8 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert "observer_bridge_ranked_events.png" in html
     assert "observer_bridge_geometry_3d.html" in html
     assert "observer_bridge_camera_view.png" in html
+    assert "observer_bridge_camera_overlay.png" in html
+    assert "Observer Camera Overlay" in html
+    assert "overlay resolution" in html
+    assert "camera_preview_pixel_plane" in html
     assert "Observer Camera View" in html

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -12,10 +13,12 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import numpy as np
 
+from .camera_preview import render_camera_preview
 from .config import validate_values
 from .medium_renderer import MediumRenderer
-from .paths import observer_bridge_dir, run_metadata_dir
+from .paths import camera_preview_dir, observer_bridge_dir, run_metadata_dir
 from .provenance import write_json
 
 
@@ -308,6 +311,166 @@ def _draw_camera_view(candidates: list[dict[str, Any]], ranked: list[dict[str, A
     }
 
 
+def _project_candidates_for_camera(candidates: list[dict[str, Any]], ranked: list[dict[str, Any]], values: dict[str, dict[str, Any]], top_n: int) -> list[dict[str, Any]]:
+    top_ids = {str(row.get("interaction_id") or row.get("event_id")) for row in ranked[:top_n]}
+    projections: list[dict[str, Any]] = []
+    for row in candidates:
+        point = _spherical(_score(row, "interaction_r_rg"), _score(row, "interaction_theta_rad"), _score(row, "interaction_phi_rad"))
+        x_ndc, y_ndc, inside = _project_camera(point, values)
+        row_id = str(row.get("interaction_id") or row.get("event_id"))
+        projections.append(
+            {
+                "x": x_ndc,
+                "y": y_ndc,
+                "inside": inside,
+                "score": _score(row, "final_observation_score"),
+                "top": row_id in top_ids,
+            }
+        )
+    return projections
+
+
+def _draw_camera_overlay(
+    candidates: list[dict[str, Any]],
+    ranked: list[dict[str, Any]],
+    values: dict[str, dict[str, Any]],
+    run_output_dir: Path,
+    path: Path,
+    top_n: int,
+) -> dict[str, int | bool | str]:
+    projections = _project_candidates_for_camera(candidates, ranked, values, top_n)
+    inside_rows = [row for row in projections if row["inside"]]
+    outside_rows = [row for row in projections if not row["inside"]]
+    max_score = max([row["score"] for row in projections], default=0.0)
+    camera_path = camera_preview_dir(run_output_dir) / "hadros3_camera_preview.png"
+    overlay_width = 1024
+    overlay_height = 576
+    background_source = "geometric_proxy_background"
+    background_warning: str | None = None
+    preview_summary: dict[str, Any] | None = None
+
+    with tempfile.TemporaryDirectory(prefix="hadros3_observer_overlay_") as tmp:
+        tmp_preview_dir = Path(tmp) / "CameraPreview"
+        try:
+            preview_summary = render_camera_preview(
+                values,
+                root=ROOT,
+                output_dir=tmp_preview_dir,
+                preview_options={"previewResolution": f"{overlay_width}x{overlay_height}", "suppressMessage": True},
+            )
+            camera_path = tmp_preview_dir / "hadros3_camera_preview.png"
+            background_source = "CameraPreview renderer 1024x576"
+        except Exception as exc:
+            background_warning = f"Camera preview unavailable; using geometric proxy background. {exc}"
+        if camera_path.exists() and background_warning is None:
+            try:
+                image = plt.imread(camera_path)
+            except (OSError, ValueError) as exc:
+                image = np.zeros((overlay_height, overlay_width, 3), dtype=float)
+                background_warning = f"Camera preview unavailable; using geometric proxy background. {exc}"
+                background_source = "geometric_proxy_background"
+        else:
+            image = np.zeros((overlay_height, overlay_width, 3), dtype=float)
+            background_source = "geometric_proxy_background"
+
+    if image.ndim == 2:
+        image = np.repeat(image[..., None], 3, axis=2)
+    if image.shape[-1] == 4:
+        image = image[..., :3]
+
+    fig, ax = plt.subplots(figsize=(10.24, 5.76), dpi=100)
+    ax.imshow(image, origin="upper", extent=[0, overlay_width, overlay_height, 0], zorder=0)
+    ax.set_xlim(0, overlay_width)
+    ax.set_ylim(overlay_height, 0)
+    ax.set_axis_off()
+
+    def pixel_x(row: dict[str, Any]) -> float:
+        return 0.5 * overlay_width * (1.0 + float(row["x"]))
+
+    def pixel_y(row: dict[str, Any]) -> float:
+        return 0.5 * overlay_height * (1.0 - float(row["y"]))
+
+    if outside_rows:
+        ax.scatter(
+            [pixel_x(row) for row in outside_rows],
+            [pixel_y(row) for row in outside_rows],
+            s=16,
+            color="#94a3b8",
+            alpha=0.18,
+            linewidths=0,
+            label="outside FOV candidates",
+            zorder=4,
+        )
+    if inside_rows:
+        sizes = [24.0 + 120.0 * math.sqrt(row["score"] / max_score) if max_score > 0.0 else 28.0 for row in inside_rows]
+        colors = [row["score"] for row in inside_rows]
+        scatter = ax.scatter(
+            [pixel_x(row) for row in inside_rows],
+            [pixel_y(row) for row in inside_rows],
+            s=sizes,
+            c=colors,
+            cmap="magma",
+            alpha=0.9,
+            edgecolors="white",
+            linewidths=0.7,
+            label="Observer Bridge candidates",
+            zorder=6,
+        )
+        cbar = fig.colorbar(scatter, ax=ax, fraction=0.035, pad=0.012)
+        cbar.set_label("final_observation_score")
+    top_rows = [row for row in projections if row["top"] and row["inside"]]
+    if top_rows:
+        ax.scatter(
+            [pixel_x(row) for row in top_rows],
+            [pixel_y(row) for row in top_rows],
+            s=[150.0 + 90.0 * math.sqrt(row["score"] / max_score) if max_score > 0.0 else 165.0 for row in top_rows],
+            facecolors="none",
+            edgecolors="#22c55e",
+            linewidths=2.0,
+            label=f"top {top_n} ranked",
+            zorder=7,
+        )
+    ax.legend(loc="upper right", fontsize=8, framealpha=0.82)
+    ax.text(
+        18,
+        overlay_height - 18,
+        "background = Camera Preview\npoints = Observer Bridge candidates\nprojection = geometric proxy, not ray-traced secondary particles",
+        fontsize=8.0,
+        color="white",
+        bbox={"boxstyle": "round,pad=0.28", "facecolor": "#111827", "edgecolor": "none", "alpha": 0.74},
+        zorder=8,
+        va="bottom",
+    )
+    if background_warning:
+        ax.text(
+            overlay_width * 0.5,
+            overlay_height * 0.5,
+            "Camera preview unavailable; using geometric proxy background.",
+            ha="center",
+            va="center",
+            color="white",
+            fontsize=11,
+            bbox={"boxstyle": "round,pad=0.35", "facecolor": "#111827", "edgecolor": "#475569", "alpha": 0.85},
+            zorder=8,
+        )
+    fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
+    fig.savefig(path, dpi=100)
+    plt.close(fig)
+    return {
+        "observer_bridge_camera_overlay_generated": True,
+        "camera_overlay_background_source": background_source,
+        "camera_overlay_resolution_px": f"{overlay_width}x{overlay_height}",
+        "candidate_overlay_projection_model": "geometric_pinhole_proxy",
+        "candidate_overlay_not_ray_traced": True,
+        "candidate_overlay_physics_risk": True,
+        "candidate_overlay_alignment": "camera_preview_pixel_plane",
+        "camera_overlay_preview_status": str((preview_summary or {}).get("status", "unavailable")),
+        "camera_overlay_candidates_plotted": len(projections),
+        "camera_overlay_candidates_inside_fov": len(inside_rows),
+        "camera_overlay_top_n": top_n,
+    }
+
+
 def _write_geometry_html(rows: list[dict[str, Any]], path: Path) -> None:
     points = []
     for row in rows:
@@ -352,6 +515,7 @@ def _augment_summary(summary: dict[str, Any], output_dir: Path) -> dict[str, Any
             "observer_bridge_ranked_events_png": str(output_dir / "observer_bridge_ranked_events.png"),
             "observer_bridge_geometry_3d_html": str(output_dir / "observer_bridge_geometry_3d.html"),
             "observer_bridge_camera_view": str(output_dir / "observer_bridge_camera_view.png"),
+            "observer_bridge_camera_overlay": str(output_dir / "observer_bridge_camera_overlay.png"),
         }
     )
     summary.update(
@@ -365,9 +529,20 @@ def _augment_summary(summary: dict[str, Any], output_dir: Path) -> dict[str, Any
             "observer_bridge_ranked_events_png_generated": True,
             "observer_bridge_geometry_3d_html_generated": True,
             "observer_bridge_camera_view_generated": summary.get("observer_bridge_camera_view_generated", False),
+            "observer_bridge_camera_overlay_generated": summary.get("observer_bridge_camera_overlay_generated", False),
             "camera_view_projection_model": summary.get("camera_view_projection_model"),
             "camera_view_projection_physics_risk": summary.get("camera_view_projection_physics_risk"),
             "not_ray_traced": summary.get("not_ray_traced", True),
+            "camera_overlay_background_source": summary.get("camera_overlay_background_source"),
+            "camera_overlay_resolution_px": summary.get("camera_overlay_resolution_px"),
+            "candidate_overlay_projection_model": summary.get("candidate_overlay_projection_model"),
+            "candidate_overlay_not_ray_traced": summary.get("candidate_overlay_not_ray_traced", True),
+            "candidate_overlay_physics_risk": summary.get("candidate_overlay_physics_risk", True),
+            "candidate_overlay_alignment": summary.get("candidate_overlay_alignment"),
+            "camera_overlay_preview_status": summary.get("camera_overlay_preview_status"),
+            "camera_overlay_candidates_plotted": summary.get("camera_overlay_candidates_plotted", 0),
+            "camera_overlay_candidates_inside_fov": summary.get("camera_overlay_candidates_inside_fov", 0),
+            "camera_overlay_top_n": summary.get("camera_overlay_top_n", 0),
             "medium_renderer_used": summary.get("medium_renderer_used", False),
             "medium_model": summary.get("medium_model"),
             "density_model": summary.get("density_model"),
@@ -427,6 +602,8 @@ def generate_observer_bridge_products(values: dict[str, dict[str, Any]], *, run_
     _write_geometry_html(candidates, output_dir / "observer_bridge_geometry_3d.html")
     camera_view = _draw_camera_view(candidates, ranked, values, output_dir / "observer_bridge_camera_view.png", min(5, max_ranked))
     summary.update(camera_view)
+    camera_overlay = _draw_camera_overlay(candidates, ranked, values, run_output_dir, output_dir / "observer_bridge_camera_overlay.png", min(5, max_ranked))
+    summary.update(camera_overlay)
 
     summary = _augment_summary(summary, output_dir)
     write_json(summary_path, summary)

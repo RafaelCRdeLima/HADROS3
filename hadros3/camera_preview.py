@@ -496,12 +496,12 @@ def _draw_analytic_camera_preview(
     img *= (1.0 - 0.92 * shadow[..., None])
     img = np.clip(img, 0.0, 1.0)
 
-    fig, ax = plt.subplots(figsize=(8, 4.5), facecolor="#0b1018")
+    fig, ax = plt.subplots(figsize=(nx / 100.0, ny / 100.0), dpi=100, facecolor="#0b1018")
     ax.imshow(img, origin="lower", extent=(-1, 1, -1, 1))
     ax.add_patch(plt.Circle((0, 0), 0.19 * horizon / 1.6, color="black", ec="white", lw=0.9, alpha=0.96))
     ax.text(-0.96, 0.88, "HADROS3 analytic camera preview", color="white", fontsize=10, ha="left")
     ax.text(-0.96, 0.76, f"a={spin:g}  inc={inc:g} deg  FOV={fov:g} deg", color="#d6e4f0", fontsize=8, ha="left")
-    if message:
+    if message and not bool((preview_options or {}).get("suppressMessage", False)):
         ax.text(
             0.0,
             -0.93,
@@ -514,7 +514,7 @@ def _draw_analytic_camera_preview(
         )
     ax.set_axis_off()
     fig.tight_layout(pad=0)
-    fig.savefig(path, dpi=160)
+    fig.savefig(path, dpi=100)
     plt.close(fig)
 
 

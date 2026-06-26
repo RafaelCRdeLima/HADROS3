@@ -5,6 +5,8 @@ import json
 import math
 from pathlib import Path
 
+import matplotlib.pyplot as plt
+
 from hadros3.config import defaults
 from hadros3.observer_bridge import generate_observer_bridge_products
 from hadros3.pipeline import render_hadros_web
@@ -121,6 +123,7 @@ def test_observer_bridge_scores_all_dis_interactions_without_modifying_dis(tmp_p
         "observer_bridge_ranked_events.png",
         "observer_bridge_geometry_3d.html",
         "observer_bridge_camera_view.png",
+        "observer_bridge_camera_overlay.png",
     ]:
         assert (bridge_dir / filename).exists()
 
@@ -134,6 +137,16 @@ def test_observer_bridge_scores_all_dis_interactions_without_modifying_dis(tmp_p
     assert summary["camera_view_candidates_plotted"] == 3
     assert 0 <= summary["camera_view_candidates_inside_fov"] <= 3
     assert summary["camera_view_top_n"] == 5
+    assert summary["observer_bridge_camera_overlay_generated"] is True
+    assert summary["camera_overlay_background_source"] == "CameraPreview renderer 1024x576"
+    assert summary["camera_overlay_resolution_px"] == "1024x576"
+    assert summary["candidate_overlay_projection_model"] == "geometric_pinhole_proxy"
+    assert summary["candidate_overlay_not_ray_traced"] is True
+    assert summary["candidate_overlay_physics_risk"] is True
+    assert summary["candidate_overlay_alignment"] == "camera_preview_pixel_plane"
+    assert summary["camera_overlay_candidates_plotted"] == 3
+    assert 0 <= summary["camera_overlay_candidates_inside_fov"] <= 3
+    assert summary["camera_overlay_top_n"] == 5
 
     report = json.loads((bridge_dir / "observer_bridge_report.json").read_text(encoding="utf-8"))
     assert report["observer_bridge_camera_view_generated"] is True
@@ -141,6 +154,12 @@ def test_observer_bridge_scores_all_dis_interactions_without_modifying_dis(tmp_p
     assert report["camera_view_projection_physics_risk"] is True
     assert report["not_ray_traced"] is True
     assert report["medium_renderer_used"] is True
+    assert report["observer_bridge_camera_overlay_generated"] is True
+    assert report["camera_overlay_resolution_px"] == "1024x576"
+    assert report["candidate_overlay_projection_model"] == "geometric_pinhole_proxy"
+    assert report["candidate_overlay_not_ray_traced"] is True
+    assert report["candidate_overlay_physics_risk"] is True
+    assert report["candidate_overlay_alignment"] == "camera_preview_pixel_plane"
 
     candidates = [json.loads(line) for line in (bridge_dir / "observer_bridge_candidates.jsonl").read_text(encoding="utf-8").splitlines()]
     assert len(candidates) == 3
@@ -189,4 +208,30 @@ def test_observer_bridge_provenance_is_scoring_only(tmp_path: Path) -> None:
     assert provenance["observer_bridge"]["camera_view_candidates_plotted"] == 3
     assert 0 <= provenance["observer_bridge"]["camera_view_candidates_inside_fov"] <= 3
     assert provenance["observer_bridge"]["camera_view_top_n"] == 5
+    assert provenance["observer_bridge"]["observer_bridge_camera_overlay_generated"] is True
+    assert provenance["observer_bridge"]["camera_overlay_resolution_px"] == "1024x576"
+    assert provenance["observer_bridge"]["candidate_overlay_projection_model"] == "geometric_pinhole_proxy"
+    assert provenance["observer_bridge"]["candidate_overlay_not_ray_traced"] is True
+    assert provenance["observer_bridge"]["candidate_overlay_physics_risk"] is True
+    assert provenance["observer_bridge"]["candidate_overlay_alignment"] == "camera_preview_pixel_plane"
+    assert provenance["observer_bridge"]["camera_overlay_candidates_plotted"] == 3
+    assert 0 <= provenance["observer_bridge"]["camera_overlay_candidates_inside_fov"] <= 3
+    assert provenance["observer_bridge"]["camera_overlay_top_n"] == 5
     assert provenance["disabled_expensive_or_future_stages"]["observer_bridge_active_filter"] == "active_H3_W8_scoring_only"
+
+
+def test_observer_bridge_camera_overlay_uses_camera_preview_when_available(tmp_path: Path) -> None:
+    values = defaults()
+    values["observer_camera"].update({"observer_distance_rg": 60.0, "inclination_deg": 90.0, "azimuth_deg": 0.0})
+    _write_dis_inputs(tmp_path)
+    camera_dir = tmp_path / "CameraPreview"
+    camera_dir.mkdir(parents=True, exist_ok=True)
+    plt.imsave(camera_dir / "hadros3_camera_preview.png", [[[0.05, 0.05, 0.08], [0.15, 0.15, 0.18]], [[0.08, 0.08, 0.12], [0.2, 0.2, 0.24]]])
+
+    summary = generate_observer_bridge_products(values, run_output_dir=tmp_path)
+
+    assert (tmp_path / "ObserverBridge" / "observer_bridge_camera_overlay.png").exists()
+    assert summary["camera_overlay_background_source"] == "CameraPreview renderer 1024x576"
+    assert summary["camera_overlay_resolution_px"] == "1024x576"
+    assert summary["candidate_overlay_projection_model"] == "geometric_pinhole_proxy"
+    assert summary["candidate_overlay_not_ray_traced"] is True

@@ -1,0 +1,963 @@
+\documentclass[11pt,a4paper]{report}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{geometry}
+\usepackage{longtable}
+\usepackage{hyperref}
+\usepackage{xcolor}
+
+\geometry{margin=1in}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue,
+  citecolor=blue
+}
+\numberwithin{equation}{chapter}
+\setlength{\parskip}{0.5em}
+\setlength{\parindent}{0pt}
+
+\newcommand{\code}[1]{\texttt{\detokenize{#1}}}
+\newcommand{\rg}{r_g}
+\newcommand{\dd}{\mathrm{d}}
+\newcommand{\GeV}{\mathrm{GeV}}
+\newcommand{\cm}{\mathrm{cm}}
+\newcommand{\gcm}{\mathrm{g\,cm^{-3}}}
+\newcommand{\sigmanun}{\sigma_{\nu N}}
+
+\begin{document}
+
+\begin{titlepage}
+\centering
+\vspace*{2.0cm}
+{\Huge\bfseries HADROS3: Physics and Statistical Theory of the Implemented Pipeline\par}
+\vspace{1.0cm}
+{\Large Rafael C. R. de Lima\par}
+\vfill
+{\large Implemented theory through H3-W9a POWHEG dry-run preparation\par}
+\vspace{0.5cm}
+{\large \today\par}
+\vfill
+\begin{minipage}{0.82\textwidth}
+\small
+This document describes only the physics, statistics, numerical methods, and
+proxy models implemented in the current HADROS3 pipeline. It is not a user
+manual, dashboard guide, installation guide, or proposal for future stages.
+Where the implementation uses diagnostic renderers or physics proxies, that
+status is stated explicitly.
+\end{minipage}
+\end{titlepage}
+
+\tableofcontents
+
+\chapter*{Scope and Notation}
+\addcontentsline{toc}{chapter}{Scope and Notation}
+
+The implemented HADROS3 pipeline is organized as a staged calculation,
+\begin{equation}
+\mathrm{inputs}\rightarrow \mathrm{run}()\rightarrow
+\mathrm{outputs}\rightarrow \mathrm{diagnostics}\rightarrow
+\mathrm{provenance}.
+\end{equation}
+Each implemented stage consumes official products from earlier stages and
+writes to its own output directory. The stages covered here are the camera
+preview, Kerr geometry utilities, analytic medium, UHE source, forward null
+geodesics, DIS optical-depth sampler, Observer Bridge scoring, and POWHEG
+dry-run hard-process preparation.
+
+All radii in the dynamical Kerr calculation are expressed in gravitational
+radius units,
+\begin{equation}
+\rg = \frac{G M}{c^2}.
+\end{equation}
+The implementation uses Boyer-Lindquist coordinates
+$x^\mu=(t,r,\theta,\phi)$ and the metric signature $(-,+,+,+)$.
+The dimensionless Kerr spin is denoted by $a$ in units of $\rg$.
+The code clamps spin-dependent operations away from the extremal singular
+limit where needed.
+
+\begin{longtable}{>{\raggedright\arraybackslash}p{0.22\textwidth}
+                  >{\raggedright\arraybackslash}p{0.67\textwidth}}
+\caption{Primary symbols used in the implemented theory.}\\
+\toprule
+Symbol & Meaning \\
+\midrule
+\endfirsthead
+\toprule
+Symbol & Meaning \\
+\midrule
+\endhead
+$r,\theta,\phi$ & Boyer-Lindquist spherical coordinates in $\rg$ units.\\
+$\Sigma,\Delta,A$ & Standard Kerr metric functions.\\
+$p_\mu$ & Covariant four-momentum components.\\
+$E_{\nu,\mathrm{local}}$ & Neutrino energy measured in a local medium or ZAMO frame.\\
+$\rho(r,\theta)$ & Analytic torus rest-mass density.\\
+$n_b$ & Baryon number density, $n_b=\rho/m_b$.\\
+$\sigmanun(E)$ & Tabulated charged-current neutrino-nucleon DIS cross section.\\
+$\tau$ & Integrated DIS optical depth along one forward path.\\
+$S_{\rm obs}$ & Observer Bridge final observation score.\\
+\bottomrule
+\end{longtable}
+
+\chapter{Camera / Kerr Ray Tracing}
+
+\section{Implemented camera modes}
+
+The camera preview layer is a visual and diagnostic stage. It is separate from
+the DIS interaction physics and from the Observer Bridge scoring. Its main
+product is a rendered observer-view image, typically
+\code{CameraPreview/hadros3_camera_preview.png}. The implemented backend
+selection includes:
+\begin{itemize}
+\item \code{analytic_geometry_only}: always available; a schematic camera
+preview, not a physical Kerr ray-traced image.
+\item \code{kerr_like_cuda}: a self-contained HADROS3 CUDA preview executable
+using a Kerr-like camera model.
+\item \code{full_kerr}: a self-contained HADROS3 CUDA preview executable using
+the full-Kerr preview mode when available.
+\item \code{legacy_cpu_geodesic_preview}: detected for provenance but not used
+as the primary self-contained HADROS3 runtime path.
+\end{itemize}
+
+The camera preview can render a torus-like visual object and polar funnels.
+This visual object is not the DIS optical-depth calculation. The provenance
+marks camera-preview products separately from the shared
+\code{MediumRenderer}. In current provenance, the camera preview records
+\code{medium_renderer_used = false} because its purpose is visual camera
+preview, not the shared diagnostic density-map renderer.
+
+\section{Camera frame}
+
+Observer Bridge camera diagnostics use the same geometric convention for the
+camera direction that is also relevant when overlaying candidates on the camera
+preview. A camera position is built from
+\begin{equation}
+\mathbf{x}_{\rm obs}
+= r_{\rm obs}
+\begin{pmatrix}
+\sin i \cos\varphi_{\rm obs}\\
+\sin i \sin\varphi_{\rm obs}\\
+\cos i
+\end{pmatrix},
+\end{equation}
+where $r_{\rm obs}$ is \code{observer_distance_rg}, $i$ is
+\code{observer_inclination_deg}, and $\varphi_{\rm obs}$ is
+\code{observer_azimuth_deg}. The forward axis points approximately toward the
+origin,
+\begin{equation}
+\hat{\mathbf{f}} =
+-\frac{\mathbf{x}_{\rm obs}}{|\mathbf{x}_{\rm obs}|}.
+\end{equation}
+The right and up axes are built from a world $z$ axis, with a fallback right
+axis if the camera is too close to the polar direction:
+\begin{align}
+\hat{\mathbf{r}}_{\rm cam} &=
+\frac{\hat{\mathbf{f}}\times \hat{\mathbf{z}}}
+{|\hat{\mathbf{f}}\times \hat{\mathbf{z}}|},\\
+\hat{\mathbf{u}}_{\rm cam} &=
+\frac{\hat{\mathbf{r}}_{\rm cam}\times \hat{\mathbf{f}}}
+{|\hat{\mathbf{r}}_{\rm cam}\times \hat{\mathbf{f}}|}.
+\end{align}
+
+\section{Pinhole diagnostic projection}
+
+For Observer Bridge candidate overlays, the implemented projection is a
+geometric pinhole proxy. It converts a candidate position
+$\mathbf{x}$ into a camera vector
+\begin{equation}
+\mathbf{d}=\mathbf{x}-\mathbf{x}_{\rm obs}
+\end{equation}
+and projects it as
+\begin{align}
+z_{\rm cam} &= \mathbf{d}\cdot \hat{\mathbf{f}},\\
+x_{\rm ndc} &=
+\frac{\mathbf{d}\cdot \hat{\mathbf{r}}_{\rm cam}}
+{z_{\rm cam}\tan(\mathrm{FOV}_x/2)},\\
+y_{\rm ndc} &=
+\frac{\mathbf{d}\cdot \hat{\mathbf{u}}_{\rm cam}}
+{z_{\rm cam}\tan(\mathrm{FOV}_y/2)}.
+\end{align}
+The field-of-view flag is true when $z_{\rm cam}>0$ and
+$|x_{\rm ndc}|\leq 1$, $|y_{\rm ndc}|\leq 1$. The camera overlay records
+\code{candidate_overlay_projection_model = geometric_pinhole_proxy} and
+\code{candidate_overlay_not_ray_traced = true}. Therefore the background image
+may be generated by the camera renderer, but the plotted Observer Bridge
+candidates are not ray-traced secondary particles.
+
+\section{Inputs and outputs}
+
+\begin{longtable}{p{0.30\textwidth}p{0.60\textwidth}}
+\toprule
+Role & Implemented item \\
+\midrule
+Inputs & Black-hole spin, observer distance, inclination, azimuth, FOV, image
+resolution, torus and funnel visual parameters.\\
+Outputs & \code{CameraPreview/hadros3_camera_preview.png},
+\code{CameraPreview/hadros3_camera_preview_summary.json}.\\
+Approximations & Analytic fallback is schematic. CUDA preview is visual camera
+rendering; candidate overlays remain pinhole proxies.\\
+Provenance & Records backend used, fallback status, whether CUDA was used, and
+whether full-Kerr preview mode was requested.\\
+\bottomrule
+\end{longtable}
+
+\chapter{Black Hole and Kerr Geometry}
+
+\section{Metric functions}
+
+HADROS3 uses the Kerr metric in Boyer-Lindquist coordinates and in $\rg$
+units. The standard metric functions are
+\begin{align}
+\Sigma &= r^2 + a^2\cos^2\theta,\\
+\Delta &= r^2 - 2r + a^2,\\
+A &= (r^2+a^2)^2 - a^2\Delta\sin^2\theta.
+\end{align}
+The outer horizon radius is
+\begin{equation}
+r_+ = 1 + \sqrt{1-a^2}.
+\end{equation}
+
+The nonzero covariant metric components implemented for the dynamical
+calculation are
+\begin{align}
+g_{tt} &= -\left(1-\frac{2r}{\Sigma}\right),\\
+g_{t\phi} &= -\frac{2ar\sin^2\theta}{\Sigma},\\
+g_{rr} &= \frac{\Sigma}{\Delta},\\
+g_{\theta\theta} &= \Sigma,\\
+g_{\phi\phi} &=
+\left(r^2+a^2+\frac{2a^2r\sin^2\theta}{\Sigma}\right)\sin^2\theta
+= \frac{A\sin^2\theta}{\Sigma}.
+\end{align}
+The corresponding inverse components used by the Hamiltonian geodesic solver
+are
+\begin{align}
+g^{tt} &= -\frac{A}{\Sigma\Delta},\\
+g^{t\phi} &= -\frac{2ar}{\Sigma\Delta},\\
+g^{rr} &= \frac{\Delta}{\Sigma},\\
+g^{\theta\theta} &= \frac{1}{\Sigma},\\
+g^{\phi\phi} &=
+\frac{\Delta-a^2\sin^2\theta}{\Sigma\Delta\sin^2\theta}.
+\end{align}
+
+\section{ZAMO quantities}
+
+The implemented ZAMO lapse and frame-dragging angular velocity are
+\begin{align}
+\alpha &= \sqrt{\frac{\Sigma\Delta}{A}},\\
+\omega &= \frac{2ar}{A}.
+\end{align}
+For a covariant momentum with components $p_t$ and $p_\phi$, the ZAMO energy
+proxy used in the C++ tetrad utilities is
+\begin{equation}
+E_{\rm ZAMO}= -\frac{p_t+\omega p_\phi}{\alpha}.
+\end{equation}
+The local tetrad initialization maps a normalized local spatial direction
+$(n_r,n_\theta,n_\phi)$ into a contravariant null vector and then lowers the
+index with $g_{\mu\nu}$. The implementation checks that the resulting null norm
+is finite and that the ZAMO energy is positive.
+
+\section{Null invariant}
+
+The null condition is
+\begin{equation}
+g^{\mu\nu}p_\mu p_\nu = 0.
+\end{equation}
+Both Python reference utilities and the C++ forward-geodesic backend monitor
+this invariant. The calculation also monitors the Killing quantities
+\begin{align}
+E_\infty &= -p_t,\\
+L_z &= p_\phi,
+\end{align}
+which are conserved because the metric is stationary and axisymmetric.
+
+\chapter{Torus / Medium}
+
+\section{Analytic density model}
+
+The implemented medium model is an analytic torus density field. It is not a
+hydrodynamical simulation. The density is evaluated as
+\begin{equation}
+\rho(r,\theta)
+=
+\rho_0
+\exp\left[-\frac{1}{2}
+\left(\frac{r-r_{\rm peak}}{\sigma_r}\right)^2\right]
+\exp\left[-\frac{1}{2}
+\left(\frac{\theta-\pi/2}{\sigma_\theta}\right)^2\right],
+\label{eq:torus_density}
+\end{equation}
+with the hard radial support
+\begin{equation}
+\rho(r,\theta)=0
+\quad \mathrm{if}\quad
+r<r_{\rm inner}\quad\mathrm{or}\quad r>r_{\rm outer}.
+\end{equation}
+The implemented radial width is
+\begin{equation}
+\sigma_r = \frac{1}{2}(r_{\rm outer}-r_{\rm inner}),
+\end{equation}
+and the angular width is
+\begin{equation}
+\sigma_\theta = \max(\theta_{\rm half},10^{-6}).
+\end{equation}
+The configuration parameter \code{half_opening_angle_deg} is therefore a
+Gaussian angular width, not a hard angular boundary. This interpretation is
+recorded in diagnostics as
+\code{half_opening_angle_interpretation = gaussian_width_not_boundary}.
+
+Within the hard radial support, the code can apply a configured
+\code{density_floor_g_cm3} by taking the maximum of the analytic value and the
+floor. Outside the radial shell, the density remains exactly zero.
+
+\section{MediumRenderer}
+
+The shared \code{MediumRenderer} renders the same analytic density model used
+by the DIS sampler diagnostics. It records
+\begin{align}
+\code{medium_renderer_used} &= \code{true},\\
+\code{density_model_has_hard_radial_cut} &= \code{true},\\
+\code{density_model_theta_profile} &= \code{gaussian},\\
+\code{density_model_theta_is_hard_cut} &= \code{false}.
+\end{align}
+The renderer draws the hard radial cuts and Gaussian angular density levels.
+Those angular levels are visual density contours, not physical walls.
+
+\section{Inputs and outputs}
+
+\begin{longtable}{p{0.30\textwidth}p{0.60\textwidth}}
+\toprule
+Role & Implemented item \\
+\midrule
+Inputs & \code{rho0_g_cm3}, \code{r_inner_rg}, \code{r_peak_rg},
+\code{r_outer_rg}, \code{half_opening_angle_deg}, optional density floor.\\
+Used by & DIS density evaluation, DIS density diagnostics, forward geometry
+diagnostics, Observer Bridge diagnostic projections.\\
+Approximation & Static analytic density field; no GRMHD evolution; no
+self-consistent thermal or composition model.\\
+Output semantics & Positive density only inside the hard radial shell; Gaussian
+tail in $\theta$.\\
+\bottomrule
+\end{longtable}
+
+\chapter{UHE Source}
+
+\section{Coordinate cone sampling}
+
+The implemented UHE source is a coordinate-volume sampler in a polar cone.
+For a cone spanning $r_{\min}\leq r\leq r_{\max}$ and
+$\theta_{\min}\leq \theta\leq\theta_{\max}$, the coordinate volume used for
+sampling is
+\begin{equation}
+V_{\rm cone}
+= \frac{2\pi}{3}
+\left(r_{\max}^3-r_{\min}^3\right)
+\left(\cos\theta_{\min}-\cos\theta_{\max}\right).
+\end{equation}
+Uniform coordinate-volume sampling is implemented by drawing
+$u_r,u_\theta,u_\phi\sim U(0,1)$ and setting
+\begin{align}
+r &= \left[
+r_{\min}^3 + u_r(r_{\max}^3-r_{\min}^3)
+\right]^{1/3},\\
+\cos\theta &=
+\cos\theta_{\min}
+-u_\theta(\cos\theta_{\min}-\cos\theta_{\max}),\\
+\phi &= 2\pi u_\phi.
+\end{align}
+The source sampling and physical PDFs are both recorded as
+\begin{equation}
+p_{\rm source} = \frac{1}{V_{\rm cone}},
+\end{equation}
+so the implemented source weight is unity for the default model:
+\begin{equation}
+w_{\rm source}=
+\frac{p_{\rm physical}}{p_{\rm sampling}}=1.
+\end{equation}
+
+\section{Energy and directions}
+
+The implemented source energy model is monoenergetic:
+\begin{equation}
+E_{\nu,\rm emit}=E_0.
+\end{equation}
+For the isotropic local direction model, the code samples a unit vector in a
+ZAMO orthonormal frame:
+\begin{align}
+\cos\alpha &= 2u_\alpha-1,\\
+\beta &= 2\pi u_\beta,\\
+n_r &= \cos\alpha,\\
+n_\theta &= \sin\alpha\cos\beta,\\
+n_\phi &= \sin\alpha\sin\beta.
+\end{align}
+The sampling PDF is
+\begin{equation}
+p_\Omega = \frac{1}{4\pi},
+\end{equation}
+and the default direction weight is unity.
+
+The source stage does not itself produce the physical Kerr four-momentum for
+forward propagation. It records the source position, energy, and local direction.
+The forward-geodesic stage constructs the physical Kerr null momentum from
+those quantities.
+
+\section{Inputs and outputs}
+
+\begin{longtable}{p{0.30\textwidth}p{0.60\textwidth}}
+\toprule
+Role & Implemented item \\
+\midrule
+Inputs & Cone geometry, sample count, random seed, monoenergetic
+neutrino energy, direction model.\\
+Outputs & \code{UHEsource/uhe_neutrino_source_samples.jsonl} and source summary
+products.\\
+Weights & \code{source_weight = 1} and \code{direction_weight = 1} for the
+implemented default uniform/properly matched sampling.\\
+Approximation & Coordinate cone volume, not a GR invariant emissivity integral.\\
+\bottomrule
+\end{longtable}
+
+\chapter{Forward Geodesics}
+
+\section{Momentum construction}
+
+The forward stage consumes UHE source samples and constructs a Kerr null
+covector. For a local isotropic direction, the ZAMO tetrad maps the local
+direction into a null four-vector and then into covariant momentum components.
+For legacy coordinate radial directions, the implementation constructs a
+covariant momentum with $p_t=-E$ and solves the null constraint for $p_r$.
+
+The implementation records that the physical Kerr four-momentum is constructed
+in the forward stage, not in the source sampler.
+
+\section{Hamiltonian system}
+
+The Hamiltonian for null geodesics is
+\begin{equation}
+H(x,p)=\frac{1}{2}g^{\mu\nu}(x)p_\mu p_\nu.
+\end{equation}
+The implemented equations of motion are
+\begin{align}
+\frac{\dd x^\mu}{\dd\lambda} &=
+g^{\mu\nu}p_\nu,\\
+\frac{\dd p_i}{\dd\lambda} &=
+-\frac{1}{2}
+\partial_i g^{\mu\nu}p_\mu p_\nu,
+\qquad i\in\{r,\theta\}.
+\end{align}
+The cyclic momenta are conserved by construction in the differential system:
+\begin{equation}
+\frac{\dd p_t}{\dd\lambda}=0,\qquad
+\frac{\dd p_\phi}{\dd\lambda}=0.
+\end{equation}
+
+The current implementation uses an RK4 stepping procedure with substeps and
+invariant checks. Derivatives of inverse metric components are evaluated
+numerically. When needed, $p_r$ can be renormalized to keep the null constraint
+within tolerance. The solver stops when it reaches the horizon neighborhood,
+the configured outer radius, maximum steps, or an invalid invariant condition.
+
+\section{Segment quantities}
+
+Each accepted forward path is written as a set of path segments. The segment
+length used downstream is a coordinate path-length proxy,
+\begin{equation}
+\Delta l_{\rm coord}
+=
+\left[
+(\Delta r)^2
++ (r_{\rm mid}\Delta\theta)^2
++ (r_{\rm mid}\sin\theta_{\rm mid}\Delta\phi)^2
+\right]^{1/2}.
+\end{equation}
+This is then converted to cm in the DIS stage by multiplying by $\rg$ in cm.
+This is an implemented optical-depth path-length approximation and should not
+be confused with a fully covariant matter-frame line element.
+
+\section{Inputs and outputs}
+
+\begin{longtable}{p{0.30\textwidth}p{0.60\textwidth}}
+\toprule
+Role & Implemented item \\
+\midrule
+Inputs & \code{UHEsource/uhe_neutrino_source_samples.jsonl},
+black-hole spin, step settings, tolerances, outer radius, requested number of
+samples.\\
+Outputs & \code{ForwardGeodesics/uhe_neutrino_forward_paths.jsonl},
+\code{ForwardGeodesics/uhe_neutrino_forward_path_segments.jsonl}, and summary
+diagnostics.\\
+Invariants & Null norm, Killing energy, and $L_z$ are monitored.\\
+Approximation & Numerical RK4 Hamiltonian evolution with coordinate segment
+lengths for downstream optical depth.\\
+\bottomrule
+\end{longtable}
+
+\chapter{DIS Interaction Sampler}
+
+\section{Density and local energy}
+
+The DIS sampler consumes forward path segments and evaluates the analytic torus
+density at segment midpoints. The baryon density is
+\begin{equation}
+n_b(r,\theta)=\frac{\rho(r,\theta)}{m_b},
+\end{equation}
+where $m_b$ is the baryon mass in grams.
+
+The local neutrino energy is computed from the covariant momentum. If the
+configured static medium model is valid at that position, the code uses the
+static observer expression
+\begin{equation}
+E_{\rm local} = -p_t u^t,\qquad
+u^t=\frac{1}{\sqrt{-g_{tt}}}.
+\end{equation}
+If a static observer is not valid, or if the implementation needs the fallback,
+the ZAMO expression is used:
+\begin{equation}
+E_{\rm local}
+=-\left(\frac{p_t}{\alpha}+\frac{\omega p_\phi}{\alpha}\right)
+=-\frac{p_t+\omega p_\phi}{\alpha}.
+\end{equation}
+The static-to-ZAMO fallback is recorded as a physics-risk approximation.
+
+\section{Cross-section interpolation}
+
+The DIS charged-current cross sections are read from compact tabulated files
+for the implemented GBW and IIM models. If an energy lies inside the tabulated
+range, the interpolation is log-log:
+\begin{equation}
+\ln \sigmanun(E)
+=
+\ln \sigma_0
++
+\frac{\ln E-\ln E_0}{\ln E_1-\ln E_0}
+\left(\ln\sigma_1-\ln\sigma_0\right).
+\end{equation}
+Requests outside the tabulated range are rejected for that segment and the
+segment contribution is set to zero in the diagnostic recomputation.
+
+\section{Optical depth and probability}
+
+For each segment,
+\begin{equation}
+\Delta\tau_i =
+n_{b,i}\,\sigmanun(E_{{\rm local},i})\,
+\Delta l_i,
+\end{equation}
+where $\Delta l_i$ is the coordinate path-length proxy converted from $\rg$ to
+cm. The total optical depth along a path is
+\begin{equation}
+\tau = \sum_i \Delta\tau_i.
+\end{equation}
+The interaction probability is
+\begin{equation}
+P_{\rm int}=1-\exp(-\tau),
+\end{equation}
+implemented numerically as
+\begin{equation}
+P_{\rm int}=-\operatorname{expm1}(-\tau)
+\end{equation}
+with clipping to the interval $[0,1]$.
+
+\section{Interaction sampling}
+
+If a path is accepted by the Bernoulli trial with probability $P_{\rm int}$,
+the segment index is sampled by the inverse CDF
+\begin{equation}
+P(i)=\frac{\Delta\tau_i}{\sum_j \Delta\tau_j}.
+\end{equation}
+After the segment is selected, the implemented accepted-point sampler requires
+the final recorded interaction point to have positive medium density. It
+performs rejection sampling inside the chosen segment and records
+\begin{align}
+\code{interaction_point_density_checked} &= \code{true},\\
+\code{interaction_point_inside_medium} &= \code{true}\quad \mathrm{when}\quad
+\rho(r_{\rm int},\theta_{\rm int})>0,\\
+\code{interaction_point_rho_g_cm3} &= \rho(r_{\rm int},\theta_{\rm int}).
+\end{align}
+The fallback policy is recorded in
+\code{interaction_point_sampling_method}. The present criterion for a valid
+accepted point is $\rho(r_{\rm int},\theta_{\rm int})>0$.
+
+\section{Weights}
+
+The DIS products preserve source and direction weights from the UHE source.
+The pre-event weight used downstream is recorded as
+\code{final_pre_event_weight}. The DIS sampler also records optical-depth and
+expected-interaction quantities so that later stages can distinguish the
+sampling decision from pre-event observation scoring.
+
+\section{Inputs and outputs}
+
+\begin{longtable}{p{0.30\textwidth}p{0.60\textwidth}}
+\toprule
+Role & Implemented item \\
+\midrule
+Inputs & Forward geodesic paths and segments, source samples, DIS cross-section
+tables, analytic medium parameters, random seed.\\
+Outputs & \code{DIS/dis_path_optical_depths.jsonl},
+\code{DIS/dis_accepted_interactions.jsonl}, optical-depth report, diagnostics,
+GBW/IIM comparison products.\\
+Diagnostics & Tau distribution, interaction probability distribution, optical
+depth maps, medium density map, accepted interaction distributions, sigma and
+correlation plots.\\
+Approximation & Static or ZAMO local energy model; coordinate path-length proxy;
+compact cross-section tables.\\
+\bottomrule
+\end{longtable}
+
+\chapter{Observer Bridge}
+
+\section{Purpose}
+
+The Observer Bridge consumes accepted DIS interactions and assigns a
+non-destructive observation score. It does not generate secondary particles,
+does not call POWHEG, does not call PYTHIA, does not call GEANT4, and does not
+perform photon transport. All accepted DIS interactions become Observer Bridge
+candidates, even if they are outside the camera FOV or have small score.
+
+\section{Geometry proxies}
+
+The interaction position is converted to Cartesian coordinates through
+\begin{equation}
+(x,y,z)=
+\left(
+r\sin\theta\cos\phi,\,
+r\sin\theta\sin\phi,\,
+r\cos\theta
+\right).
+\end{equation}
+The observer is placed at the configured camera position. The geometric
+direction from the interaction to the observer is
+\begin{equation}
+\hat{\mathbf{n}}_{\rm obs}
+=
+\frac{\mathbf{x}_{\rm obs}-\mathbf{x}_{\rm int}}
+{|\mathbf{x}_{\rm obs}-\mathbf{x}_{\rm int}|}.
+\end{equation}
+The implemented escape proxy compares this direction with the local radial
+direction,
+\begin{equation}
+w_{\rm esc}
+=
+\max\left(0,\,
+\hat{\mathbf{x}}_{\rm int}\cdot \hat{\mathbf{n}}_{\rm obs}
+\right).
+\end{equation}
+This is a proxy, not a particle-transport escape calculation.
+
+The FOV weight is either a hard FOV flag or a soft Gaussian-like angular proxy,
+depending on configuration. The visibility, line-of-sight, and redshift models
+are explicitly recorded as proxies. The implemented default redshift and
+line-of-sight weights are unity proxies unless configured otherwise.
+
+\section{Score definition}
+
+The implemented physics weight in the C++ Observer Bridge is
+\begin{equation}
+w_{\rm physics}=\code{final_pre_event_weight},
+\end{equation}
+with a fallback to source times direction weight when that field is absent.
+The observer weight is the product of the implemented proxy factors:
+\begin{equation}
+w_{\rm observer}
+=
+w_{\rm esc}\,
+w_{\rm visibility}\,
+w_{\rm FOV}\,
+w_{\rm distance}\,
+w_{\rm redshift}\,
+w_{\rm LOS}.
+\end{equation}
+The final observation score is
+\begin{equation}
+S_{\rm obs}
+=
+w_{\rm physics}\,w_{\rm observer}.
+\end{equation}
+All three quantities are recorded for each candidate:
+\code{physics_weight}, \code{observer_weight}, and
+\code{final_observation_score}. The implementation enforces non-negative proxy
+weights by clipping or construction.
+
+\section{Proxy risk flags}
+
+The reports record the proxy nature of the bridge:
+\begin{align}
+\code{secondary_particle_proxy_model} &\neq \code{full_transport},\\
+\code{escape_proxy_physics_risk} &= \code{true},\\
+\code{visibility_proxy_physics_risk} &= \code{true},\\
+\code{redshift_proxy_physics_risk} &= \code{true}.
+\end{align}
+The stage status is scoring-only. It is intentionally non-destructive.
+
+\section{Inputs and outputs}
+
+\begin{longtable}{p{0.30\textwidth}p{0.60\textwidth}}
+\toprule
+Role & Implemented item \\
+\midrule
+Inputs & \code{DIS/dis_accepted_interactions.jsonl} and runtime configuration.
+It may consult previous products for diagnostics.\\
+Outputs & \code{ObserverBridge/observer_bridge_candidates.jsonl},
+\code{ObserverBridge/observer_bridge_ranked_events.jsonl}, JSON/CSV summaries,
+camera-view and overlay diagnostics.\\
+Invariant policy & Number of candidates scored equals number of accepted DIS
+interactions consumed. FOV is not used as a destructive filter.\\
+Approximation & Geometric escape, visibility, FOV, redshift, and line-of-sight
+proxies. No secondary-particle generation.\\
+\bottomrule
+\end{longtable}
+
+\chapter{POWHEG Dry Run / Hard Process Preparation}
+
+\section{Dry-run role}
+
+H3-W9a prepares local POWHEG DIS jobs but deliberately does not execute
+\code{pwhg_main}. It consumes ranked Observer Bridge events and writes its own
+products under \code{POWHEG/}. It does not modify \code{ObserverBridge/},
+\code{DIS/}, \code{ForwardGeodesics/}, or \code{UHEsource/}.
+
+The implemented run mode is
+\begin{equation}
+\code{powheg_run_mode}=\code{dry_run}.
+\end{equation}
+The reports record
+\begin{align}
+\code{powheg_invoked} &= \code{false},\\
+\code{pwhg_main_executed} &= \code{false},\\
+\code{powheg_lhe_generated} &= \code{false}.
+\end{align}
+
+\section{Candidate selection}
+
+The driver reads \code{ObserverBridge/observer_bridge_ranked_events.jsonl},
+sorts candidates by decreasing final observation score, and uses the original
+input order as a tie-breaker. The implemented selection policies are:
+\begin{itemize}
+\item \code{top_score}: take highest-score candidates up to
+\code{max_powheg_events}.
+\item \code{score_threshold}: discard candidates below
+\code{min_final_observation_score}, then cap at \code{max_powheg_events}.
+\item \code{all_candidates}: represented by the same sorted traversal and cap.
+\end{itemize}
+
+\section{Input-card mapping}
+
+Each selected candidate receives a request identifier of the form
+\code{H3PWHG-000001}. Each request has its own
+\code{powheg_input_cards/<request_id>/powheg.input}. The implemented mapping is
+\begin{align}
+E_{\nu,\rm local} &\rightarrow \code{ebeam1},\\
+m_N = 0.938272~\GeV &\rightarrow \code{ebeam2},\\
+\code{events_per_candidate} &\rightarrow \code{numevts},\\
+\code{channel_type} &= 3,\\
+\code{vtype} &= 2.
+\end{align}
+The dry-run card also records fixed PDF choices
+\code{lhans1 = 303400} and \code{lhans2 = 303400}. The implemented scale cap is
+\begin{equation}
+Q_{\max} =
+\min\left(2\sqrt{0.938272\,E_{\nu,\rm local}},\,10^5\right).
+\end{equation}
+For the implemented seed mode, the seed is
+\begin{equation}
+\code{powheg_seed}
+=
+\code{random_seed}+\code{candidate_rank}.
+\end{equation}
+
+\section{Event requests}
+
+The event request file
+\code{POWHEG/powheg_event_requests.jsonl} records for each prepared job:
+\begin{align}
+\mathcal{R}_{\rm POWHEG}=\{&
+\code{powheg_request_id},\,
+\code{candidate_rank},\,
+\code{interaction_id},\,
+\code{event_id},\,
+\code{source_sample_id}, \nonumber\\
+&E_{\nu,\rm local},\,
+w_{\rm physics},\,
+w_{\rm observer},\,
+S_{\rm obs},\,
+\code{powheg_input_path},\,
+\code{powheg_seed},\,
+\code{powheg_status}\}.
+\end{align}
+The status is \code{dry_run_ready}; \code{powheg_invoked} is false for every
+request.
+
+\section{Inputs and outputs}
+
+\begin{longtable}{p{0.30\textwidth}p{0.60\textwidth}}
+\toprule
+Role & Implemented item \\
+\midrule
+Inputs & \code{ObserverBridge/observer_bridge_ranked_events.jsonl} and POWHEG
+configuration values.\\
+Outputs & \code{POWHEG/powheg_event_requests.jsonl}, input cards, summary
+JSON/CSV, report JSON, and diagnostic plots.\\
+No output yet & No \code{pwgevents.lhe}; no PYTHIA; no GEANT4; no photon
+transport.\\
+Backend & C++17 executable \code{bin/hadros3_powheg_driver}. Python handles
+orchestration and plots.\\
+\bottomrule
+\end{longtable}
+
+\chapter{Provenance and Statistical Weights}
+
+\section{Stage provenance}
+
+Each stage records the backend, products, validation flags, and disabled future
+stages relevant to its current implementation. A typical provenance record
+contains:
+\begin{equation}
+\{\mathrm{parameters},\mathrm{products},\mathrm{validation},
+\mathrm{stage\ summaries},\mathrm{disabled\ stages}\}.
+\end{equation}
+The implemented provenance explicitly marks future expensive stages as disabled
+until they are introduced:
+\begin{align}
+\code{pythia_invoked} &= \code{false},\\
+\code{geant4_invoked} &= \code{false},\\
+\code{photon_transport_invoked} &= \code{false},\\
+\code{expensive_event_generation_invoked} &= \code{false}.
+\end{align}
+For H3-W9a, POWHEG is active only as dry-run preparation:
+\begin{equation}
+\code{status}=\code{powheg_jobs_prepared_no_lhe}.
+\end{equation}
+
+\section{Weight chain}
+
+The implemented source and direction samplers are configured so that the
+default source and direction weights are unity:
+\begin{align}
+w_{\rm source} &= 1,\\
+w_{\rm direction} &= 1.
+\end{align}
+The DIS sampler records interaction and pre-event weights. The Observer Bridge
+then uses
+\begin{equation}
+w_{\rm physics}=\code{final_pre_event_weight}
+\end{equation}
+and computes
+\begin{equation}
+S_{\rm obs}=w_{\rm physics}w_{\rm observer}.
+\end{equation}
+The POWHEG dry-run carries those weights into each event request; it does not
+change the physics score and does not generate a hard event yet.
+
+\section{Random seeds}
+
+The implemented random stages record seeds:
+\begin{itemize}
+\item UHE source sampling records its source seed.
+\item DIS interaction sampling records its acceptance and point-sampling seed.
+\item POWHEG dry-run records \code{random_seed} and the per-candidate
+\code{powheg_seed}.
+\end{itemize}
+These seeds are part of the statistical contract of the pipeline.
+
+\chapter{Pipeline Summary}
+
+\section{Implemented stage contract}
+
+The current implemented pipeline can be summarized as
+\begin{equation}
+\mathrm{UHESource}
+\rightarrow
+\mathrm{ForwardGeodesics}
+\rightarrow
+\mathrm{DIS}
+\rightarrow
+\mathrm{ObserverBridge}
+\rightarrow
+\mathrm{POWHEG\ DryRun}.
+\end{equation}
+The camera preview is an observer-view diagnostic that can be used by the
+dashboard and by Observer Bridge overlays, but it is not a physical
+secondary-particle propagation stage.
+
+\begin{longtable}{p{0.20\textwidth}p{0.24\textwidth}p{0.24\textwidth}p{0.22\textwidth}}
+\caption{Implemented pipeline products and semantic status.}\\
+\toprule
+Stage & Official inputs & Official outputs & Status \\
+\midrule
+\endfirsthead
+\toprule
+Stage & Official inputs & Official outputs & Status \\
+\midrule
+\endhead
+UHE Source & Configuration & \code{UHEsource/} JSONL/JSON & Sampling proxy with
+monoenergetic source.\\
+Forward Geodesics & \code{UHEsource/} & \code{ForwardGeodesics/} paths and
+segments & Kerr null geodesic propagation.\\
+DIS Sampler & \code{ForwardGeodesics/}, \code{UHEsource/} & \code{DIS/}
+optical-depth and accepted interactions & Optical-depth DIS sampler.\\
+Observer Bridge & \code{DIS/dis_accepted_interactions.jsonl} &
+\code{ObserverBridge/} candidates and ranked events & Non-destructive
+geometric scoring proxy.\\
+POWHEG Dry Run & \code{ObserverBridge/observer_bridge_ranked_events.jsonl} &
+\code{POWHEG/} requests and input cards & Prepared jobs only; no LHE.\\
+\bottomrule
+\end{longtable}
+
+\section{Explicit non-goals of the implemented stages}
+
+The current pipeline does not yet implement:
+\begin{itemize}
+\item real POWHEG event execution inside the main pipeline;
+\item LHE generation from H3-W9a;
+\item PYTHIA showering and hadronization;
+\item GEANT4 detector or material transport;
+\item photon transport from secondaries to the observer;
+\item full GRMHD torus evolution;
+\item full physical visibility, escape, redshift, or line-of-sight transport.
+\end{itemize}
+Those future stages must preserve the contract that each stage consumes official
+previous outputs, writes only to its own directory, records provenance, and
+marks expensive or proxy physics explicitly.
+
+\appendix
+\chapter{Appendix: Symbols and Product Names}
+
+\begin{longtable}{p{0.30\textwidth}p{0.60\textwidth}}
+\toprule
+Product or field & Meaning \\
+\midrule
+\endfirsthead
+\toprule
+Product or field & Meaning \\
+\midrule
+\endhead
+\code{uhe_neutrino_source_samples.jsonl} & UHE source positions, energies,
+directions, and sampling weights.\\
+\code{uhe_neutrino_forward_path_segments.jsonl} & Forward geodesic path
+segments with midpoint coordinates, momenta, and segment lengths.\\
+\code{dis_path_optical_depths.jsonl} & Path-level DIS optical depths and
+interaction probabilities.\\
+\code{dis_accepted_interactions.jsonl} & Accepted DIS interactions and their
+density-checked interaction points.\\
+\code{observer_bridge_candidates.jsonl} & All accepted DIS interactions scored
+as observation candidates.\\
+\code{observer_bridge_ranked_events.jsonl} & Same candidate family ranked by
+final observation score.\\
+\code{powheg_event_requests.jsonl} & Dry-run POWHEG event requests and card
+paths.\\
+\code{final_pre_event_weight} & Physics weight consumed by Observer Bridge as
+implemented.\\
+\code{final_observation_score} & Product of implemented physics and observer
+weights.\\
+\code{powheg_invoked} & False in H3-W9a dry run.\\
+\code{pwhg_main_executed} & False in H3-W9a dry run.\\
+\code{powheg_lhe_generated} & False in H3-W9a dry run.\\
+\bottomrule
+\end{longtable}
+
+\end{document}

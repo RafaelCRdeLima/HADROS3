@@ -21,8 +21,9 @@ from hadros3.config import deep_update, defaults, load_values, run_output_dir, s
 from hadros3.dis_sampler import generate_dis_interaction_products, generate_gbw_iim_comparison
 from hadros3.forward_geodesics import generate_forward_geodesic_products
 from hadros3.observer_bridge import generate_observer_bridge_products
-from hadros3.paths import camera_preview_dir, clear_dis_outputs, clear_forward_geodesics_outputs, clear_observer_bridge_outputs, dashboard_dir, dis_dir, ensure_output_layout, forward_geodesics_dir, geometry_dir, observer_bridge_dir, rel, run_metadata_dir, uhe_source_dir
+from hadros3.paths import camera_preview_dir, clear_dis_outputs, clear_forward_geodesics_outputs, clear_observer_bridge_outputs, clear_powheg_outputs, dashboard_dir, dis_dir, ensure_output_layout, forward_geodesics_dir, geometry_dir, observer_bridge_dir, powheg_dir, rel, run_metadata_dir, uhe_source_dir
 from hadros3.pipeline import render_hadros_web
+from hadros3.powheg import generate_powheg_products
 from hadros3.reuse import discover_original_hadros
 from hadros3.uhe_source import generate_uhe_source_products
 
@@ -45,6 +46,7 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
     forward_dir = forward_geodesics_dir(output_dir)
     dis_output_dir = dis_dir(output_dir)
     bridge_dir = observer_bridge_dir(output_dir)
+    powheg_output_dir = powheg_dir(output_dir)
     web_dir = dashboard_dir(output_dir)
 
     camera_preview_path = camera_dir / "hadros3_camera_preview.png"
@@ -119,6 +121,13 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
     bridge_geometry_3d_html_path = bridge_dir / "observer_bridge_geometry_3d.html"
     bridge_camera_view_path = bridge_dir / "observer_bridge_camera_view.png"
     bridge_camera_overlay_path = bridge_dir / "observer_bridge_camera_overlay.png"
+    powheg_requests_path = powheg_output_dir / "powheg_event_requests.jsonl"
+    powheg_summary_json_path = powheg_output_dir / "powheg_summary.json"
+    powheg_summary_csv_path = powheg_output_dir / "powheg_summary.csv"
+    powheg_report_path = powheg_output_dir / "powheg_report.json"
+    powheg_card_preview_path = powheg_output_dir / "powheg_card_preview.png"
+    powheg_energy_distribution_path = powheg_output_dir / "powheg_energy_distribution.png"
+    powheg_job_summary_path = powheg_output_dir / "powheg_job_summary.png"
     html_path = web_dir / "index.html"
 
     camera_summary: dict[str, Any] | None = None
@@ -126,6 +135,7 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
     forward_summary: dict[str, Any] | None = None
     dis_summary: dict[str, Any] | None = None
     observer_bridge_summary: dict[str, Any] | None = None
+    powheg_summary: dict[str, Any] | None = None
     if camera_summary_path.exists():
         try:
             camera_summary = json.loads(camera_summary_path.read_text(encoding="utf-8"))
@@ -151,6 +161,11 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             observer_bridge_summary = json.loads(bridge_summary_json_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             observer_bridge_summary = {"status": "invalid_summary", "message": "Could not parse Observer Bridge summary."}
+    if powheg_summary_json_path.exists():
+        try:
+            powheg_summary = json.loads(powheg_summary_json_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            powheg_summary = {"status": "invalid_summary", "message": "Could not parse POWHEG summary."}
     return {
         "schema": schema(),
         "values": values,
@@ -161,6 +176,7 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
         "forward_summary": forward_summary,
         "dis_summary": dis_summary,
         "observer_bridge_summary": observer_bridge_summary,
+        "powheg_summary": powheg_summary,
         "source_status": {
             "configured_status": values.get("uhe_neutrino_source", {}).get("status"),
             "input_dir": rel(source_dir, output_dir),
@@ -293,6 +309,34 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "observer_bridge_camera_overlay": rel(bridge_camera_overlay_path, output_dir),
             },
         },
+        "powheg": {
+            "configured_status": values.get("powheg", {}).get("status"),
+            "input_observer_bridge_found": bridge_ranked_path.exists(),
+            "output_dir": rel(powheg_output_dir, output_dir),
+            "n_candidates_input": powheg_summary.get("n_candidates_input", 0) if powheg_summary else 0,
+            "powheg_jobs_prepared": powheg_summary.get("powheg_jobs_prepared", 0) if powheg_summary else 0,
+            "powheg_cards_generated": powheg_summary.get("powheg_cards_generated", 0) if powheg_summary else 0,
+            "powheg_lhe_generated": powheg_summary.get("powheg_lhe_generated", False) if powheg_summary else False,
+            "products": {
+                "powheg_event_requests": powheg_requests_path.exists(),
+                "powheg_summary_json": powheg_summary_json_path.exists(),
+                "powheg_summary": powheg_summary_csv_path.exists(),
+                "powheg_report": powheg_report_path.exists(),
+                "powheg_card_preview": powheg_card_preview_path.exists(),
+                "powheg_energy_distribution": powheg_energy_distribution_path.exists(),
+                "powheg_job_summary": powheg_job_summary_path.exists(),
+            },
+            "summary": powheg_summary,
+            "links": {
+                "powheg_event_requests": rel(powheg_requests_path, output_dir),
+                "powheg_summary_json": rel(powheg_summary_json_path, output_dir),
+                "powheg_summary": rel(powheg_summary_csv_path, output_dir),
+                "powheg_report": rel(powheg_report_path, output_dir),
+                "powheg_card_preview": rel(powheg_card_preview_path, output_dir),
+                "powheg_energy_distribution": rel(powheg_energy_distribution_path, output_dir),
+                "powheg_job_summary": rel(powheg_job_summary_path, output_dir),
+            },
+        },
         "pipeline_status": [
             {"stage": "Geometry", "status": "done" if geometry_preview_path.exists() else "pending", "tab": "Camera"},
             {"stage": "Camera", "status": "done" if camera_preview_path.exists() else "pending", "tab": "Camera"},
@@ -300,6 +344,7 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             {"stage": "Forward Geodesics", "status": "done" if forward_paths_path.exists() and forward_segments_path.exists() else "pending", "tab": "Forward Geodesics"},
             {"stage": "DIS Interaction Sampler", "status": "done" if dis_summary_path.exists() else "pending", "tab": "DIS Interaction Sampler"},
             {"stage": "Observer Bridge", "status": "done" if bridge_summary_json_path.exists() else "pending", "tab": "Observer Bridge"},
+            {"stage": "POWHEG", "status": "done" if powheg_summary_json_path.exists() else "pending", "tab": "POWHEG"},
             {"stage": "Event Generation", "status": "pending", "tab": "Event Generation"},
             {"stage": "GEANT4", "status": "pending", "tab": "GEANT4"},
             {"stage": "Photon Transport", "status": "pending", "tab": "Photon Transport"},
@@ -376,6 +421,13 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             "observer_bridge_geometry_3d_html_exists": bridge_geometry_3d_html_path.exists(),
             "observer_bridge_camera_view_exists": bridge_camera_view_path.exists(),
             "observer_bridge_camera_overlay_exists": bridge_camera_overlay_path.exists(),
+            "powheg_event_requests_exists": powheg_requests_path.exists(),
+            "powheg_summary_json_exists": powheg_summary_json_path.exists(),
+            "powheg_summary_exists": powheg_summary_csv_path.exists(),
+            "powheg_report_exists": powheg_report_path.exists(),
+            "powheg_card_preview_exists": powheg_card_preview_path.exists(),
+            "powheg_energy_distribution_exists": powheg_energy_distribution_path.exists(),
+            "powheg_job_summary_exists": powheg_job_summary_path.exists(),
             "provenance_exists": provenance_path.exists(),
             "config_exists": config_output_path.exists(),
             "render_summary_exists": render_summary_path.exists(),
@@ -451,6 +503,13 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "observer_bridge_geometry_3d_html": rel(bridge_geometry_3d_html_path, output_dir),
                 "observer_bridge_camera_view": rel(bridge_camera_view_path, output_dir),
                 "observer_bridge_camera_overlay": rel(bridge_camera_overlay_path, output_dir),
+                "powheg_event_requests": rel(powheg_requests_path, output_dir),
+                "powheg_summary_json": rel(powheg_summary_json_path, output_dir),
+                "powheg_summary": rel(powheg_summary_csv_path, output_dir),
+                "powheg_report": rel(powheg_report_path, output_dir),
+                "powheg_card_preview": rel(powheg_card_preview_path, output_dir),
+                "powheg_energy_distribution": rel(powheg_energy_distribution_path, output_dir),
+                "powheg_job_summary": rel(powheg_job_summary_path, output_dir),
                 "provenance": rel(provenance_path, output_dir),
                 "render_summary": rel(render_summary_path, output_dir),
                 "html_summary": rel(html_path, output_dir),
@@ -567,6 +626,7 @@ let sourcePreviewVersion = Date.now();
 let forwardPreviewVersion = Date.now();
 let disPreviewVersion = Date.now();
 let observerBridgePreviewVersion = Date.now();
+let powhegPreviewVersion = Date.now();
 function outPath(key) {{
   return state.outputs.paths && state.outputs.paths[key] ? state.outputs.paths[key] : key;
 }}
@@ -587,6 +647,17 @@ function setObserverBridgeOutputs(exists) {{
   state.outputs.observer_bridge_ranked_events_png_exists = exists;
   state.outputs.observer_bridge_geometry_3d_html_exists = exists;
   state.outputs.observer_bridge_camera_view_exists = exists;
+  state.outputs.observer_bridge_camera_overlay_exists = exists;
+}}
+function setPowhegOutputs(exists) {{
+  state.powheg_summary = exists ? state.powheg_summary : null;
+  state.outputs.powheg_event_requests_exists = exists;
+  state.outputs.powheg_summary_json_exists = exists;
+  state.outputs.powheg_summary_exists = exists;
+  state.outputs.powheg_report_exists = exists;
+  state.outputs.powheg_card_preview_exists = exists;
+  state.outputs.powheg_energy_distribution_exists = exists;
+  state.outputs.powheg_job_summary_exists = exists;
 }}
 function inputFor(field, value) {{
   if (field.kind === "select") {{
@@ -714,6 +785,7 @@ async function sampleUheSource() {{
       state.outputs.gbw_vs_iim_interaction_locations_exists = false;
       state.outputs.gbw_vs_iim_summary_exists = false;
       setObserverBridgeOutputs(false);
+      setPowhegOutputs(false);
       state.forward_geodesics_status = Object.assign({{}}, state.forward_geodesics_status || {{}}, {{
         input_uhe_source_found: true,
         paths_exists: false,
@@ -798,6 +870,7 @@ async function propagateForwardGeodesics() {{
       state.outputs.gbw_vs_iim_interaction_locations_exists = false;
       state.outputs.gbw_vs_iim_summary_exists = false;
       setObserverBridgeOutputs(false);
+      setPowhegOutputs(false);
       state.forward_geodesics_status = Object.assign({{}}, state.forward_geodesics_status || {{}}, {{
         configured_status: state.values.forward_geodesics.status,
         input_uhe_source_found: true,
@@ -869,6 +942,7 @@ async function sampleDisInteractions() {{
       state.outputs.gbw_vs_iim_interaction_locations_exists = true;
       state.outputs.gbw_vs_iim_summary_exists = true;
       setObserverBridgeOutputs(false);
+      setPowhegOutputs(false);
       state.dis_interaction_sampler = Object.assign({{}}, state.dis_interaction_sampler || {{}}, {{
         configured_status: state.values.dis_interaction_sampler.status,
         input_uhe_source_found: true,
@@ -924,6 +998,7 @@ async function computeObserverBridge() {{
       state.values.observer_bridge.status = "observer_bridge_scored_no_event_generation";
       state.observer_bridge_summary = result.data.observer_bridge;
       setObserverBridgeOutputs(true);
+      setPowhegOutputs(false);
       state.observer_bridge = Object.assign({{}}, state.observer_bridge || {{}}, {{
         configured_status: state.values.observer_bridge.status,
         input_dis_found: true,
@@ -935,6 +1010,36 @@ async function computeObserverBridge() {{
       state.outputs.config_exists = true;
       activeTab = "Observer Bridge";
       observerBridgePreviewVersion = Date.now();
+      const logText = result.text;
+      render();
+      const log = document.querySelector("#log");
+      if (log) log.textContent = logText;
+    }}
+  }}
+  finally {{ button.disabled = false; }}
+}}
+async function preparePowheg() {{
+  const button = document.querySelector("#powheg-button");
+  button.disabled = true;
+  try {{
+    const values = collect();
+    const result = await post("/api/powheg", values);
+    if (result.ok && result.data && result.data.powheg) {{
+      state.values = values;
+      state.powheg_summary = result.data.powheg;
+      setPowhegOutputs(true);
+      state.powheg = Object.assign({{}}, state.powheg || {{}}, {{
+        input_observer_bridge_found: true,
+        n_candidates_input: result.data.powheg.n_candidates_input,
+        powheg_jobs_prepared: result.data.powheg.powheg_jobs_prepared,
+        powheg_cards_generated: result.data.powheg.powheg_cards_generated,
+        powheg_lhe_generated: false,
+        summary: result.data.powheg,
+      }});
+      state.outputs.provenance_exists = true;
+      state.outputs.config_exists = true;
+      activeTab = "POWHEG";
+      powhegPreviewVersion = Date.now();
       const logText = result.text;
       render();
       const log = document.querySelector("#log");
@@ -1141,7 +1246,7 @@ function tabLabel(tab) {{
   return aliases[tab.tab] || tab.tab;
 }}
 function orderedTabs() {{
-  const order = ["Camera", "Black Hole", "Torus / Medium", "Funnel / Cone", "UHE Source", "Forward Geodesics", "DIS Interaction Sampler", "Observer Bridge", "Event Generation", "GEANT4", "Photon Transport", "Spectra", "Outputs", "Provenance"];
+  const order = ["Camera", "Black Hole", "Torus / Medium", "Funnel / Cone", "UHE Source", "Forward Geodesics", "DIS Interaction Sampler", "Observer Bridge", "POWHEG", "Event Generation", "GEANT4", "Photon Transport", "Spectra", "Outputs", "Provenance"];
   return [...state.schema].sort((a, b) => {{
     const ai = order.indexOf(tabLabel(a));
     const bi = order.indexOf(tabLabel(b));
@@ -1446,6 +1551,61 @@ function renderObserverBridgePanel() {{
     ${{links}}
   </div>`;
 }}
+function renderPowhegPanel() {{
+  const summary = state.powheg_summary;
+  const status = state.powheg || {{}};
+  const fields = Object.fromEntries(state.schema.flatMap(tab => tab.fields).filter(f => f.section === "powheg").map(f => [f.key, f]));
+  const value = key => state.values.powheg[key];
+  const input = key => `<label><span>${{fields[key].label}}</span>${{inputFor(fields[key], value(key))}}</label>`;
+  const bridgeFound = Boolean(status.input_observer_bridge_found || state.outputs.observer_bridge_ranked_events_exists);
+  const inputHtml = `<section><h2>Inputs</h2><div class="summary-grid">
+    <div class="summary-item"><strong>Observer Bridge ranked events</strong><span class="${{bridgeFound ? "ok" : "pending"}}">${{bridgeFound ? "found" : "missing"}}</span></div>
+    <div class="summary-item"><strong>Input file</strong><code>${{outPath("observer_bridge_ranked_events")}}</code></div>
+    <div class="summary-item"><strong>POWHEG backend</strong><code>local_powheg</code></div>
+    <div class="summary-item"><strong>POWHEG process</strong><code>nudis</code></div>
+    <div class="summary-item"><strong>run_mode</strong><code>dry_run</code></div>
+  </div></section>`;
+  const configHtml = `<section><h2>Configuration</h2>
+    <div class="camera-controls-card"><h3>Dry-run driver</h3>
+      ${{input("powheg_backend")}}
+      ${{input("powheg_process")}}
+      ${{input("run_mode")}}
+      ${{input("ranking_policy")}}
+      ${{input("max_powheg_events")}}
+      ${{input("events_per_candidate")}}
+      ${{input("random_seed")}}
+      ${{input("powheg_seed_mode")}}
+      ${{input("min_final_observation_score")}}
+    </div>
+  </section>`;
+  const resultsHtml = summary ? `<section><h2>Results</h2><div class="summary-grid">
+    <div class="summary-item"><strong>Candidates received</strong>${{summary.n_candidates_input || 0}}</div>
+    <div class="summary-item"><strong>POWHEG jobs prepared</strong>${{summary.powheg_jobs_prepared || 0}}</div>
+    <div class="summary-item"><strong>Input cards generated</strong>${{summary.powheg_cards_generated || 0}}</div>
+    <div class="summary-item"><strong>LHE generated</strong><span class="pending">NO</span></div>
+    <div class="summary-item"><strong>Dry Run</strong><span class="ok">${{summary.powheg_run_mode || "dry_run"}}</span></div>
+    <div class="summary-item"><strong>pwhg_main</strong><span class="pending">NOT executed</span></div>
+    <div class="summary-item"><strong>powheg_invoked</strong>${{String(summary.powheg_invoked)}}</div>
+    <div class="summary-item"><strong>Backend language</strong>${{summary.backend_language || "C++17"}}</div>
+    <div class="summary-item"><strong>Backend executable</strong><code>${{summary.backend_executable || "bin/hadros3_powheg_driver"}}</code></div>
+    <div class="summary-item"><strong>Runtime self-contained</strong>${{String(summary.powheg_runtime_self_contained)}}</div>
+  </div></section>` : `<section><h2>Results</h2><p class="note">No POWHEG dry-run jobs prepared yet.</p></section>`;
+  const links = `<section><h2>Outputs</h2><div class="output-link-grid">
+    ${{state.outputs.powheg_event_requests_exists ? `<a href="${{outUrl("powheg_event_requests")}}" target="_blank">Event requests JSONL<br><code>${{outPath("powheg_event_requests")}}</code></a>` : ""}}
+    ${{state.outputs.powheg_summary_json_exists ? `<a href="${{outUrl("powheg_summary_json")}}" target="_blank">Summary JSON<br><code>${{outPath("powheg_summary_json")}}</code></a>` : ""}}
+    ${{state.outputs.powheg_summary_exists ? `<a href="${{outUrl("powheg_summary")}}" target="_blank">Summary CSV<br><code>${{outPath("powheg_summary")}}</code></a>` : ""}}
+    ${{state.outputs.powheg_report_exists ? `<a href="${{outUrl("powheg_report")}}" target="_blank">Report JSON<br><code>${{outPath("powheg_report")}}</code></a>` : ""}}
+  </div></section>`;
+  return `<div class="source-panel">
+    ${{inputHtml}}
+    ${{configHtml}}
+    <section><h2>Run</h2><button type="button" id="powheg-button" class="source-action" ${{bridgeFound ? "" : "disabled"}}>Prepare POWHEG Jobs</button>
+    <p class="note">Dry Run: pwhg_main NOT executed. H3-W9a prepares event requests, deterministic seeds and real POWHEG input cards only.</p>
+    <p class="note">No LHE, PYTHIA, GEANT4 or photon transport is generated in this phase.</p></section>
+    ${{resultsHtml}}
+    ${{links}}
+  </div>`;
+}}
 function renderContextPanel() {{
   const geometryPreviewTabs = new Set(["Camera", "Black Hole", "Torus / Medium", "Funnel / Cone"]);
   if (geometryPreviewTabs.has(activeTab)) {{
@@ -1524,6 +1684,17 @@ function renderContextPanel() {{
     ].filter(Boolean).join("");
     const diagnostics = diagnosticCards ? `<section><h2>Diagnostics</h2><div class="diagnostic-card-grid">${{diagnosticCards}}</div></section>` : "";
     return `<aside class="panel"><h2>Observer Camera Overlay</h2><div class="context-figure">${{figure}}</div>${{diagnostics}}</aside>`;
+  }}
+  if (activeTab === "POWHEG") {{
+    const figure = state.outputs.powheg_card_preview_exists
+      ? `<img src="${{outUrl("powheg_card_preview")}}?v=${{powhegPreviewVersion}}" alt="POWHEG card preview">`
+      : `<div class="context-empty">No POWHEG dry-run diagnostics generated yet.</div>`;
+    const diagnosticCards = [
+      state.outputs.powheg_energy_distribution_exists ? `<figure class="diagnostic-plot-card"><figcaption>Energy distribution</figcaption><a href="${{outUrl("powheg_energy_distribution")}}" target="_blank"><img src="${{outUrl("powheg_energy_distribution")}}?v=${{powhegPreviewVersion}}" alt="POWHEG energy distribution"></a></figure>` : "",
+      state.outputs.powheg_job_summary_exists ? `<figure class="diagnostic-plot-card"><figcaption>Job summary</figcaption><a href="${{outUrl("powheg_job_summary")}}" target="_blank"><img src="${{outUrl("powheg_job_summary")}}?v=${{powhegPreviewVersion}}" alt="POWHEG job summary"></a></figure>` : "",
+    ].filter(Boolean).join("");
+    const diagnostics = diagnosticCards ? `<section><h2>Diagnostics</h2><div class="diagnostic-card-grid">${{diagnosticCards}}</div></section>` : "";
+    return `<aside class="panel"><h2>POWHEG Card Preview</h2><div class="context-figure">${{figure}}</div>${{diagnostics}}</aside>`;
   }}
   return "";
 }}
@@ -1640,6 +1811,17 @@ function renderOutputsPanel() {{
     ${{out.observer_bridge_visibility_map_exists ? `<img src="${{outUrl("observer_bridge_visibility_map")}}" alt="Observer Bridge visibility map">` : ""}}
     ${{link(out.observer_bridge_ranked_events_png_exists, "observer_bridge_ranked_events_png", "Observer Bridge ranked events PNG")}}
     ${{out.observer_bridge_ranked_events_png_exists ? `<img src="${{outUrl("observer_bridge_ranked_events_png")}}" alt="Observer Bridge ranked events">` : ""}}
+  `) + group("POWHEG/", `
+    ${{link(out.powheg_event_requests_exists, "powheg_event_requests", "POWHEG event requests")}}
+    ${{link(out.powheg_summary_json_exists, "powheg_summary_json", "POWHEG summary JSON")}}
+    ${{link(out.powheg_summary_exists, "powheg_summary", "POWHEG summary CSV")}}
+    ${{link(out.powheg_report_exists, "powheg_report", "POWHEG report")}}
+    ${{link(out.powheg_card_preview_exists, "powheg_card_preview", "POWHEG card preview")}}
+    ${{out.powheg_card_preview_exists ? `<img src="${{outUrl("powheg_card_preview")}}" alt="POWHEG card preview">` : ""}}
+    ${{link(out.powheg_energy_distribution_exists, "powheg_energy_distribution", "POWHEG energy distribution")}}
+    ${{out.powheg_energy_distribution_exists ? `<img src="${{outUrl("powheg_energy_distribution")}}" alt="POWHEG energy distribution">` : ""}}
+    ${{link(out.powheg_job_summary_exists, "powheg_job_summary", "POWHEG job summary")}}
+    ${{out.powheg_job_summary_exists ? `<img src="${{outUrl("powheg_job_summary")}}" alt="POWHEG job summary">` : ""}}
   `) + group("Dashboard/", `
     ${{link(out.html_summary_exists, "html_summary", "Dashboard HTML")}}
   `);
@@ -1746,9 +1928,9 @@ function render() {{
   const runName = state.values.run.run_name || "HADROS3_run";
   const runStrip = `<div class="run-strip"><label><span>Run name</span><input id="runNameInput" type="text" value="${{runName}}"></label><span>Output</span><div class="output-folder">output/${{safeRunName(runName)}}</div></div>`;
   const nav = `<nav>${{tabs.map(tab => `<button class="tab-button ${{tabLabel(tab) === activeTab ? "active" : ""}}" data-tab="${{tabLabel(tab)}}">${{tabLabel(tab)}}</button>`).join("")}}</nav>`;
-  const customTabs = new Set(["DIS Interaction Sampler", "Observer Bridge"]);
+  const customTabs = new Set(["DIS Interaction Sampler", "Observer Bridge", "POWHEG"]);
   const genericFields = customTabs.has(activeTab) ? "" : renderFields(active);
-  root.innerHTML = runStrip + nav + `<div class="panel"><p class="note">Geometry/configuration shell only. Expensive event stages are disabled.</p>${{genericFields}}${{activeTab === "Camera" ? renderHadrosCameraPanel() + renderBackendTable() : ""}}${{activeTab === "UHE Source" ? renderSourcePanel() : ""}}${{activeTab === "Forward Geodesics" ? renderForwardPanel() : ""}}${{activeTab === "DIS Interaction Sampler" ? renderDisPanel() : ""}}${{activeTab === "Observer Bridge" ? renderObserverBridgePanel() : ""}}${{activeTab === "Outputs" ? renderOutputsPanel() : ""}}` +
+  root.innerHTML = runStrip + nav + `<div class="panel"><p class="note">Geometry/configuration shell only. Expensive event stages are disabled.</p>${{genericFields}}${{activeTab === "Camera" ? renderHadrosCameraPanel() + renderBackendTable() : ""}}${{activeTab === "UHE Source" ? renderSourcePanel() : ""}}${{activeTab === "Forward Geodesics" ? renderForwardPanel() : ""}}${{activeTab === "DIS Interaction Sampler" ? renderDisPanel() : ""}}${{activeTab === "Observer Bridge" ? renderObserverBridgePanel() : ""}}${{activeTab === "POWHEG" ? renderPowhegPanel() : ""}}${{activeTab === "Outputs" ? renderOutputsPanel() : ""}}` +
     `<pre id="log"></pre></div>` +
     renderContextPanel();
   bindHadrosCameraPanel();
@@ -1762,6 +1944,8 @@ function render() {{
   if (disCompareButton) disCompareButton.onclick = compareDisModels;
   const observerBridgeButton = document.querySelector("#observer-bridge-button");
   if (observerBridgeButton) observerBridgeButton.onclick = computeObserverBridge;
+  const powhegButton = document.querySelector("#powheg-button");
+  if (powhegButton) powhegButton.onclick = preparePowheg;
   bindNumberInputs();
   drawGeometrySvg();
   document.querySelector("#runNameInput").addEventListener("input", event => {{
@@ -1967,6 +2151,7 @@ class Handler(BaseHTTPRequestHandler):
             clear_forward_geodesics_outputs(output_dir)
             clear_dis_outputs(output_dir)
             clear_observer_bridge_outputs(output_dir)
+            clear_powheg_outputs(output_dir)
             render_summary = render_hadros_web(values, root=ROOT, source_summary=source_summary)
             summary = {"status": "ok", "source": source_summary, "render": render_summary}
             self._send(200, json.dumps(summary, indent=2, sort_keys=True) + "\n", "application/json")
@@ -1987,6 +2172,7 @@ class Handler(BaseHTTPRequestHandler):
             forward_summary = generate_forward_geodesic_products(values, run_output_dir=output_dir)
             clear_dis_outputs(output_dir)
             clear_observer_bridge_outputs(output_dir)
+            clear_powheg_outputs(output_dir)
             render_summary = render_hadros_web(values, root=ROOT, forward_geodesic_summary=forward_summary)
             summary = {"status": "ok", "forward": forward_summary, "render": render_summary}
             self._send(200, json.dumps(summary, indent=2, sort_keys=True) + "\n", "application/json")
@@ -2006,6 +2192,7 @@ class Handler(BaseHTTPRequestHandler):
             values["dis_interaction_sampler"]["status"] = "dis_optical_depth_sampled_no_observer_bridge"
             dis_summary = generate_dis_interaction_products(values, run_output_dir=output_dir)
             clear_observer_bridge_outputs(output_dir)
+            clear_powheg_outputs(output_dir)
             render_summary = render_hadros_web(values, root=ROOT, dis_summary=dis_summary)
             summary = {"status": "ok", "dis": dis_summary, "render": render_summary}
             self._send(200, json.dumps(summary, indent=2, sort_keys=True) + "\n", "application/json")
@@ -2024,8 +2211,26 @@ class Handler(BaseHTTPRequestHandler):
             ensure_output_layout(output_dir)
             values["observer_bridge"]["status"] = "observer_bridge_scored_no_event_generation"
             observer_bridge_summary = generate_observer_bridge_products(values, run_output_dir=output_dir)
+            clear_powheg_outputs(output_dir)
             render_summary = render_hadros_web(values, root=ROOT, observer_bridge_summary=observer_bridge_summary)
             summary = {"status": "ok", "observer_bridge": observer_bridge_summary, "render": render_summary}
+            self._send(200, json.dumps(summary, indent=2, sort_keys=True) + "\n", "application/json")
+            return
+        if self.path == "/api/powheg":
+            problems = validate_values(values)
+            if problems:
+                self._send(
+                    400,
+                    json.dumps({"status": "error", "validation_errors": problems}, indent=2, sort_keys=True) + "\n",
+                    "application/json",
+                )
+                return
+            output_dir = ROOT / run_output_dir(values)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            ensure_output_layout(output_dir)
+            powheg_summary = generate_powheg_products(values, run_output_dir=output_dir)
+            render_summary = render_hadros_web(values, root=ROOT, powheg_summary=powheg_summary)
+            summary = {"status": "ok", "powheg": powheg_summary, "render": render_summary}
             self._send(200, json.dumps(summary, indent=2, sort_keys=True) + "\n", "application/json")
             return
         if self.path == "/api/compare-dis-models":
@@ -2069,6 +2274,7 @@ def main() -> int:
     parser.add_argument("--propagate-forward-geodesics", action="store_true", help="Generate H3-W6 forward neutrino geodesics through hadros-web orchestration and exit.")
     parser.add_argument("--sample-dis-interactions", action="store_true", help="Generate H3-W7 DIS optical-depth interaction samples through hadros-web orchestration and exit.")
     parser.add_argument("--observer-bridge", action="store_true", help="Generate H3-W8 Observer Bridge scoring products through hadros-web orchestration and exit.")
+    parser.add_argument("--powheg", action="store_true", help="Prepare H3-W9a POWHEG dry-run jobs through hadros-web orchestration and exit.")
     parser.add_argument("--serve", action="store_true", help="Serve the web control surface.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8877)
@@ -2119,6 +2325,7 @@ def main() -> int:
         clear_forward_geodesics_outputs(output_dir)
         clear_dis_outputs(output_dir)
         clear_observer_bridge_outputs(output_dir)
+        clear_powheg_outputs(output_dir)
         render_summary = render_hadros_web(values, root=ROOT, output_dir=output_dir, source_summary=source_summary)
         print(json.dumps({"status": "ok", "source": source_summary, "render": render_summary}, indent=2, sort_keys=True))
         return 0
@@ -2131,6 +2338,7 @@ def main() -> int:
         forward_summary = generate_forward_geodesic_products(values, run_output_dir=output_dir)
         clear_dis_outputs(output_dir)
         clear_observer_bridge_outputs(output_dir)
+        clear_powheg_outputs(output_dir)
         render_summary = render_hadros_web(values, root=ROOT, output_dir=output_dir, forward_geodesic_summary=forward_summary)
         print(json.dumps({"status": "ok", "forward": forward_summary, "render": render_summary}, indent=2, sort_keys=True))
         return 0
@@ -2142,6 +2350,7 @@ def main() -> int:
         values["dis_interaction_sampler"]["status"] = "dis_optical_depth_sampled_no_observer_bridge"
         dis_summary = generate_dis_interaction_products(values, run_output_dir=output_dir)
         clear_observer_bridge_outputs(output_dir)
+        clear_powheg_outputs(output_dir)
         render_summary = render_hadros_web(values, root=ROOT, output_dir=output_dir, dis_summary=dis_summary)
         print(json.dumps({"status": "ok", "dis": dis_summary, "render": render_summary}, indent=2, sort_keys=True))
         return 0
@@ -2152,8 +2361,18 @@ def main() -> int:
         ensure_output_layout(output_dir)
         values["observer_bridge"]["status"] = "observer_bridge_scored_no_event_generation"
         observer_bridge_summary = generate_observer_bridge_products(values, run_output_dir=output_dir)
+        clear_powheg_outputs(output_dir)
         render_summary = render_hadros_web(values, root=ROOT, output_dir=output_dir, observer_bridge_summary=observer_bridge_summary)
         print(json.dumps({"status": "ok", "observer_bridge": observer_bridge_summary, "render": render_summary}, indent=2, sort_keys=True))
+        return 0
+    if args.powheg:
+        output_dir = args.output_dir if args.output_dir is not None else ROOT / run_output_dir(values)
+        if not output_dir.is_absolute():
+            output_dir = ROOT / output_dir
+        ensure_output_layout(output_dir)
+        powheg_summary = generate_powheg_products(values, run_output_dir=output_dir)
+        render_summary = render_hadros_web(values, root=ROOT, output_dir=output_dir, powheg_summary=powheg_summary)
+        print(json.dumps({"status": "ok", "powheg": powheg_summary, "render": render_summary}, indent=2, sort_keys=True))
         return 0
     summary = render_hadros_web(values, root=ROOT, output_dir=args.output_dir)
     print(json.dumps(summary, indent=2, sort_keys=True))

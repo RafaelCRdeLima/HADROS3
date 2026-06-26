@@ -31,6 +31,8 @@ def test_schema_exposes_hadros3_first_stage_controls() -> None:
         ("dis_interaction_sampler", "medium_velocity_model"),
         ("observer_bridge", "observer_bridge_backend"),
         ("observer_bridge", "bridge_mode"),
+        ("powheg", "powheg_backend"),
+        ("powheg", "ranking_policy"),
         ("provenance", "trust_boundary"),
     }
     assert expected <= keys
@@ -148,6 +150,13 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert payload["outputs"]["paths"]["observer_bridge_geometry_3d_html"] == "ObserverBridge/observer_bridge_geometry_3d.html"
     assert payload["outputs"]["paths"]["observer_bridge_camera_view"] == "ObserverBridge/observer_bridge_camera_view.png"
     assert payload["outputs"]["paths"]["observer_bridge_camera_overlay"] == "ObserverBridge/observer_bridge_camera_overlay.png"
+    assert payload["outputs"]["paths"]["powheg_event_requests"] == "POWHEG/powheg_event_requests.jsonl"
+    assert payload["outputs"]["paths"]["powheg_summary_json"] == "POWHEG/powheg_summary.json"
+    assert payload["outputs"]["paths"]["powheg_summary"] == "POWHEG/powheg_summary.csv"
+    assert payload["outputs"]["paths"]["powheg_report"] == "POWHEG/powheg_report.json"
+    assert payload["outputs"]["paths"]["powheg_card_preview"] == "POWHEG/powheg_card_preview.png"
+    assert payload["outputs"]["paths"]["powheg_energy_distribution"] == "POWHEG/powheg_energy_distribution.png"
+    assert payload["outputs"]["paths"]["powheg_job_summary"] == "POWHEG/powheg_job_summary.png"
     assert payload["outputs"]["paths"]["dis_summary_json"] == "DIS/dis_summary.json"
     assert payload["outputs"]["paths"]["uhe_source_sampling_uniformity"] == "UHEsource/uhe_source_sampling_uniformity.png"
     assert payload["outputs"]["paths"]["uhe_source_sampling_uniformity_report"] == "UHEsource/uhe_source_sampling_uniformity_report.json"
@@ -164,6 +173,9 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert "Available UHE samples" in html
     assert "Compute DIS Optical Depth / Sample Interactions" in html
     assert "Compute Observer Bridge Scores" in html
+    assert "Prepare POWHEG Jobs" in html
+    assert "Dry Run" in html
+    assert "pwhg_main NOT executed" in html
     assert "cpp_hadros_original_port" in html
     assert "Full Kerr null geodesic propagation" in html
     assert "Initial Direction" in html
@@ -232,6 +244,14 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert "observer_bridge_geometry_3d.html" in html
     assert "observer_bridge_camera_view.png" in html
     assert "observer_bridge_camera_overlay.png" in html
+    assert "POWHEG/" in html
+    assert "powheg_event_requests.jsonl" in html
+    assert "powheg_summary.json" in html
+    assert "powheg_summary.csv" in html
+    assert "powheg_report.json" in html
+    assert "powheg_card_preview.png" in html
+    assert "powheg_energy_distribution.png" in html
+    assert "powheg_job_summary.png" in html
     assert "Observer Camera Overlay" in html
     assert "overlay resolution" in html
     assert "camera_preview_pixel_plane" in html

@@ -13,6 +13,7 @@ UHE_SOURCE_DIR = "UHEsource"
 FORWARD_GEODESICS_DIR = "ForwardGeodesics"
 DIS_DIR = "DIS"
 OBSERVER_BRIDGE_DIR = "ObserverBridge"
+POWHEG_DIR = "POWHEG"
 DASHBOARD_DIR = "Dashboard"
 
 
@@ -44,6 +45,10 @@ def observer_bridge_dir(run_output: Path) -> Path:
     return run_output / OBSERVER_BRIDGE_DIR
 
 
+def powheg_dir(run_output: Path) -> Path:
+    return run_output / POWHEG_DIR
+
+
 def clear_forward_geodesics_outputs(run_output: Path) -> None:
     path = forward_geodesics_dir(run_output)
     if path.exists():
@@ -60,6 +65,13 @@ def clear_dis_outputs(run_output: Path) -> None:
 
 def clear_observer_bridge_outputs(run_output: Path) -> None:
     path = observer_bridge_dir(run_output)
+    if path.exists():
+        shutil.rmtree(path)
+    path.mkdir(parents=True, exist_ok=True)
+
+
+def clear_powheg_outputs(run_output: Path) -> None:
+    path = powheg_dir(run_output)
     if path.exists():
         shutil.rmtree(path)
     path.mkdir(parents=True, exist_ok=True)
@@ -163,6 +175,15 @@ def ensure_output_layout(run_output: Path) -> None:
             "observer_bridge_geometry_3d.html",
             "observer_bridge_camera_view.png",
             "observer_bridge_camera_overlay.png",
+        ],
+        POWHEG_DIR: [
+            "powheg_event_requests.jsonl",
+            "powheg_summary.json",
+            "powheg_summary.csv",
+            "powheg_report.json",
+            "powheg_card_preview.png",
+            "powheg_energy_distribution.png",
+            "powheg_job_summary.png",
         ],
         DASHBOARD_DIR: [
             "index.html",

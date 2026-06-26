@@ -37,11 +37,13 @@ def build_provenance(
     forward_geodesic_summary: dict[str, Any] | None = None,
     dis_summary: dict[str, Any] | None = None,
     observer_bridge_summary: dict[str, Any] | None = None,
+    powheg_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     source_active = bool(source_summary and source_summary.get("source_sampler_active"))
     forward_active = bool(forward_geodesic_summary and forward_geodesic_summary.get("forward_neutrino_geodesics_invoked"))
     dis_active = bool(dis_summary and dis_summary.get("optical_depth_dis_sampler_invoked"))
     observer_bridge_active = bool(observer_bridge_summary and observer_bridge_summary.get("observer_bridge_invoked"))
+    powheg_active = bool(powheg_summary and powheg_summary.get("powheg_dry_run_invoked"))
     paint_swatch_disk_diagnostic_mode = bool(camera_preview and camera_preview.get("paint_swatch_disk_diagnostic_mode"))
     paint_swatch_disk_uses_forced_thin_disk = bool(camera_preview and camera_preview.get("paint_swatch_disk_uses_forced_thin_disk"))
     paint_swatch_disk_physical_torus_emission = (
@@ -109,8 +111,8 @@ def build_provenance(
         "summary": dis_summary,
     }
     return {
-        "hadros3_stage": "H3-W0_to_H3-W8_observer_bridge_scoring" if observer_bridge_active else ("H3-W0_to_H3-W7_dis_interaction_sampler" if dis_active else ("H3-W0_to_H3-W6_forward_neutrino_geodesics" if forward_active else ("H3-W0_to_H3-W5_hadros_web_uhe_source_shell" if source_active else "H3-W0_to_H3-W4_hadros_web_geometry_shell"))),
-        "status": "observer_bridge_scored_no_event_generation" if observer_bridge_active else ("dis_interactions_sampled_no_observer_bridge" if dis_active else ("forward_geodesics_propagated_no_interactions" if forward_active else ("uhe_source_sampled_no_expensive_events" if source_active else "geometry_configured_no_expensive_events"))),
+        "hadros3_stage": "H3-W0_to_H3-W9a_powheg_dry_run" if powheg_active else ("H3-W0_to_H3-W8_observer_bridge_scoring" if observer_bridge_active else ("H3-W0_to_H3-W7_dis_interaction_sampler" if dis_active else ("H3-W0_to_H3-W6_forward_neutrino_geodesics" if forward_active else ("H3-W0_to_H3-W5_hadros_web_uhe_source_shell" if source_active else "H3-W0_to_H3-W4_hadros_web_geometry_shell")))),
+        "status": "powheg_jobs_prepared_no_lhe" if powheg_active else ("observer_bridge_scored_no_event_generation" if observer_bridge_active else ("dis_interactions_sampled_no_observer_bridge" if dis_active else ("forward_geodesics_propagated_no_interactions" if forward_active else ("uhe_source_sampled_no_expensive_events" if source_active else "geometry_configured_no_expensive_events")))),
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "hadros3_version": __version__,
         "git_commit": _git_commit(root),
@@ -119,7 +121,7 @@ def build_provenance(
         "parameters": values,
         "reused_hadros_components": discover_original_hadros(),
         "disabled_expensive_or_future_stages": {
-            "powheg": "disabled",
+            "powheg": "active_H3_W9a_dry_run_no_pwhg_main" if powheg_active else "disabled",
             "pythia": "disabled",
             "geant4": "disabled",
             "forward_neutrino_geodesics": "active_H3_W6" if forward_active else "not_invoked",
@@ -238,6 +240,30 @@ def build_provenance(
             "geant4_invoked": False,
             "photon_transport_invoked": False,
             "summary": observer_bridge_summary,
+        },
+        "powheg": {
+            "powheg_dry_run_invoked": powheg_active,
+            "powheg_backend": powheg_summary.get("powheg_backend") if powheg_active else values.get("powheg", {}).get("powheg_backend"),
+            "powheg_process": powheg_summary.get("powheg_process") if powheg_active else values.get("powheg", {}).get("powheg_process"),
+            "powheg_run_mode": powheg_summary.get("powheg_run_mode") if powheg_active else values.get("powheg", {}).get("run_mode"),
+            "ranking_policy": powheg_summary.get("ranking_policy") if powheg_active else values.get("powheg", {}).get("ranking_policy"),
+            "max_powheg_events": powheg_summary.get("max_powheg_events") if powheg_active else values.get("powheg", {}).get("max_powheg_events"),
+            "events_per_candidate": powheg_summary.get("events_per_candidate") if powheg_active else values.get("powheg", {}).get("events_per_candidate"),
+            "random_seed": powheg_summary.get("random_seed") if powheg_active else values.get("powheg", {}).get("random_seed"),
+            "powheg_seed_mode": powheg_summary.get("powheg_seed_mode") if powheg_active else values.get("powheg", {}).get("powheg_seed_mode"),
+            "powheg_jobs_prepared": powheg_summary.get("powheg_jobs_prepared") if powheg_active else 0,
+            "powheg_cards_generated": powheg_summary.get("powheg_cards_generated") if powheg_active else 0,
+            "powheg_lhe_generated": False,
+            "powheg_invoked": False,
+            "pwhg_main_executed": False,
+            "powheg_runtime_self_contained": powheg_summary.get("powheg_runtime_self_contained") if powheg_active else True,
+            "backend_language": powheg_summary.get("backend_language") if powheg_active else "C++17",
+            "backend_executable": powheg_summary.get("backend_executable") if powheg_active else "bin/hadros3_powheg_driver",
+            "pythia_invoked": False,
+            "geant4_invoked": False,
+            "photon_transport_invoked": False,
+            "expensive_event_generation_invoked": False,
+            "summary": powheg_summary,
         },
         "validation": validation,
     }

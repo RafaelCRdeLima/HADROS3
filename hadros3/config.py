@@ -320,6 +320,20 @@ def schema() -> list[dict[str, Any]]:
             ],
         },
         {
+            "tab": "POWHEG",
+            "fields": [
+                field("powheg", "powheg_backend", "POWHEG backend", "local_powheg", kind="select", options=["local_powheg"]),
+                field("powheg", "powheg_process", "POWHEG process", "nudis", kind="select", options=["nudis"]),
+                field("powheg", "ranking_policy", "Ranking policy", "top_score", kind="select", options=["top_score", "all_candidates", "score_threshold"]),
+                field("powheg", "max_powheg_events", "Max POWHEG jobs", 5, kind="number"),
+                field("powheg", "events_per_candidate", "Events per candidate", 2, kind="number"),
+                field("powheg", "random_seed", "Random seed", 12345, kind="number"),
+                field("powheg", "powheg_seed_mode", "Seed mode", "base_plus_candidate_rank", kind="select", options=["base_plus_candidate_rank"]),
+                field("powheg", "min_final_observation_score", "Min final score", 0.0, kind="number"),
+                field("powheg", "run_mode", "Run mode", "dry_run", kind="select", options=["dry_run"]),
+            ],
+        },
+        {
             "tab": "Event Generation",
             "fields": [
                 field("event_generation", "mode", "Event generation", "placeholder_disabled", kind="select", options=["placeholder_disabled"]),
@@ -474,6 +488,7 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
     forward = values["forward_geodesics"]
     dis = values.get("dis_interaction_sampler", {})
     bridge = values.get("observer_bridge", {})
+    powheg = values.get("powheg", {})
 
     spin = float(bh["spin_a"])
     if not (-0.999 <= spin <= 0.999):
@@ -597,6 +612,26 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
         problems.append("observer_bridge.min_observer_weight must be non-negative")
     if float(bridge.get("min_final_observation_score", 0.0)) < 0.0:
         problems.append("observer_bridge.min_final_observation_score must be non-negative")
+    if str(powheg.get("powheg_backend", "local_powheg")) != "local_powheg":
+        problems.append("powheg.powheg_backend must be local_powheg in H3-W9a")
+    if str(powheg.get("powheg_process", "nudis")) != "nudis":
+        problems.append("powheg.powheg_process must be nudis in H3-W9a")
+    if str(powheg.get("ranking_policy", "top_score")) not in {"top_score", "all_candidates", "score_threshold"}:
+        problems.append("powheg.ranking_policy must be top_score, all_candidates, or score_threshold")
+    if int(float(powheg.get("max_powheg_events", 5))) <= 0:
+        problems.append("powheg.max_powheg_events must be positive")
+    if int(float(powheg.get("events_per_candidate", 2))) <= 0:
+        problems.append("powheg.events_per_candidate must be positive")
+    try:
+        int(float(powheg.get("random_seed", 0)))
+    except (TypeError, ValueError):
+        problems.append("powheg.random_seed must be an integer")
+    if str(powheg.get("powheg_seed_mode", "base_plus_candidate_rank")) != "base_plus_candidate_rank":
+        problems.append("powheg.powheg_seed_mode must be base_plus_candidate_rank in H3-W9a")
+    if float(powheg.get("min_final_observation_score", 0.0)) < 0.0:
+        problems.append("powheg.min_final_observation_score must be non-negative")
+    if str(powheg.get("run_mode", "dry_run")) != "dry_run":
+        problems.append("powheg.run_mode must be dry_run in H3-W9a")
     return problems
 
 

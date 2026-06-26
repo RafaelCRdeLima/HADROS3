@@ -106,10 +106,10 @@ def test_render_hadros_web_writes_first_stage_products(tmp_path: Path) -> None:
     assert provenance["camera_preview"]["requested_mode"] in {"analytic_geometry_only", "kerr_like_cuda", "full_kerr"}
     assert provenance["camera_preview"]["medium_renderer_used"] is False
     assert provenance["theory_document"] == "docs/Theory/HADROS3_Physics_Theory.pdf"
-    assert provenance["theory_version"] == "1.0"
+    assert provenance["theory_version"] == "1.1"
     assert provenance["theory_commit"]
     assert provenance["theory_generation_date"]
-    assert provenance["scientific_theory"]["theory_pipeline_version"] == "H3-W9a"
+    assert provenance["scientific_theory"]["theory_pipeline_version"] == "H3-W9b"
     version_payload = json.loads(Path("VERSION.json").read_text(encoding="utf-8"))
     for key in ["software_version", "physics_version", "pipeline_version", "theory_version"]:
         assert key in version_payload
@@ -169,6 +169,9 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert payload["outputs"]["paths"]["powheg_summary_json"] == "POWHEG/powheg_summary.json"
     assert payload["outputs"]["paths"]["powheg_summary"] == "POWHEG/powheg_summary.csv"
     assert payload["outputs"]["paths"]["powheg_report"] == "POWHEG/powheg_report.json"
+    assert payload["outputs"]["paths"]["powheg_validation_report"] == "POWHEG/powheg_validation_report.json"
+    assert payload["outputs"]["paths"]["powheg_lhe"] == "POWHEG/powheg_lhe/H3PWHG-000001/pwgevents.lhe"
+    assert payload["outputs"]["paths"]["powheg_log"] == "POWHEG/powheg_run_logs/H3PWHG-000001/powheg.log"
     assert payload["outputs"]["paths"]["powheg_card_preview"] == "POWHEG/powheg_card_preview.png"
     assert payload["outputs"]["paths"]["powheg_energy_distribution"] == "POWHEG/powheg_energy_distribution.png"
     assert payload["outputs"]["paths"]["powheg_job_summary"] == "POWHEG/powheg_job_summary.png"
@@ -189,8 +192,9 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert "Compute DIS Optical Depth / Sample Interactions" in html
     assert "Compute Observer Bridge Scores" in html
     assert "Prepare POWHEG Jobs" in html
-    assert "Dry Run" in html
-    assert "pwhg_main NOT executed" in html
+    assert "Run POWHEG Real Smoke" in html
+    assert "Dry run" in html
+    assert "Real smoke executes the local pwhg_main" in html
     assert "cpp_hadros_original_port" in html
     assert "Full Kerr null geodesic propagation" in html
     assert "Initial Direction" in html
@@ -264,6 +268,9 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert "powheg_summary.json" in html
     assert "powheg_summary.csv" in html
     assert "powheg_report.json" in html
+    assert "powheg_validation_report.json" in html
+    assert "pwgevents.lhe" in html
+    assert "powheg.log" in html
     assert "powheg_card_preview.png" in html
     assert "powheg_energy_distribution.png" in html
     assert "powheg_job_summary.png" in html

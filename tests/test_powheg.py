@@ -4,7 +4,10 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
+
 from hadros3.config import defaults
+from hadros3 import powheg as powheg_module
 from hadros3.powheg import generate_powheg_products
 from hadros3.provenance import build_provenance
 
@@ -103,6 +106,12 @@ def test_powheg_dry_run_generates_ranked_cards_without_lhe_or_observer_modificat
     assert "channel_type 3" in card
     assert "vtype 2" in card
     assert not list((tmp_path / "POWHEG").rglob("*.lhe"))
+    validation = json.loads((tmp_path / "POWHEG" / "powheg_validation_report.json").read_text(encoding="utf-8"))
+    assert validation["run_mode"] == "dry_run"
+    assert validation["powheg_run_mode"] == "dry_run"
+    assert validation["powheg_invoked"] is False
+    assert validation["pwhg_main_executed"] is False
+    assert validation["powheg_lhe_generated"] is False
     for filename in [
         "powheg_summary.json",
         "powheg_summary.csv",
@@ -156,6 +165,96 @@ def test_powheg_provenance_marks_dry_run_without_real_powheg_invocation(tmp_path
     assert provenance["powheg"]["powheg_lhe_generated"] is False
     assert provenance["powheg"]["powheg_runtime_self_contained"] is True
     assert provenance["powheg"]["backend_language"] == "C++17"
+    assert provenance["powheg"]["pythia_invoked"] is False
+    assert provenance["powheg"]["geant4_invoked"] is False
+    assert provenance["powheg"]["photon_transport_invoked"] is False
+
+
+def test_powheg_real_smoke_fails_clearly_without_local_pwhg_main(tmp_path: Path, monkeypatch) -> None:
+    _write_ranked_events(tmp_path)
+    values = defaults()
+    values["powheg"].update({"run_mode": "real_smoke", "max_powheg_events": 3, "events_per_candidate": 2})
+    monkeypatch.setattr(powheg_module, "POWHEG_BINARY", tmp_path / "missing" / "pwhg_main")
+
+    with pytest.raises(FileNotFoundError, match="Local POWHEG pwhg_main not found"):
+        generate_powheg_products(values, run_output_dir=tmp_path)
+
+
+def test_powheg_real_smoke_executes_local_pwhg_main_and_generates_parseable_lhe(tmp_path: Path, monkeypatch) -> None:
+    ranked_path = _write_ranked_events(tmp_path)
+    before = _sha256(ranked_path)
+    fake_pwhg = tmp_path / "external" / "powheg" / "build" / "DIS" / "pwhg_main"
+    fake_pwhg.parent.mkdir(parents=True, exist_ok=True)
+    fake_pwhg.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+test -f powheg.input
+cat > pwgevents.lhe <<'LHE'
+<LesHouchesEvents version="1.0">
+<header></header>
+<init></init>
+<event>
+1 1 1.0 1.0 1.0 1.0
+</event>
+</LesHouchesEvents>
+LHE
+""",
+        encoding="utf-8",
+    )
+    fake_pwhg.chmod(0o755)
+    monkeypatch.setattr(powheg_module, "POWHEG_BINARY", fake_pwhg)
+
+    values = defaults()
+    values["powheg"].update({"run_mode": "real_smoke", "max_powheg_events": 10, "events_per_candidate": 2})
+    summary = generate_powheg_products(values, run_output_dir=tmp_path)
+    requests = _requests(tmp_path)
+
+    assert _sha256(ranked_path) == before
+    assert summary["powheg_run_mode"] == "real_smoke"
+    assert summary["powheg_dry_run_invoked"] is False
+    assert summary["powheg_real_smoke_invoked"] is True
+    assert summary["powheg_invoked"] is True
+    assert summary["pwhg_main_executed"] is True
+    assert summary["powheg_lhe_generated"] is True
+    assert summary["n_powheg_jobs"] == 1
+    assert summary["powheg_jobs_prepared"] == 1
+    assert summary["n_lhe_events"] == 1
+    assert summary["pythia_invoked"] is False
+    assert summary["geant4_invoked"] is False
+    assert summary["photon_transport_invoked"] is False
+    assert requests[0]["interaction_id"] == "int-high"
+    assert requests[0]["powheg_status"] == "real_smoke_lhe_generated"
+    assert requests[0]["powheg_invoked"] is True
+    assert requests[0]["pwhg_main_executed"] is True
+    assert requests[0]["powheg_lhe_generated"] is True
+    lhe = tmp_path / "POWHEG" / "powheg_lhe" / "H3PWHG-000001" / "pwgevents.lhe"
+    log = tmp_path / "POWHEG" / "powheg_run_logs" / "H3PWHG-000001" / "powheg.log"
+    validation = json.loads((tmp_path / "POWHEG" / "powheg_validation_report.json").read_text(encoding="utf-8"))
+    assert lhe.exists()
+    assert log.exists()
+    text = lhe.read_text(encoding="utf-8")
+    assert "<LesHouchesEvents" in text
+    assert "</LesHouchesEvents>" in text
+    assert text.count("<event>") == 1
+    assert validation["lhe_valid"] is True
+    assert validation["run_mode"] == "real_smoke"
+    assert validation["powheg_run_mode"] == "real_smoke"
+    assert validation["n_lhe_events"] == 1
+
+    provenance = build_provenance(
+        root=Path.cwd(),
+        values=values,
+        products=summary["products"],
+        validation={"configuration_valid": True},
+        powheg_summary=summary,
+    )
+    assert provenance["hadros3_stage"] == "H3-W0_to_H3-W9b_powheg_real_smoke"
+    assert provenance["status"] == "powheg_real_smoke_lhe_generated"
+    assert provenance["disabled_expensive_or_future_stages"]["powheg"] == "active_H3_W9b_real_smoke_local_pwhg_main"
+    assert provenance["powheg"]["powheg_invoked"] is True
+    assert provenance["powheg"]["pwhg_main_executed"] is True
+    assert provenance["powheg"]["powheg_lhe_generated"] is True
+    assert provenance["powheg"]["n_lhe_events"] == 1
     assert provenance["powheg"]["pythia_invoked"] is False
     assert provenance["powheg"]["geant4_invoked"] is False
     assert provenance["powheg"]["photon_transport_invoked"] is False

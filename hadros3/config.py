@@ -330,7 +330,7 @@ def schema() -> list[dict[str, Any]]:
                 field("powheg", "random_seed", "Random seed", 12345, kind="number"),
                 field("powheg", "powheg_seed_mode", "Seed mode", "base_plus_candidate_rank", kind="select", options=["base_plus_candidate_rank"]),
                 field("powheg", "min_final_observation_score", "Min final score", 0.0, kind="number"),
-                field("powheg", "run_mode", "Run mode", "dry_run", kind="select", options=["dry_run"]),
+                field("powheg", "run_mode", "Run mode", "dry_run", kind="select", options=["dry_run", "real_smoke"]),
             ],
         },
         {
@@ -630,8 +630,8 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
         problems.append("powheg.powheg_seed_mode must be base_plus_candidate_rank in H3-W9a")
     if float(powheg.get("min_final_observation_score", 0.0)) < 0.0:
         problems.append("powheg.min_final_observation_score must be non-negative")
-    if str(powheg.get("run_mode", "dry_run")) != "dry_run":
-        problems.append("powheg.run_mode must be dry_run in H3-W9a")
+    if str(powheg.get("run_mode", "dry_run")) not in {"dry_run", "real_smoke"}:
+        problems.append("powheg.run_mode must be dry_run or real_smoke")
     return problems
 
 

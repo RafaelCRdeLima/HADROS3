@@ -181,6 +181,7 @@ def ensure_output_layout(run_output: Path) -> None:
             "powheg_summary.json",
             "powheg_summary.csv",
             "powheg_report.json",
+            "powheg_validation_report.json",
             "powheg_card_preview.png",
             "powheg_energy_distribution.png",
             "powheg_job_summary.png",

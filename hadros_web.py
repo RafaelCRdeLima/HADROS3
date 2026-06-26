@@ -125,6 +125,9 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
     powheg_summary_json_path = powheg_output_dir / "powheg_summary.json"
     powheg_summary_csv_path = powheg_output_dir / "powheg_summary.csv"
     powheg_report_path = powheg_output_dir / "powheg_report.json"
+    powheg_validation_report_path = powheg_output_dir / "powheg_validation_report.json"
+    powheg_lhe_path = powheg_output_dir / "powheg_lhe" / "H3PWHG-000001" / "pwgevents.lhe"
+    powheg_log_path = powheg_output_dir / "powheg_run_logs" / "H3PWHG-000001" / "powheg.log"
     powheg_card_preview_path = powheg_output_dir / "powheg_card_preview.png"
     powheg_energy_distribution_path = powheg_output_dir / "powheg_energy_distribution.png"
     powheg_job_summary_path = powheg_output_dir / "powheg_job_summary.png"
@@ -317,11 +320,15 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             "powheg_jobs_prepared": powheg_summary.get("powheg_jobs_prepared", 0) if powheg_summary else 0,
             "powheg_cards_generated": powheg_summary.get("powheg_cards_generated", 0) if powheg_summary else 0,
             "powheg_lhe_generated": powheg_summary.get("powheg_lhe_generated", False) if powheg_summary else False,
+            "n_lhe_events": powheg_summary.get("n_lhe_events", 0) if powheg_summary else 0,
             "products": {
                 "powheg_event_requests": powheg_requests_path.exists(),
                 "powheg_summary_json": powheg_summary_json_path.exists(),
                 "powheg_summary": powheg_summary_csv_path.exists(),
                 "powheg_report": powheg_report_path.exists(),
+                "powheg_validation_report": powheg_validation_report_path.exists(),
+                "powheg_lhe": powheg_lhe_path.exists(),
+                "powheg_log": powheg_log_path.exists(),
                 "powheg_card_preview": powheg_card_preview_path.exists(),
                 "powheg_energy_distribution": powheg_energy_distribution_path.exists(),
                 "powheg_job_summary": powheg_job_summary_path.exists(),
@@ -332,6 +339,9 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "powheg_summary_json": rel(powheg_summary_json_path, output_dir),
                 "powheg_summary": rel(powheg_summary_csv_path, output_dir),
                 "powheg_report": rel(powheg_report_path, output_dir),
+                "powheg_validation_report": rel(powheg_validation_report_path, output_dir),
+                "powheg_lhe": rel(powheg_lhe_path, output_dir),
+                "powheg_log": rel(powheg_log_path, output_dir),
                 "powheg_card_preview": rel(powheg_card_preview_path, output_dir),
                 "powheg_energy_distribution": rel(powheg_energy_distribution_path, output_dir),
                 "powheg_job_summary": rel(powheg_job_summary_path, output_dir),
@@ -425,6 +435,9 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             "powheg_summary_json_exists": powheg_summary_json_path.exists(),
             "powheg_summary_exists": powheg_summary_csv_path.exists(),
             "powheg_report_exists": powheg_report_path.exists(),
+            "powheg_validation_report_exists": powheg_validation_report_path.exists(),
+            "powheg_lhe_exists": powheg_lhe_path.exists(),
+            "powheg_log_exists": powheg_log_path.exists(),
             "powheg_card_preview_exists": powheg_card_preview_path.exists(),
             "powheg_energy_distribution_exists": powheg_energy_distribution_path.exists(),
             "powheg_job_summary_exists": powheg_job_summary_path.exists(),
@@ -507,6 +520,9 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "powheg_summary_json": rel(powheg_summary_json_path, output_dir),
                 "powheg_summary": rel(powheg_summary_csv_path, output_dir),
                 "powheg_report": rel(powheg_report_path, output_dir),
+                "powheg_validation_report": rel(powheg_validation_report_path, output_dir),
+                "powheg_lhe": rel(powheg_lhe_path, output_dir),
+                "powheg_log": rel(powheg_log_path, output_dir),
                 "powheg_card_preview": rel(powheg_card_preview_path, output_dir),
                 "powheg_energy_distribution": rel(powheg_energy_distribution_path, output_dir),
                 "powheg_job_summary": rel(powheg_job_summary_path, output_dir),
@@ -655,6 +671,9 @@ function setPowhegOutputs(exists) {{
   state.outputs.powheg_summary_json_exists = exists;
   state.outputs.powheg_summary_exists = exists;
   state.outputs.powheg_report_exists = exists;
+  state.outputs.powheg_validation_report_exists = exists;
+  state.outputs.powheg_lhe_exists = exists;
+  state.outputs.powheg_log_exists = exists;
   state.outputs.powheg_card_preview_exists = exists;
   state.outputs.powheg_energy_distribution_exists = exists;
   state.outputs.powheg_job_summary_exists = exists;
@@ -1028,12 +1047,16 @@ async function preparePowheg() {{
       state.values = values;
       state.powheg_summary = result.data.powheg;
       setPowhegOutputs(true);
+      state.outputs.powheg_validation_report_exists = Boolean(result.data.powheg.powheg_validation_report_generated);
+      state.outputs.powheg_lhe_exists = Boolean(result.data.powheg.powheg_lhe_generated);
+      state.outputs.powheg_log_exists = Boolean(result.data.powheg.powheg_lhe_generated);
       state.powheg = Object.assign({{}}, state.powheg || {{}}, {{
         input_observer_bridge_found: true,
         n_candidates_input: result.data.powheg.n_candidates_input,
         powheg_jobs_prepared: result.data.powheg.powheg_jobs_prepared,
         powheg_cards_generated: result.data.powheg.powheg_cards_generated,
-        powheg_lhe_generated: false,
+        powheg_lhe_generated: Boolean(result.data.powheg.powheg_lhe_generated),
+        n_lhe_events: result.data.powheg.n_lhe_events || 0,
         summary: result.data.powheg,
       }});
       state.outputs.provenance_exists = true;
@@ -1563,10 +1586,10 @@ function renderPowhegPanel() {{
     <div class="summary-item"><strong>Input file</strong><code>${{outPath("observer_bridge_ranked_events")}}</code></div>
     <div class="summary-item"><strong>POWHEG backend</strong><code>local_powheg</code></div>
     <div class="summary-item"><strong>POWHEG process</strong><code>nudis</code></div>
-    <div class="summary-item"><strong>run_mode</strong><code>dry_run</code></div>
+    <div class="summary-item"><strong>run_mode</strong><code>${{value("run_mode")}}</code></div>
   </div></section>`;
   const configHtml = `<section><h2>Configuration</h2>
-    <div class="camera-controls-card"><h3>Dry-run driver</h3>
+    <div class="camera-controls-card"><h3>POWHEG driver</h3>
       ${{input("powheg_backend")}}
       ${{input("powheg_process")}}
       ${{input("run_mode")}}
@@ -1582,26 +1605,30 @@ function renderPowhegPanel() {{
     <div class="summary-item"><strong>Candidates received</strong>${{summary.n_candidates_input || 0}}</div>
     <div class="summary-item"><strong>POWHEG jobs prepared</strong>${{summary.powheg_jobs_prepared || 0}}</div>
     <div class="summary-item"><strong>Input cards generated</strong>${{summary.powheg_cards_generated || 0}}</div>
-    <div class="summary-item"><strong>LHE generated</strong><span class="pending">NO</span></div>
-    <div class="summary-item"><strong>Dry Run</strong><span class="ok">${{summary.powheg_run_mode || "dry_run"}}</span></div>
-    <div class="summary-item"><strong>pwhg_main</strong><span class="pending">NOT executed</span></div>
+    <div class="summary-item"><strong>LHE generated</strong><span class="${{summary.powheg_lhe_generated ? "ok" : "pending"}}">${{summary.powheg_lhe_generated ? "YES" : "NO"}}</span></div>
+    <div class="summary-item"><strong>LHE events</strong>${{summary.n_lhe_events || 0}}</div>
+    <div class="summary-item"><strong>Run mode</strong><span class="ok">${{summary.powheg_run_mode || "dry_run"}}</span></div>
+    <div class="summary-item"><strong>pwhg_main</strong><span class="${{summary.pwhg_main_executed ? "ok" : "pending"}}">${{summary.pwhg_main_executed ? "executed" : "NOT executed"}}</span></div>
     <div class="summary-item"><strong>powheg_invoked</strong>${{String(summary.powheg_invoked)}}</div>
     <div class="summary-item"><strong>Backend language</strong>${{summary.backend_language || "C++17"}}</div>
     <div class="summary-item"><strong>Backend executable</strong><code>${{summary.backend_executable || "bin/hadros3_powheg_driver"}}</code></div>
     <div class="summary-item"><strong>Runtime self-contained</strong>${{String(summary.powheg_runtime_self_contained)}}</div>
-  </div></section>` : `<section><h2>Results</h2><p class="note">No POWHEG dry-run jobs prepared yet.</p></section>`;
+  </div></section>` : `<section><h2>Results</h2><p class="note">No POWHEG jobs prepared yet.</p></section>`;
   const links = `<section><h2>Outputs</h2><div class="output-link-grid">
     ${{state.outputs.powheg_event_requests_exists ? `<a href="${{outUrl("powheg_event_requests")}}" target="_blank">Event requests JSONL<br><code>${{outPath("powheg_event_requests")}}</code></a>` : ""}}
     ${{state.outputs.powheg_summary_json_exists ? `<a href="${{outUrl("powheg_summary_json")}}" target="_blank">Summary JSON<br><code>${{outPath("powheg_summary_json")}}</code></a>` : ""}}
     ${{state.outputs.powheg_summary_exists ? `<a href="${{outUrl("powheg_summary")}}" target="_blank">Summary CSV<br><code>${{outPath("powheg_summary")}}</code></a>` : ""}}
     ${{state.outputs.powheg_report_exists ? `<a href="${{outUrl("powheg_report")}}" target="_blank">Report JSON<br><code>${{outPath("powheg_report")}}</code></a>` : ""}}
+    ${{state.outputs.powheg_validation_report_exists ? `<a href="${{outUrl("powheg_validation_report")}}" target="_blank">Validation report<br><code>${{outPath("powheg_validation_report")}}</code></a>` : ""}}
+    ${{state.outputs.powheg_lhe_exists ? `<a href="${{outUrl("powheg_lhe")}}" target="_blank">Smoke LHE<br><code>${{outPath("powheg_lhe")}}</code></a>` : ""}}
+    ${{state.outputs.powheg_log_exists ? `<a href="${{outUrl("powheg_log")}}" target="_blank">POWHEG log<br><code>${{outPath("powheg_log")}}</code></a>` : ""}}
   </div></section>`;
   return `<div class="source-panel">
     ${{inputHtml}}
     ${{configHtml}}
-    <section><h2>Run</h2><button type="button" id="powheg-button" class="source-action" ${{bridgeFound ? "" : "disabled"}}>Prepare POWHEG Jobs</button>
-    <p class="note">Dry Run: pwhg_main NOT executed. H3-W9a prepares event requests, deterministic seeds and real POWHEG input cards only.</p>
-    <p class="note">No LHE, PYTHIA, GEANT4 or photon transport is generated in this phase.</p></section>
+    <section><h2>Run</h2><button type="button" id="powheg-button" class="source-action" ${{bridgeFound ? "" : "disabled"}}>${{value("run_mode") === "real_smoke" ? "Run POWHEG Real Smoke" : "Prepare POWHEG Jobs"}}</button>
+    <p class="note">Dry run prepares requests, deterministic seeds and real POWHEG input cards without executing pwhg_main. Real smoke executes the local pwhg_main for one top candidate and validates a minimal LHE.</p>
+    <p class="note">PYTHIA, GEANT4, photon transport and spectra remain disabled.</p></section>
     ${{resultsHtml}}
     ${{links}}
   </div>`;
@@ -1816,6 +1843,9 @@ function renderOutputsPanel() {{
     ${{link(out.powheg_summary_json_exists, "powheg_summary_json", "POWHEG summary JSON")}}
     ${{link(out.powheg_summary_exists, "powheg_summary", "POWHEG summary CSV")}}
     ${{link(out.powheg_report_exists, "powheg_report", "POWHEG report")}}
+    ${{link(out.powheg_validation_report_exists, "powheg_validation_report", "POWHEG validation report")}}
+    ${{link(out.powheg_lhe_exists, "powheg_lhe", "POWHEG smoke LHE")}}
+    ${{link(out.powheg_log_exists, "powheg_log", "POWHEG smoke log")}}
     ${{link(out.powheg_card_preview_exists, "powheg_card_preview", "POWHEG card preview")}}
     ${{out.powheg_card_preview_exists ? `<img src="${{outUrl("powheg_card_preview")}}" alt="POWHEG card preview">` : ""}}
     ${{link(out.powheg_energy_distribution_exists, "powheg_energy_distribution", "POWHEG energy distribution")}}
@@ -2275,6 +2305,7 @@ def main() -> int:
     parser.add_argument("--sample-dis-interactions", action="store_true", help="Generate H3-W7 DIS optical-depth interaction samples through hadros-web orchestration and exit.")
     parser.add_argument("--observer-bridge", action="store_true", help="Generate H3-W8 Observer Bridge scoring products through hadros-web orchestration and exit.")
     parser.add_argument("--powheg", action="store_true", help="Prepare H3-W9a POWHEG dry-run jobs through hadros-web orchestration and exit.")
+    parser.add_argument("--powheg-real-smoke", action="store_true", help="Run H3-W9b one-candidate local POWHEG real-smoke mode and exit.")
     parser.add_argument("--serve", action="store_true", help="Serve the web control surface.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8877)
@@ -2370,6 +2401,19 @@ def main() -> int:
         if not output_dir.is_absolute():
             output_dir = ROOT / output_dir
         ensure_output_layout(output_dir)
+        powheg_summary = generate_powheg_products(values, run_output_dir=output_dir)
+        render_summary = render_hadros_web(values, root=ROOT, output_dir=output_dir, powheg_summary=powheg_summary)
+        print(json.dumps({"status": "ok", "powheg": powheg_summary, "render": render_summary}, indent=2, sort_keys=True))
+        return 0
+    if args.powheg_real_smoke:
+        output_dir = args.output_dir if args.output_dir is not None else ROOT / run_output_dir(values)
+        if not output_dir.is_absolute():
+            output_dir = ROOT / output_dir
+        ensure_output_layout(output_dir)
+        values["powheg"]["run_mode"] = "real_smoke"
+        values["powheg"]["ranking_policy"] = "top_score"
+        values["powheg"]["max_powheg_events"] = 1
+        values["powheg"]["events_per_candidate"] = min(2, int(float(values["powheg"].get("events_per_candidate", 2))))
         powheg_summary = generate_powheg_products(values, run_output_dir=output_dir)
         render_summary = render_hadros_web(values, root=ROOT, output_dir=output_dir, powheg_summary=powheg_summary)
         print(json.dumps({"status": "ok", "powheg": powheg_summary, "render": render_summary}, indent=2, sort_keys=True))

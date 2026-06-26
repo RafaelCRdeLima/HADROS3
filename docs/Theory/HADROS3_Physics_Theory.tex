@@ -30,12 +30,12 @@
 \newcommand{\gcm}{\mathrm{g\,cm^{-3}}}
 \newcommand{\sigmanun}{\sigma_{\nu N}}
 \newcommand{\SoftwareVersion}{0.9.0}
-\newcommand{\PhysicsVersion}{1.0}
-\newcommand{\TheoryVersion}{1.0}
-\newcommand{\TheoryCompatibleCommit}{1d99515}
+\newcommand{\PhysicsVersion}{1.1}
+\newcommand{\TheoryVersion}{1.1}
+\newcommand{\TheoryCompatibleCommit}{7251499}
 \newcommand{\TheoryGenerationDate}{2026-06-26}
-\newcommand{\TheoryPipelineVersion}{H3-W9a}
-\newcommand{\TheoryImplementationStatus}{implemented through H3-W9a POWHEG dry-run preparation}
+\newcommand{\TheoryPipelineVersion}{H3-W9b}
+\newcommand{\TheoryImplementationStatus}{implemented through H3-W9b POWHEG real-smoke execution}
 
 \begin{document}
 
@@ -46,7 +46,7 @@
 \vspace{1.0cm}
 {\Large Rafael C. R. de Lima\par}
 \vfill
-{\large Implemented theory through H3-W9a POWHEG dry-run preparation\par}
+{\large Implemented theory through H3-W9b POWHEG real-smoke execution\par}
 \vspace{0.5cm}
 {\large \TheoryGenerationDate\par}
 \vfill
@@ -128,7 +128,7 @@ H3-W6 Forward Geodesics & implemented and documented \\
 H3-W7 DIS Interaction Sampler & implemented and documented \\
 H3-W8 Observer Bridge & implemented/proxy and documented \\
 H3-W9a POWHEG Dry Run & implemented/dry run and documented \\
-H3-W9b POWHEG Real Run & planned, not documented as implemented \\
+H3-W9b POWHEG Real Smoke & implemented/smoke and documented \\
 H3-W10 PYTHIA & planned, not documented as implemented \\
 H3-W11 GEANT4 & planned, not documented as implemented \\
 H3-W12 Photon Transport & planned, not documented as implemented \\
@@ -177,7 +177,7 @@ H3-W6 Forward Geodesics & implemented & yes \\
 H3-W7 DIS Interaction Sampler & implemented & yes \\
 H3-W8 Observer Bridge & implemented/proxy & yes \\
 H3-W9a POWHEG Dry Run & implemented/dry run & yes \\
-H3-W9b POWHEG Real Run & planned & no \\
+H3-W9b POWHEG Real Smoke & implemented/smoke & yes \\
 H3-W10 PYTHIA & planned & no \\
 H3-W11 GEANT4 & planned & no \\
 H3-W12 Photon Transport & planned & no \\
@@ -827,7 +827,7 @@ proxies. No secondary-particle generation.\\
 \bottomrule
 \end{longtable}
 
-\chapter{POWHEG Dry Run / Hard Process Preparation}
+\chapter{POWHEG Hard Process Preparation and Smoke Execution}
 
 \section{Dry-run role}
 
@@ -836,7 +836,7 @@ H3-W9a prepares local POWHEG DIS jobs but deliberately does not execute
 products under \code{POWHEG/}. It does not modify \code{ObserverBridge/},
 \code{DIS/}, \code{ForwardGeodesics/}, or \code{UHEsource/}.
 
-The implemented run mode is
+The H3-W9a run mode is
 \begin{equation}
 \code{powheg_run_mode}=\code{dry_run}.
 \end{equation}
@@ -846,6 +846,16 @@ The reports record
 \code{pwhg_main_executed} &= \code{false},\\
 \code{powheg_lhe_generated} &= \code{false}.
 \end{align}
+
+H3-W9b adds a controlled real-smoke mode:
+\begin{equation}
+\code{powheg_run_mode}=\code{real_smoke}.
+\end{equation}
+This mode selects only the top-ranked candidate, writes one input card, executes
+the self-contained local executable
+\code{external/powheg/build/DIS/pwhg_main}, and validates a minimal LHE file.
+It is a pipeline smoke execution, not the full production event-generation
+stage. PYTHIA, GEANT4, photon transport, and spectra remain disabled.
 
 \section{Candidate selection}
 
@@ -885,6 +895,27 @@ For the implemented seed mode, the seed is
 \code{random_seed}+\code{candidate_rank}.
 \end{equation}
 
+\section{Real-smoke LHE validation}
+
+In H3-W9b real-smoke mode, the prepared POWHEG card is copied into an isolated
+work directory and \code{pwhg_main} is executed with that directory as its
+working directory. The produced \code{pwgevents.lhe} must satisfy
+\begin{align}
+\code{<LesHouchesEvents} &\in \code{pwgevents.lhe},\\
+\code{</LesHouchesEvents>} &\in \code{pwgevents.lhe},\\
+N_{\rm LHE\,events} &> 0.
+\end{align}
+The validated LHE and run log are copied to
+\begin{align}
+\code{POWHEG/powheg_lhe/H3PWHG-000001/pwgevents.lhe},\\
+\code{POWHEG/powheg_run_logs/H3PWHG-000001/powheg.log}.
+\end{align}
+The validation report records \code{powheg_invoked=true},
+\code{pwhg_main_executed=true}, \code{powheg_lhe_generated=true}, and
+\code{n_lhe_events}. This smoke mode does not modify
+\code{ObserverBridge/}, \code{DIS/}, \code{ForwardGeodesics/}, or
+\code{UHEsource/}.
+
 \section{Event requests}
 
 The event request file
@@ -904,8 +935,12 @@ S_{\rm obs},\,
 \code{powheg_seed},\,
 \code{powheg_status}\}.
 \end{align}
-The status is \code{dry_run_ready}; \code{powheg_invoked} is false for every
-request.
+The dry-run status is \code{dry_run_ready}; \code{powheg_invoked} is false for
+every dry-run request. In real-smoke mode the initial status is
+\code{real_smoke_ready}; after successful validation the request records
+\code{real_smoke_lhe_generated}, \code{powheg_invoked=true},
+\code{pwhg_main_executed=true}, the LHE path, the log path, and
+\code{n_lhe_events}.
 
 \section{Inputs and outputs}
 
@@ -916,9 +951,9 @@ Role & Implemented item \\
 Inputs & \code{ObserverBridge/observer_bridge_ranked_events.jsonl} and POWHEG
 configuration values.\\
 Outputs & \code{POWHEG/powheg_event_requests.jsonl}, input cards, summary
-JSON/CSV, report JSON, and diagnostic plots.\\
-No output yet & No \code{pwgevents.lhe}; no PYTHIA; no GEANT4; no photon
-transport.\\
+JSON/CSV, report JSON, validation report, diagnostic plots, and in real-smoke
+mode one validated \code{pwgevents.lhe}.\\
+Still disabled & No PYTHIA; no GEANT4; no photon transport; no spectra.\\
 Backend & C++17 executable \code{bin/hadros3_powheg_driver}. Python handles
 orchestration and plots.\\
 \bottomrule
@@ -947,6 +982,10 @@ For H3-W9a, POWHEG is active only as dry-run preparation:
 \begin{equation}
 \code{status}=\code{powheg_jobs_prepared_no_lhe}.
 \end{equation}
+For H3-W9b real-smoke execution:
+\begin{equation}
+\code{status}=\code{powheg_real_smoke_lhe_generated}.
+\end{equation}
 The provenance also records the scientific theory reference for the run:
 \begin{align}
 \code{theory_document} &= \code{docs/Theory/HADROS3_Physics_Theory.pdf},\\
@@ -974,8 +1013,10 @@ and computes
 \begin{equation}
 S_{\rm obs}=w_{\rm physics}w_{\rm observer}.
 \end{equation}
-The POWHEG dry-run carries those weights into each event request; it does not
-change the physics score and does not generate a hard event yet.
+The POWHEG dry-run and real-smoke modes carry those weights into each event
+request. They do not change the physics score. H3-W9a stops after card
+preparation; H3-W9b executes one local POWHEG smoke job and validates the
+resulting minimal LHE.
 
 \section{Random seeds}
 
@@ -983,8 +1024,8 @@ The implemented random stages record seeds:
 \begin{itemize}
 \item UHE source sampling records its source seed.
 \item DIS interaction sampling records its acceptance and point-sampling seed.
-\item POWHEG dry-run records \code{random_seed} and the per-candidate
-\code{powheg_seed}.
+\item POWHEG dry-run and real-smoke modes record \code{random_seed} and the
+per-candidate \code{powheg_seed}.
 \end{itemize}
 These seeds are part of the statistical contract of the pipeline.
 
@@ -1002,7 +1043,7 @@ The current implemented pipeline can be summarized as
 \rightarrow
 \mathrm{ObserverBridge}
 \rightarrow
-\mathrm{POWHEG\ DryRun}.
+\mathrm{POWHEG\ RealSmoke}.
 \end{equation}
 The camera preview is an observer-view diagnostic that can be used by the
 dashboard and by Observer Bridge overlays, but it is not a physical
@@ -1027,8 +1068,9 @@ optical-depth and accepted interactions & Optical-depth DIS sampler.\\
 Observer Bridge & \code{DIS/dis_accepted_interactions.jsonl} &
 \code{ObserverBridge/} candidates and ranked events & Non-destructive
 geometric scoring proxy.\\
-POWHEG Dry Run & \code{ObserverBridge/observer_bridge_ranked_events.jsonl} &
-\code{POWHEG/} requests and input cards & Prepared jobs only; no LHE.\\
+POWHEG Real Smoke & \code{ObserverBridge/observer_bridge_ranked_events.jsonl} &
+\code{POWHEG/} requests, input cards, validation report, and one smoke LHE &
+H3-W9a dry run plus H3-W9b local one-job LHE smoke.\\
 \bottomrule
 \end{longtable}
 
@@ -1036,8 +1078,7 @@ POWHEG Dry Run & \code{ObserverBridge/observer_bridge_ranked_events.jsonl} &
 
 The current pipeline does not yet implement:
 \begin{itemize}
-\item real POWHEG event execution inside the main pipeline;
-\item LHE generation from H3-W9a;
+\item production-scale POWHEG event execution beyond the real-smoke mode;
 \item PYTHIA showering and hadronization;
 \item GEANT4 detector or material transport;
 \item photon transport from secondaries to the observer;
@@ -1078,9 +1119,9 @@ paths.\\
 implemented.\\
 \code{final_observation_score} & Product of implemented physics and observer
 weights.\\
-\code{powheg_invoked} & False in H3-W9a dry run.\\
-\code{pwhg_main_executed} & False in H3-W9a dry run.\\
-\code{powheg_lhe_generated} & False in H3-W9a dry run.\\
+\code{powheg_invoked} & False in H3-W9a dry run; true in H3-W9b real smoke.\\
+\code{pwhg_main_executed} & False in H3-W9a dry run; true in H3-W9b real smoke.\\
+\code{powheg_lhe_generated} & False in H3-W9a dry run; true in H3-W9b real smoke.\\
 \bottomrule
 \end{longtable}
 

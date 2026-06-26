@@ -154,7 +154,13 @@ static Config load_config(const fs::path& path) {
   c.run_mode = json_string(powheg, "run_mode", c.run_mode);
   if (c.backend != "local_powheg") throw std::runtime_error("powheg_backend must be local_powheg");
   if (c.process != "nudis") throw std::runtime_error("powheg_process must be nudis");
-  if (c.run_mode != "dry_run") throw std::runtime_error("H3-W9a only supports dry_run");
+  if (c.run_mode != "dry_run" && c.run_mode != "real_smoke") {
+    throw std::runtime_error("POWHEG run_mode must be dry_run or real_smoke");
+  }
+  if (c.run_mode == "real_smoke") {
+    c.max_powheg_events = 1;
+    c.events_per_candidate = std::min(c.events_per_candidate, 2);
+  }
   return c;
 }
 
@@ -214,8 +220,12 @@ static std::string fortran_double(double value, int precision = 10) {
 static std::string powheg_card(const Candidate& c, const Config& cfg, int seed) {
   const double qmax = qmax_for_energy(c.energy_gev);
   std::ostringstream out;
-  out << "! HADROS3 H3-W9a POWHEG DIS dry-run card.\n";
-  out << "! pwhg_main is NOT executed in this stage.\n";
+  out << "! HADROS3 POWHEG DIS card.\n";
+  if (cfg.run_mode == "real_smoke") {
+    out << "! H3-W9b real smoke mode: pwhg_main executes locally for this card.\n";
+  } else {
+    out << "! H3-W9a dry run: pwhg_main is NOT executed in this stage.\n";
+  }
   out << "! interaction_id=" << c.interaction_id << " event_id=" << c.event_id << "\n";
   out << "! final_observation_score=" << std::setprecision(17) << c.final_score << "\n";
   out << "LOevents 1\n";
@@ -233,7 +243,11 @@ static std::string powheg_card(const Candidate& c, const Config& cfg, int seed) 
   out << "lhans1 303400\nlhans2 303400\nalphas_from_pdf 1\n";
   out << "renscfact 1d0\nfacscfact 1d0\n";
   out << "use-old-grid 0\nuse-old-ubound 0\n";
-  out << "ncall1 1000\nitmx1 1\nncall2 2000\nitmx2 1\n";
+  if (cfg.run_mode == "real_smoke") {
+    out << "ncall1 100\nitmx1 1\nncall2 200\nitmx2 1\n";
+  } else {
+    out << "ncall1 1000\nitmx1 1\nncall2 2000\nitmx2 1\n";
+  }
   out << "foldcsi 1\nfoldy 1\nfoldphi 1\nnubound 1000\n";
   out << "iupperfsr 1\nfastbtlbound 1\nstoremintupb 1\nubexcess_correct 1\nstoreinfo_rwgt 1\n";
   out << "hdamp 0\nbornzerodamp 1\nwithnegweights 1\nflg_jacsing 1\ntestplots 0\nxupbound 2d0\n";
@@ -256,11 +270,12 @@ static std::string rel_to(const fs::path& path, const fs::path& base) {
   return fs::relative(path, base).generic_string();
 }
 
-static void write_requests(const fs::path& path, const std::vector<Request>& requests, const fs::path& run_output) {
+static void write_requests(const fs::path& path, const std::vector<Request>& requests, const fs::path& run_output, const Config& cfg) {
   std::ofstream out(path);
   if (!out) throw std::runtime_error("cannot write " + path.string());
   out << std::setprecision(17);
   for (const auto& r : requests) {
+    const std::string status = cfg.run_mode == "real_smoke" ? "real_smoke_ready" : "dry_run_ready";
     out << "{"
         << "\"powheg_request_id\":" << quote(r.request_id) << ","
         << "\"candidate_rank\":" << r.candidate.candidate_rank << ","
@@ -273,21 +288,22 @@ static void write_requests(const fs::path& path, const std::vector<Request>& req
         << "\"final_observation_score\":" << r.candidate.final_score << ","
         << "\"powheg_input_path\":" << quote(rel_to(r.card_path, run_output)) << ","
         << "\"powheg_seed\":" << r.seed << ","
-        << "\"powheg_status\":\"dry_run_ready\","
+        << "\"powheg_status\":" << quote(status) << ","
         << "\"powheg_invoked\":false"
         << "}\n";
   }
 }
 
-static void write_summary_csv(const fs::path& path, const std::vector<Request>& requests) {
+static void write_summary_csv(const fs::path& path, const std::vector<Request>& requests, const Config& cfg) {
   std::ofstream out(path);
   if (!out) throw std::runtime_error("cannot write " + path.string());
   out << "powheg_request_id,candidate_rank,interaction_id,event_id,interaction_E_nu_local_gev,final_observation_score,powheg_seed,powheg_status\n";
   out << std::setprecision(17);
   for (const auto& r : requests) {
+    const std::string status = cfg.run_mode == "real_smoke" ? "real_smoke_ready" : "dry_run_ready";
     out << r.request_id << "," << r.candidate.candidate_rank << "," << r.candidate.interaction_id << ","
         << r.candidate.event_id << "," << r.candidate.energy_gev << "," << r.candidate.final_score << ","
-        << r.seed << ",dry_run_ready\n";
+        << r.seed << "," << status << "\n";
   }
 }
 
@@ -304,13 +320,16 @@ static void write_summary_json(const fs::path& path, const Config& cfg, int inpu
   }
   std::ofstream out(path);
   if (!out) throw std::runtime_error("cannot write " + path.string());
+  const bool real_smoke = cfg.run_mode == "real_smoke";
+  const std::string stage_name = real_smoke ? "H3-W9b POWHEG Real Run Smoke Mode" : "H3-W9a POWHEG Integration Dry Run";
   out << std::setprecision(17);
   out << "{\n"
-      << "  \"stage_name\": \"H3-W9a POWHEG Integration Dry Run\",\n"
+      << "  \"stage_name\": " << quote(stage_name) << ",\n"
       << "  \"powheg_backend\": " << quote(cfg.backend) << ",\n"
       << "  \"powheg_process\": " << quote(cfg.process) << ",\n"
       << "  \"powheg_run_mode\": " << quote(cfg.run_mode) << ",\n"
-      << "  \"powheg_dry_run_invoked\": true,\n"
+      << "  \"powheg_dry_run_invoked\": " << (real_smoke ? "false" : "true") << ",\n"
+      << "  \"powheg_real_smoke_invoked\": " << (real_smoke ? "true" : "false") << ",\n"
       << "  \"powheg_invoked\": false,\n"
       << "  \"pwhg_main_executed\": false,\n"
       << "  \"powheg_jobs_prepared\": " << requests.size() << ",\n"
@@ -387,11 +406,16 @@ int main(int argc, char** argv) {
       write_text_file(req.card_path, powheg_card(req.candidate, cfg, req.seed));
       requests.push_back(req);
     }
-    write_requests(output_dir / "powheg_event_requests.jsonl", requests, run_output);
-    write_summary_csv(output_dir / "powheg_summary.csv", requests);
+    write_requests(output_dir / "powheg_event_requests.jsonl", requests, run_output, cfg);
+    write_summary_csv(output_dir / "powheg_summary.csv", requests, cfg);
     write_summary_json(output_dir / "powheg_summary.json", cfg, static_cast<int>(candidates.size()), requests, output_dir);
     fs::copy_file(output_dir / "powheg_summary.json", output_dir / "powheg_report.json", fs::copy_options::overwrite_existing);
-    std::cout << "H3-W9a POWHEG dry run prepared " << requests.size() << " jobs; pwhg_main NOT executed\n";
+    if (cfg.run_mode == "real_smoke") {
+      std::cout << "H3-W9b POWHEG real-smoke prepared " << requests.size()
+                << " job; local pwhg_main execution is delegated to the Python wrapper\n";
+    } else {
+      std::cout << "H3-W9a POWHEG dry run prepared " << requests.size() << " jobs; pwhg_main NOT executed\n";
+    }
     return 0;
   } catch (const std::exception& exc) {
     std::cerr << "hadros3_powheg_driver failed: " << exc.what() << "\n";

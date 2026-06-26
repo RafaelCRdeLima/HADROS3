@@ -4,3 +4,12 @@ __pycache__/
 output/
 bin/hadros3_*
 configs/
+tmp/powheg_smoke/
+output/POWHEG_smoke/
+external/powheg/POWHEG-BOX-RES/
+external/powheg/POWHEG_SOURCE.json
+external/powheg/build/
+external/powheg/**/*.o
+external/powheg/**/pwhg_main
+*.lhe
+*.log

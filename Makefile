@@ -11,7 +11,7 @@ NVCCFLAGS ?= -O3 -std=c++17
 CPP_INCLUDES := -Icpp/include
 KERR_PORT_SRC := cpp/src/kerr/kerr_metric.cpp cpp/src/kerr/kerr_geodesic.cpp cpp/src/cascade/kerr_local_tetrad.cpp cpp/src/cascade/packet_kerr_null_propagator.cpp
 
-.PHONY: help install-dev test cpp hadros3-forward-geodesics hadros3-dis-sampler hadros3-observer-bridge hadros3-geodesic-preview-cuda hadros-web render-hadros-web render-camera-preview launch-camera-preview sample-uhe-source propagate-forward-geodesics sample-dis-interactions observer-bridge serve-hadros-web check validate clean
+.PHONY: help install-dev test cpp hadros3-forward-geodesics hadros3-dis-sampler hadros3-observer-bridge hadros3-geodesic-preview-cuda powheg-fetch powheg-build powheg-smoke hadros-web render-hadros-web render-camera-preview launch-camera-preview sample-uhe-source propagate-forward-geodesics sample-dis-interactions observer-bridge serve-hadros-web check validate clean
 
 help:
 	@echo "HADROS3 commands:"
@@ -26,6 +26,9 @@ help:
 	@echo "  make hadros3-dis-sampler Build the self-contained H3-W7 C++ DIS sampler"
 	@echo "  make hadros3-observer-bridge Build the self-contained H3-W8 C++ Observer Bridge scorer"
 	@echo "  make hadros3-geodesic-preview-cuda Build self-contained HADROS3 CUDA camera preview if CUDA is available"
+	@echo "  make powheg-fetch     Fetch/copy the pinned POWHEG-BOX-RES DIS source into external/powheg"
+	@echo "  make powheg-build     Build local POWHEG DIS pwhg_main for H3-W9 bootstrap"
+	@echo "  make powheg-smoke     Run a minimal local POWHEG DIS smoke test"
 	@echo "  make propagate-forward-geodesics Generate H3-W6 forward geodesics through hadros-web"
 	@echo "  make sample-dis-interactions Generate H3-W7 DIS interaction samples through hadros-web"
 	@echo "  make observer-bridge   Generate H3-W8 Observer Bridge scoring products through hadros-web"
@@ -80,6 +83,15 @@ bin/hadros3_dis_sampler: cpp/apps/hadros3_dis_sampler.cpp
 bin/hadros3_observer_bridge: cpp/apps/hadros3_observer_bridge.cpp
 	@mkdir -p bin
 	$(CXX) $(CXXFLAGS) $(CPP_INCLUDES) cpp/apps/hadros3_observer_bridge.cpp -o $@
+
+powheg-fetch:
+	$(PYTHON) scripts/powheg/bootstrap_powheg.py fetch
+
+powheg-build:
+	$(PYTHON) scripts/powheg/bootstrap_powheg.py build
+
+powheg-smoke:
+	$(PYTHON) scripts/powheg/bootstrap_powheg.py smoke
 
 hadros-web:
 	$(PYTHON) hadros_web.py --serve --host $(HOST) --port $(PORT)

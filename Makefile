@@ -1,4 +1,4 @@
-PYTHON ?= python3
+PYTHON ?= micromamba run -n dis python
 PIP ?= $(PYTHON) -m pip
 HOST ?= 127.0.0.1
 PORT ?= 8877

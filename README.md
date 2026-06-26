@@ -170,3 +170,4 @@ This builds the C++ backends and then runs the official HADROS3 checks:
 make cpp
 make check
 ```
+By default, HADROS3 uses the micromamba environment `dis` for Python validation.

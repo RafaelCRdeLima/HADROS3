@@ -68,6 +68,20 @@ docs/Theory/HADROS3_Physics_Theory.pdf
   -> official reference for implemented physics
 ```
 
+Scientific release metadata lives in [`VERSION.json`](VERSION.json):
+
+```text
+software_version
+  -> changes with code, UI, build, test, or infrastructure releases
+physics_version
+  -> changes when equations, physical models, proxies, weights, statistics, or
+     physical backends change
+pipeline_version
+  -> identifies the most advanced implemented physical pipeline stage
+theory_version
+  -> tracks the documented implemented physics in the Theory PDF
+```
+
 Render the preview/configuration products directly and exit:
 
 ```bash

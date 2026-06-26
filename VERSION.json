@@ -1,0 +1,7 @@
+{
+  "software_version": "0.9.0",
+  "physics_version": "1.0",
+  "pipeline_version": "H3-W9a",
+  "theory_version": "1.0",
+  "theory_document": "docs/Theory/HADROS3_Physics_Theory.pdf"
+}

@@ -20,6 +20,13 @@ THEORY_SOURCE_DOCUMENT = "docs/Theory/HADROS3_Physics_Theory.tex"
 THEORY_COMPATIBLE_HADROS3_COMMIT = "1d99515"
 THEORY_GENERATION_DATE = "2026-06-26"
 THEORY_PIPELINE_VERSION = "H3-W9a"
+DEFAULT_SCIENTIFIC_RELEASE = {
+    "software_version": "0.9.0",
+    "physics_version": "1.0",
+    "pipeline_version": THEORY_PIPELINE_VERSION,
+    "theory_version": THEORY_VERSION,
+    "theory_document": THEORY_DOCUMENT,
+}
 THEORY_IMPLEMENTATION_STATUS = "implemented_through_H3_W9a_powheg_dry_run"
 THEORY_IMPLEMENTED_STAGES = ["H3-W5", "H3-W6", "H3-W7", "H3-W8", "H3-W9a"]
 THEORY_PLANNED_STAGES = ["H3-W9b", "H3-W10", "H3-W11", "H3-W12", "H3-W13"]
@@ -37,6 +44,20 @@ def _git_commit(root: Path) -> str | None:
         return None
 
 
+def _scientific_release(root: Path, git_commit: str | None) -> dict[str, Any]:
+    release = dict(DEFAULT_SCIENTIFIC_RELEASE)
+    version_path = root / "VERSION.json"
+    try:
+        payload = json.loads(version_path.read_text(encoding="utf-8"))
+        for key in DEFAULT_SCIENTIFIC_RELEASE:
+            if key in payload:
+                release[key] = payload[key]
+    except Exception:
+        pass
+    release["git_commit"] = git_commit
+    return release
+
+
 def build_provenance(
     *,
     root: Path,
@@ -52,15 +73,18 @@ def build_provenance(
 ) -> dict[str, Any]:
     created_utc = datetime.now(timezone.utc).isoformat()
     git_commit = _git_commit(root)
+    scientific_release = _scientific_release(root, git_commit)
     theory_metadata = {
-        "theory_document": THEORY_DOCUMENT,
+        "theory_document": scientific_release["theory_document"],
         "theory_source_document": THEORY_SOURCE_DOCUMENT,
-        "theory_version": THEORY_VERSION,
+        "theory_version": scientific_release["theory_version"],
         "theory_commit": git_commit,
         "theory_compatible_hadros3_commit": THEORY_COMPATIBLE_HADROS3_COMMIT,
         "theory_generation_date": THEORY_GENERATION_DATE,
         "theory_recorded_in_provenance_utc": created_utc,
-        "theory_pipeline_version": THEORY_PIPELINE_VERSION,
+        "theory_pipeline_version": scientific_release["pipeline_version"],
+        "physics_version": scientific_release["physics_version"],
+        "software_version": scientific_release["software_version"],
         "theory_implementation_status": THEORY_IMPLEMENTATION_STATUS,
         "theory_implemented_stages": THEORY_IMPLEMENTED_STAGES,
         "theory_planned_stages": THEORY_PLANNED_STAGES,
@@ -146,6 +170,7 @@ def build_provenance(
         "theory_version": theory_metadata["theory_version"],
         "theory_commit": theory_metadata["theory_commit"],
         "theory_generation_date": theory_metadata["theory_generation_date"],
+        "scientific_release": scientific_release,
         "scientific_theory": theory_metadata,
         "python": sys.version,
         "platform": platform.platform(),

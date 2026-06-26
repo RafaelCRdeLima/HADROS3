@@ -208,6 +208,7 @@ documented as implemented until it is part of the official pipeline.
 Every new physical implementation must also update:
 
 ```text
+VERSION.json
 Theory Version
 Compatible HADROS3 commit
 implemented-stage table
@@ -244,6 +245,35 @@ tests, formatting, or visual diagnostics do not need to increment the Theory
 Version unless they alter equations, approximations, weights, physical models,
 statistics, proxies, or physical backends. Such commits should say explicitly
 that the Theory Version did not need to change.
+
+## Scientific Release Metadata
+
+The repository root must contain `VERSION.json` with:
+
+```text
+software_version
+physics_version
+pipeline_version
+theory_version
+theory_document
+```
+
+Every provenance record must include a `scientific_release` block carrying those
+values plus the current `git_commit`.
+
+Before merging a new physical stage, evaluate whether it increments:
+
+```text
+physics_version
+theory_version
+pipeline_version
+```
+
+Changes that are purely visual, dashboard-only, infrastructure, build-system, or
+test-related may increment only `software_version`. Changes to equations,
+approximations, physical models, statistical weights, proxies, physical
+statistics, or physical backends must update the relevant scientific release
+versions and the Theory PDF.
 
 ## Presets And Runtime State
 

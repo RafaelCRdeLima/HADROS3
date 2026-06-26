@@ -110,6 +110,16 @@ def test_render_hadros_web_writes_first_stage_products(tmp_path: Path) -> None:
     assert provenance["theory_commit"]
     assert provenance["theory_generation_date"]
     assert provenance["scientific_theory"]["theory_pipeline_version"] == "H3-W9a"
+    version_payload = json.loads(Path("VERSION.json").read_text(encoding="utf-8"))
+    for key in ["software_version", "physics_version", "pipeline_version", "theory_version"]:
+        assert key in version_payload
+        assert key in provenance["scientific_release"]
+    assert provenance["scientific_release"]["software_version"] == version_payload["software_version"]
+    assert provenance["scientific_release"]["physics_version"] == version_payload["physics_version"]
+    assert provenance["scientific_release"]["pipeline_version"] == version_payload["pipeline_version"]
+    assert provenance["scientific_release"]["theory_version"] == version_payload["theory_version"]
+    assert provenance["scientific_release"]["theory_document"] == version_payload["theory_document"]
+    assert provenance["scientific_release"]["git_commit"]
 
 
 def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp_path: Path, monkeypatch) -> None:

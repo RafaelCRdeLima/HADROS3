@@ -12,6 +12,7 @@ RUN_METADATA_DIR = "RunMetadata"
 UHE_SOURCE_DIR = "UHEsource"
 FORWARD_GEODESICS_DIR = "ForwardGeodesics"
 DIS_DIR = "DIS"
+OBSERVER_BRIDGE_DIR = "ObserverBridge"
 DASHBOARD_DIR = "Dashboard"
 
 
@@ -39,6 +40,10 @@ def dis_dir(run_output: Path) -> Path:
     return run_output / DIS_DIR
 
 
+def observer_bridge_dir(run_output: Path) -> Path:
+    return run_output / OBSERVER_BRIDGE_DIR
+
+
 def clear_forward_geodesics_outputs(run_output: Path) -> None:
     path = forward_geodesics_dir(run_output)
     if path.exists():
@@ -48,6 +53,13 @@ def clear_forward_geodesics_outputs(run_output: Path) -> None:
 
 def clear_dis_outputs(run_output: Path) -> None:
     path = dis_dir(run_output)
+    if path.exists():
+        shutil.rmtree(path)
+    path.mkdir(parents=True, exist_ok=True)
+
+
+def clear_observer_bridge_outputs(run_output: Path) -> None:
+    path = observer_bridge_dir(run_output)
     if path.exists():
         shutil.rmtree(path)
     path.mkdir(parents=True, exist_ok=True)
@@ -136,6 +148,19 @@ def ensure_output_layout(run_output: Path) -> None:
             "gbw_vs_iim_probability_comparison.png",
             "gbw_vs_iim_interaction_locations.png",
             "gbw_vs_iim_summary.json",
+        ],
+        OBSERVER_BRIDGE_DIR: [
+            "observer_bridge_candidates.jsonl",
+            "observer_bridge_ranked_events.jsonl",
+            "observer_bridge_summary.json",
+            "observer_bridge_summary.csv",
+            "observer_bridge_report.json",
+            "observer_bridge_map.png",
+            "observer_bridge_score_distribution.png",
+            "observer_bridge_weight_breakdown.png",
+            "observer_bridge_visibility_map.png",
+            "observer_bridge_ranked_events.png",
+            "observer_bridge_geometry_3d.html",
         ],
         DASHBOARD_DIR: [
             "index.html",

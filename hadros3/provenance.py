@@ -36,10 +36,12 @@ def build_provenance(
     source_summary: dict[str, Any] | None = None,
     forward_geodesic_summary: dict[str, Any] | None = None,
     dis_summary: dict[str, Any] | None = None,
+    observer_bridge_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     source_active = bool(source_summary and source_summary.get("source_sampler_active"))
     forward_active = bool(forward_geodesic_summary and forward_geodesic_summary.get("forward_neutrino_geodesics_invoked"))
     dis_active = bool(dis_summary and dis_summary.get("optical_depth_dis_sampler_invoked"))
+    observer_bridge_active = bool(observer_bridge_summary and observer_bridge_summary.get("observer_bridge_invoked"))
     paint_swatch_disk_diagnostic_mode = bool(camera_preview and camera_preview.get("paint_swatch_disk_diagnostic_mode"))
     paint_swatch_disk_uses_forced_thin_disk = bool(camera_preview and camera_preview.get("paint_swatch_disk_uses_forced_thin_disk"))
     paint_swatch_disk_physical_torus_emission = (
@@ -59,6 +61,7 @@ def build_provenance(
         "momentum_is_physical_kerr": source_summary.get("momentum_is_physical_kerr") if source_summary else False,
         "forward_neutrino_geodesics_invoked": forward_active,
         "optical_depth_dis_sampler_invoked": dis_active,
+        "observer_bridge_invoked": observer_bridge_active,
         "observer_bridge_active_filter_invoked": False,
         "expensive_event_generation_invoked": False,
         "summary": source_summary,
@@ -101,8 +104,8 @@ def build_provenance(
         "summary": dis_summary,
     }
     return {
-        "hadros3_stage": "H3-W0_to_H3-W7_dis_interaction_sampler" if dis_active else ("H3-W0_to_H3-W6_forward_neutrino_geodesics" if forward_active else ("H3-W0_to_H3-W5_hadros_web_uhe_source_shell" if source_active else "H3-W0_to_H3-W4_hadros_web_geometry_shell")),
-        "status": "dis_interactions_sampled_no_observer_bridge" if dis_active else ("forward_geodesics_propagated_no_interactions" if forward_active else ("uhe_source_sampled_no_expensive_events" if source_active else "geometry_configured_no_expensive_events")),
+        "hadros3_stage": "H3-W0_to_H3-W8_observer_bridge_scoring" if observer_bridge_active else ("H3-W0_to_H3-W7_dis_interaction_sampler" if dis_active else ("H3-W0_to_H3-W6_forward_neutrino_geodesics" if forward_active else ("H3-W0_to_H3-W5_hadros_web_uhe_source_shell" if source_active else "H3-W0_to_H3-W4_hadros_web_geometry_shell"))),
+        "status": "observer_bridge_scored_no_event_generation" if observer_bridge_active else ("dis_interactions_sampled_no_observer_bridge" if dis_active else ("forward_geodesics_propagated_no_interactions" if forward_active else ("uhe_source_sampled_no_expensive_events" if source_active else "geometry_configured_no_expensive_events"))),
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "hadros3_version": __version__,
         "git_commit": _git_commit(root),
@@ -116,7 +119,8 @@ def build_provenance(
             "geant4": "disabled",
             "forward_neutrino_geodesics": "active_H3_W6" if forward_active else "not_invoked",
             "optical_depth_dis_sampler": "active_H3_W7" if dis_active else "not_invoked",
-            "observer_bridge_active_filter": "placeholder_only",
+            "observer_bridge_active_filter": "active_H3_W8_scoring_only" if observer_bridge_active else "not_invoked",
+            "observer_bridge_event_generation": "disabled",
         },
         "products": products,
         "camera_preview": camera_preview,
@@ -166,6 +170,34 @@ def build_provenance(
             "summary": forward_geodesic_summary,
         },
         "dis_interaction_sampler": dis_sampler,
+        "observer_bridge": {
+            "observer_bridge_invoked": observer_bridge_active,
+            "observer_bridge_active_filter_invoked": False,
+            "observer_bridge_backend": observer_bridge_summary.get("observer_bridge_backend") if observer_bridge_active else values.get("observer_bridge", {}).get("observer_bridge_backend"),
+            "backend_language": observer_bridge_summary.get("backend_language") if observer_bridge_active else None,
+            "backend_executable": observer_bridge_summary.get("backend_executable") if observer_bridge_active else None,
+            "bridge_mode": observer_bridge_summary.get("bridge_mode") if observer_bridge_active else values.get("observer_bridge", {}).get("bridge_mode"),
+            "secondary_particle_proxy_model": observer_bridge_summary.get("secondary_particle_proxy_model") if observer_bridge_active else values.get("observer_bridge", {}).get("secondary_particle_proxy_model"),
+            "escape_proxy_model": observer_bridge_summary.get("escape_proxy_model") if observer_bridge_active else values.get("observer_bridge", {}).get("escape_proxy_model"),
+            "visibility_model": observer_bridge_summary.get("visibility_model") if observer_bridge_active else values.get("observer_bridge", {}).get("visibility_model"),
+            "redshift_proxy_model": observer_bridge_summary.get("redshift_proxy_model") if observer_bridge_active else values.get("observer_bridge", {}).get("redshift_proxy_model"),
+            "line_of_sight_proxy_model": observer_bridge_summary.get("line_of_sight_proxy_model") if observer_bridge_active else values.get("observer_bridge", {}).get("line_of_sight_proxy_model"),
+            "fov_policy": observer_bridge_summary.get("fov_policy") if observer_bridge_active else values.get("observer_bridge", {}).get("fov_policy"),
+            "physics_weight_definition": observer_bridge_summary.get("physics_weight_definition") if observer_bridge_active else "final_pre_event_weight",
+            "observer_weight_definition": observer_bridge_summary.get("observer_weight_definition") if observer_bridge_active else "escape_weight_proxy * visibility_proxy * camera_fov_weight * distance_weight * redshift_weight * line_of_sight_weight",
+            "final_observation_score_definition": observer_bridge_summary.get("final_observation_score_definition") if observer_bridge_active else "physics_weight * observer_weight",
+            "uses_hadros_original_runtime_path": observer_bridge_summary.get("uses_hadros_original_runtime_path") if observer_bridge_active else False,
+            "proxy_physics_risk": observer_bridge_summary.get("proxy_physics_risk") if observer_bridge_active else True,
+            "escape_proxy_physics_risk": observer_bridge_summary.get("escape_proxy_physics_risk") if observer_bridge_active else True,
+            "visibility_proxy_physics_risk": observer_bridge_summary.get("visibility_proxy_physics_risk") if observer_bridge_active else True,
+            "redshift_proxy_physics_risk": observer_bridge_summary.get("redshift_proxy_physics_risk") if observer_bridge_active else True,
+            "event_generation_invoked": False,
+            "powheg_invoked": False,
+            "pythia_invoked": False,
+            "geant4_invoked": False,
+            "photon_transport_invoked": False,
+            "summary": observer_bridge_summary,
+        },
         "validation": validation,
     }
 

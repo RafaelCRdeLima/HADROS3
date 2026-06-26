@@ -47,8 +47,21 @@
     "planned_model": "detector_transport_future"
   },
   "observer_bridge": {
-    "mode": "placeholder_diagnostic_disabled",
-    "planned_model": "distance_to_observer_bundle"
+    "bridge_mode": "scoring_only",
+    "distance_weight_enabled": true,
+    "escape_proxy_model": "geometric_outward_proxy",
+    "fov_policy": "hard",
+    "line_of_sight_check_enabled": true,
+    "line_of_sight_proxy_model": "geometric_proxy",
+    "max_ranked_events": 25,
+    "min_final_observation_score": 0.0,
+    "min_observer_weight": 0.0,
+    "observer_bridge_backend": "cpp_cpu",
+    "redshift_proxy_model": "unity_or_metric_proxy",
+    "redshift_weight_enabled": false,
+    "secondary_particle_proxy_model": "geometric_escape_proxy",
+    "status": "configured_only_no_observer_bridge",
+    "visibility_model": "geometric_proxy"
   },
   "observer_camera": {
     "azimuth_deg": -5.25,

@@ -288,8 +288,35 @@ def schema() -> list[dict[str, Any]]:
         {
             "tab": "Observer Bridge",
             "fields": [
-                field("observer_bridge", "mode", "Observer bridge", "placeholder_diagnostic_disabled", kind="select", options=["placeholder_diagnostic_disabled"]),
-                field("observer_bridge", "planned_model", "Planned model", "distance_to_observer_bundle", kind="select", options=["distance_to_observer_bundle"]),
+                field("observer_bridge", "observer_bridge_backend", "Observer Bridge backend", "cpp_cpu", kind="select", options=["cpp_cpu"]),
+                field("observer_bridge", "bridge_mode", "Bridge mode", "scoring_only", kind="select", options=["scoring_only"]),
+                field(
+                    "observer_bridge",
+                    "secondary_particle_proxy_model",
+                    "Secondary proxy",
+                    "geometric_escape_proxy",
+                    kind="select",
+                    options=["geometric_escape_proxy"],
+                ),
+                field("observer_bridge", "escape_proxy_model", "Escape proxy", "geometric_outward_proxy", kind="select", options=["geometric_outward_proxy"]),
+                field("observer_bridge", "visibility_model", "Visibility model", "geometric_proxy", kind="select", options=["geometric_proxy"]),
+                field("observer_bridge", "redshift_proxy_model", "Redshift proxy", "unity_or_metric_proxy", kind="select", options=["unity_or_metric_proxy"]),
+                field("observer_bridge", "line_of_sight_proxy_model", "Line of sight proxy", "geometric_proxy", kind="select", options=["geometric_proxy"]),
+                field("observer_bridge", "fov_policy", "FOV policy", "hard", kind="select", options=["hard", "soft"]),
+                field("observer_bridge", "distance_weight_enabled", "Distance weight", True, kind="checkbox"),
+                field("observer_bridge", "redshift_weight_enabled", "Redshift weight", False, kind="checkbox"),
+                field("observer_bridge", "line_of_sight_check_enabled", "Line of sight check", True, kind="checkbox"),
+                field("observer_bridge", "max_ranked_events", "Max ranked events", 25, kind="number"),
+                field("observer_bridge", "min_observer_weight", "Min observer weight", 0.0, kind="number"),
+                field("observer_bridge", "min_final_observation_score", "Min final score", 0.0, kind="number"),
+                field(
+                    "observer_bridge",
+                    "status",
+                    "Status",
+                    "configured_only_no_observer_bridge",
+                    kind="select",
+                    options=["configured_only_no_observer_bridge", "observer_bridge_scored_no_event_generation"],
+                ),
             ],
         },
         {
@@ -446,6 +473,7 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
     source = values["uhe_neutrino_source"]
     forward = values["forward_geodesics"]
     dis = values.get("dis_interaction_sampler", {})
+    bridge = values.get("observer_bridge", {})
 
     spin = float(bh["spin_a"])
     if not (-0.999 <= spin <= 0.999):
@@ -547,6 +575,28 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
         int(float(dis.get("random_seed", 0)))
     except (TypeError, ValueError):
         problems.append("dis_interaction_sampler.random_seed must be an integer")
+    if str(bridge.get("observer_bridge_backend", "cpp_cpu")) != "cpp_cpu":
+        problems.append("observer_bridge.observer_bridge_backend must be cpp_cpu in H3-W8")
+    if str(bridge.get("bridge_mode", "scoring_only")) != "scoring_only":
+        problems.append("observer_bridge.bridge_mode must be scoring_only in H3-W8")
+    if str(bridge.get("secondary_particle_proxy_model", "geometric_escape_proxy")) != "geometric_escape_proxy":
+        problems.append("observer_bridge.secondary_particle_proxy_model must be geometric_escape_proxy in H3-W8")
+    if str(bridge.get("escape_proxy_model", "geometric_outward_proxy")) != "geometric_outward_proxy":
+        problems.append("observer_bridge.escape_proxy_model must be geometric_outward_proxy in H3-W8")
+    if str(bridge.get("visibility_model", "geometric_proxy")) != "geometric_proxy":
+        problems.append("observer_bridge.visibility_model must be geometric_proxy in H3-W8")
+    if str(bridge.get("redshift_proxy_model", "unity_or_metric_proxy")) != "unity_or_metric_proxy":
+        problems.append("observer_bridge.redshift_proxy_model must be unity_or_metric_proxy in H3-W8")
+    if str(bridge.get("line_of_sight_proxy_model", "geometric_proxy")) != "geometric_proxy":
+        problems.append("observer_bridge.line_of_sight_proxy_model must be geometric_proxy in H3-W8")
+    if str(bridge.get("fov_policy", "hard")) not in {"hard", "soft"}:
+        problems.append("observer_bridge.fov_policy must be hard or soft")
+    if int(float(bridge.get("max_ranked_events", 0))) <= 0:
+        problems.append("observer_bridge.max_ranked_events must be positive")
+    if float(bridge.get("min_observer_weight", 0.0)) < 0.0:
+        problems.append("observer_bridge.min_observer_weight must be non-negative")
+    if float(bridge.get("min_final_observation_score", 0.0)) < 0.0:
+        problems.append("observer_bridge.min_final_observation_score must be non-negative")
     return problems
 
 

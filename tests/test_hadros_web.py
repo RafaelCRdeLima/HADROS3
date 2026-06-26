@@ -29,7 +29,8 @@ def test_schema_exposes_hadros3_first_stage_controls() -> None:
         ("dis_interaction_sampler", "dis_backend"),
         ("dis_interaction_sampler", "medium_model"),
         ("dis_interaction_sampler", "medium_velocity_model"),
-        ("observer_bridge", "mode"),
+        ("observer_bridge", "observer_bridge_backend"),
+        ("observer_bridge", "bridge_mode"),
         ("provenance", "trust_boundary"),
     }
     assert expected <= keys
@@ -75,6 +76,7 @@ def test_geometry_preview_context_is_available_on_geometry_tabs() -> None:
     assert 'const geometryPreviewTabs = new Set(["Camera", "Black Hole", "Torus / Medium", "Funnel / Cone"]);' in html
     assert "geometryPreviewTabs.has(activeTab)" in html
     assert "DIS Interaction Map" in html
+    assert "Observer Bridge Geometry" in html
     assert "Forward Geodesics Geometry" in html
     assert "UHE Source Samples" in html
 
@@ -132,6 +134,17 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert payload["outputs"]["paths"]["density_energy_sigma_correlation"] == "DIS/density_energy_sigma_correlation.png"
     assert payload["outputs"]["paths"]["dis_diagnostics_report"] == "DIS/dis_diagnostics_report.json"
     assert payload["outputs"]["paths"]["gbw_vs_iim_summary"] == "DIS/gbw_vs_iim_summary.json"
+    assert payload["outputs"]["paths"]["observer_bridge_candidates"] == "ObserverBridge/observer_bridge_candidates.jsonl"
+    assert payload["outputs"]["paths"]["observer_bridge_ranked_events"] == "ObserverBridge/observer_bridge_ranked_events.jsonl"
+    assert payload["outputs"]["paths"]["observer_bridge_summary_json"] == "ObserverBridge/observer_bridge_summary.json"
+    assert payload["outputs"]["paths"]["observer_bridge_summary"] == "ObserverBridge/observer_bridge_summary.csv"
+    assert payload["outputs"]["paths"]["observer_bridge_report"] == "ObserverBridge/observer_bridge_report.json"
+    assert payload["outputs"]["paths"]["observer_bridge_map"] == "ObserverBridge/observer_bridge_map.png"
+    assert payload["outputs"]["paths"]["observer_bridge_score_distribution"] == "ObserverBridge/observer_bridge_score_distribution.png"
+    assert payload["outputs"]["paths"]["observer_bridge_weight_breakdown"] == "ObserverBridge/observer_bridge_weight_breakdown.png"
+    assert payload["outputs"]["paths"]["observer_bridge_visibility_map"] == "ObserverBridge/observer_bridge_visibility_map.png"
+    assert payload["outputs"]["paths"]["observer_bridge_ranked_events_png"] == "ObserverBridge/observer_bridge_ranked_events.png"
+    assert payload["outputs"]["paths"]["observer_bridge_geometry_3d_html"] == "ObserverBridge/observer_bridge_geometry_3d.html"
     assert payload["outputs"]["paths"]["dis_summary_json"] == "DIS/dis_summary.json"
     assert payload["outputs"]["paths"]["uhe_source_sampling_uniformity"] == "UHEsource/uhe_source_sampling_uniformity.png"
     assert payload["outputs"]["paths"]["uhe_source_sampling_uniformity_report"] == "UHEsource/uhe_source_sampling_uniformity_report.json"
@@ -147,6 +160,7 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert "Propagated paths" in html
     assert "Available UHE samples" in html
     assert "Compute DIS Optical Depth / Sample Interactions" in html
+    assert "Compute Observer Bridge Scores" in html
     assert "cpp_hadros_original_port" in html
     assert "Full Kerr null geodesic propagation" in html
     assert "Initial Direction" in html
@@ -201,3 +215,15 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert "dis_interaction_candidates.jsonl" in html
     assert "dis_accepted_interactions.jsonl" in html
     assert "dis_optical_depth_report.json" in html
+    assert "ObserverBridge/" in html
+    assert "observer_bridge_candidates.jsonl" in html
+    assert "observer_bridge_ranked_events.jsonl" in html
+    assert "observer_bridge_summary.json" in html
+    assert "observer_bridge_summary.csv" in html
+    assert "observer_bridge_report.json" in html
+    assert "observer_bridge_map.png" in html
+    assert "observer_bridge_score_distribution.png" in html
+    assert "observer_bridge_weight_breakdown.png" in html
+    assert "observer_bridge_visibility_map.png" in html
+    assert "observer_bridge_ranked_events.png" in html
+    assert "observer_bridge_geometry_3d.html" in html

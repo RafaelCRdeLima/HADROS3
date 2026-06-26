@@ -20,7 +20,8 @@ from hadros3.camera_preview import available_backends, launch_interactive_camera
 from hadros3.config import deep_update, defaults, load_values, run_output_dir, safe_run_name, schema, validate_values
 from hadros3.dis_sampler import generate_dis_interaction_products, generate_gbw_iim_comparison
 from hadros3.forward_geodesics import generate_forward_geodesic_products
-from hadros3.paths import camera_preview_dir, clear_dis_outputs, clear_forward_geodesics_outputs, dashboard_dir, dis_dir, ensure_output_layout, forward_geodesics_dir, geometry_dir, rel, run_metadata_dir, uhe_source_dir
+from hadros3.observer_bridge import generate_observer_bridge_products
+from hadros3.paths import camera_preview_dir, clear_dis_outputs, clear_forward_geodesics_outputs, clear_observer_bridge_outputs, dashboard_dir, dis_dir, ensure_output_layout, forward_geodesics_dir, geometry_dir, observer_bridge_dir, rel, run_metadata_dir, uhe_source_dir
 from hadros3.pipeline import render_hadros_web
 from hadros3.reuse import discover_original_hadros
 from hadros3.uhe_source import generate_uhe_source_products
@@ -43,6 +44,7 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
     source_dir = uhe_source_dir(output_dir)
     forward_dir = forward_geodesics_dir(output_dir)
     dis_output_dir = dis_dir(output_dir)
+    bridge_dir = observer_bridge_dir(output_dir)
     web_dir = dashboard_dir(output_dir)
 
     camera_preview_path = camera_dir / "hadros3_camera_preview.png"
@@ -104,12 +106,24 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
     dis_gbw_iim_probability_comparison_path = dis_output_dir / "gbw_vs_iim_probability_comparison.png"
     dis_gbw_iim_locations_path = dis_output_dir / "gbw_vs_iim_interaction_locations.png"
     dis_gbw_iim_summary_path = dis_output_dir / "gbw_vs_iim_summary.json"
+    bridge_candidates_path = bridge_dir / "observer_bridge_candidates.jsonl"
+    bridge_ranked_path = bridge_dir / "observer_bridge_ranked_events.jsonl"
+    bridge_summary_json_path = bridge_dir / "observer_bridge_summary.json"
+    bridge_summary_csv_path = bridge_dir / "observer_bridge_summary.csv"
+    bridge_report_path = bridge_dir / "observer_bridge_report.json"
+    bridge_map_path = bridge_dir / "observer_bridge_map.png"
+    bridge_score_distribution_path = bridge_dir / "observer_bridge_score_distribution.png"
+    bridge_weight_breakdown_path = bridge_dir / "observer_bridge_weight_breakdown.png"
+    bridge_visibility_map_path = bridge_dir / "observer_bridge_visibility_map.png"
+    bridge_ranked_png_path = bridge_dir / "observer_bridge_ranked_events.png"
+    bridge_geometry_3d_html_path = bridge_dir / "observer_bridge_geometry_3d.html"
     html_path = web_dir / "index.html"
 
     camera_summary: dict[str, Any] | None = None
     source_summary: dict[str, Any] | None = None
     forward_summary: dict[str, Any] | None = None
     dis_summary: dict[str, Any] | None = None
+    observer_bridge_summary: dict[str, Any] | None = None
     if camera_summary_path.exists():
         try:
             camera_summary = json.loads(camera_summary_path.read_text(encoding="utf-8"))
@@ -130,6 +144,11 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             dis_summary = json.loads(dis_summary_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             dis_summary = {"status": "invalid_summary", "message": "Could not parse DIS summary."}
+    if bridge_summary_json_path.exists():
+        try:
+            observer_bridge_summary = json.loads(bridge_summary_json_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            observer_bridge_summary = {"status": "invalid_summary", "message": "Could not parse Observer Bridge summary."}
     return {
         "schema": schema(),
         "values": values,
@@ -139,6 +158,7 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
         "source_summary": source_summary,
         "forward_summary": forward_summary,
         "dis_summary": dis_summary,
+        "observer_bridge_summary": observer_bridge_summary,
         "source_status": {
             "configured_status": values.get("uhe_neutrino_source", {}).get("status"),
             "input_dir": rel(source_dir, output_dir),
@@ -233,13 +253,47 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "gbw_vs_iim_summary": rel(dis_gbw_iim_summary_path, output_dir),
             },
         },
+        "observer_bridge": {
+            "configured_status": values.get("observer_bridge", {}).get("status"),
+            "input_dis_found": dis_accepted_path.exists(),
+            "output_dir": rel(bridge_dir, output_dir),
+            "n_interactions_input": observer_bridge_summary.get("n_interactions_input", 0) if observer_bridge_summary else 0,
+            "n_candidates_scored": observer_bridge_summary.get("n_candidates_scored", 0) if observer_bridge_summary else 0,
+            "products": {
+                "observer_bridge_candidates": bridge_candidates_path.exists(),
+                "observer_bridge_ranked_events": bridge_ranked_path.exists(),
+                "observer_bridge_summary_json": bridge_summary_json_path.exists(),
+                "observer_bridge_summary": bridge_summary_csv_path.exists(),
+                "observer_bridge_report": bridge_report_path.exists(),
+                "observer_bridge_map": bridge_map_path.exists(),
+                "observer_bridge_score_distribution": bridge_score_distribution_path.exists(),
+                "observer_bridge_weight_breakdown": bridge_weight_breakdown_path.exists(),
+                "observer_bridge_visibility_map": bridge_visibility_map_path.exists(),
+                "observer_bridge_ranked_events_png": bridge_ranked_png_path.exists(),
+                "observer_bridge_geometry_3d_html": bridge_geometry_3d_html_path.exists(),
+            },
+            "summary": observer_bridge_summary,
+            "links": {
+                "observer_bridge_candidates": rel(bridge_candidates_path, output_dir),
+                "observer_bridge_ranked_events": rel(bridge_ranked_path, output_dir),
+                "observer_bridge_summary_json": rel(bridge_summary_json_path, output_dir),
+                "observer_bridge_summary": rel(bridge_summary_csv_path, output_dir),
+                "observer_bridge_report": rel(bridge_report_path, output_dir),
+                "observer_bridge_map": rel(bridge_map_path, output_dir),
+                "observer_bridge_score_distribution": rel(bridge_score_distribution_path, output_dir),
+                "observer_bridge_weight_breakdown": rel(bridge_weight_breakdown_path, output_dir),
+                "observer_bridge_visibility_map": rel(bridge_visibility_map_path, output_dir),
+                "observer_bridge_ranked_events_png": rel(bridge_ranked_png_path, output_dir),
+                "observer_bridge_geometry_3d_html": rel(bridge_geometry_3d_html_path, output_dir),
+            },
+        },
         "pipeline_status": [
             {"stage": "Geometry", "status": "done" if geometry_preview_path.exists() else "pending", "tab": "Camera"},
             {"stage": "Camera", "status": "done" if camera_preview_path.exists() else "pending", "tab": "Camera"},
             {"stage": "UHE Source", "status": "done" if source_samples_path.exists() else "pending", "tab": "UHE Source"},
             {"stage": "Forward Geodesics", "status": "done" if forward_paths_path.exists() and forward_segments_path.exists() else "pending", "tab": "Forward Geodesics"},
             {"stage": "DIS Interaction Sampler", "status": "done" if dis_summary_path.exists() else "pending", "tab": "DIS Interaction Sampler"},
-            {"stage": "Observer Bridge", "status": "pending", "tab": "Observer Bridge"},
+            {"stage": "Observer Bridge", "status": "done" if bridge_summary_json_path.exists() else "pending", "tab": "Observer Bridge"},
             {"stage": "Event Generation", "status": "pending", "tab": "Event Generation"},
             {"stage": "GEANT4", "status": "pending", "tab": "GEANT4"},
             {"stage": "Photon Transport", "status": "pending", "tab": "Photon Transport"},
@@ -303,6 +357,17 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             "gbw_vs_iim_probability_comparison_exists": dis_gbw_iim_probability_comparison_path.exists(),
             "gbw_vs_iim_interaction_locations_exists": dis_gbw_iim_locations_path.exists(),
             "gbw_vs_iim_summary_exists": dis_gbw_iim_summary_path.exists(),
+            "observer_bridge_candidates_exists": bridge_candidates_path.exists(),
+            "observer_bridge_ranked_events_exists": bridge_ranked_path.exists(),
+            "observer_bridge_summary_json_exists": bridge_summary_json_path.exists(),
+            "observer_bridge_summary_exists": bridge_summary_csv_path.exists(),
+            "observer_bridge_report_exists": bridge_report_path.exists(),
+            "observer_bridge_map_exists": bridge_map_path.exists(),
+            "observer_bridge_score_distribution_exists": bridge_score_distribution_path.exists(),
+            "observer_bridge_weight_breakdown_exists": bridge_weight_breakdown_path.exists(),
+            "observer_bridge_visibility_map_exists": bridge_visibility_map_path.exists(),
+            "observer_bridge_ranked_events_png_exists": bridge_ranked_png_path.exists(),
+            "observer_bridge_geometry_3d_html_exists": bridge_geometry_3d_html_path.exists(),
             "provenance_exists": provenance_path.exists(),
             "config_exists": config_output_path.exists(),
             "render_summary_exists": render_summary_path.exists(),
@@ -365,6 +430,17 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "gbw_vs_iim_probability_comparison": rel(dis_gbw_iim_probability_comparison_path, output_dir),
                 "gbw_vs_iim_interaction_locations": rel(dis_gbw_iim_locations_path, output_dir),
                 "gbw_vs_iim_summary": rel(dis_gbw_iim_summary_path, output_dir),
+                "observer_bridge_candidates": rel(bridge_candidates_path, output_dir),
+                "observer_bridge_ranked_events": rel(bridge_ranked_path, output_dir),
+                "observer_bridge_summary_json": rel(bridge_summary_json_path, output_dir),
+                "observer_bridge_summary": rel(bridge_summary_csv_path, output_dir),
+                "observer_bridge_report": rel(bridge_report_path, output_dir),
+                "observer_bridge_map": rel(bridge_map_path, output_dir),
+                "observer_bridge_score_distribution": rel(bridge_score_distribution_path, output_dir),
+                "observer_bridge_weight_breakdown": rel(bridge_weight_breakdown_path, output_dir),
+                "observer_bridge_visibility_map": rel(bridge_visibility_map_path, output_dir),
+                "observer_bridge_ranked_events_png": rel(bridge_ranked_png_path, output_dir),
+                "observer_bridge_geometry_3d_html": rel(bridge_geometry_3d_html_path, output_dir),
                 "provenance": rel(provenance_path, output_dir),
                 "render_summary": rel(render_summary_path, output_dir),
                 "html_summary": rel(html_path, output_dir),
@@ -480,11 +556,26 @@ let previewPollTimer = null;
 let sourcePreviewVersion = Date.now();
 let forwardPreviewVersion = Date.now();
 let disPreviewVersion = Date.now();
+let observerBridgePreviewVersion = Date.now();
 function outPath(key) {{
   return state.outputs.paths && state.outputs.paths[key] ? state.outputs.paths[key] : key;
 }}
 function outUrl(key) {{
   return "/output/" + outPath(key);
+}}
+function setObserverBridgeOutputs(exists) {{
+  state.observer_bridge_summary = exists ? state.observer_bridge_summary : null;
+  state.outputs.observer_bridge_candidates_exists = exists;
+  state.outputs.observer_bridge_ranked_events_exists = exists;
+  state.outputs.observer_bridge_summary_json_exists = exists;
+  state.outputs.observer_bridge_summary_exists = exists;
+  state.outputs.observer_bridge_report_exists = exists;
+  state.outputs.observer_bridge_map_exists = exists;
+  state.outputs.observer_bridge_score_distribution_exists = exists;
+  state.outputs.observer_bridge_weight_breakdown_exists = exists;
+  state.outputs.observer_bridge_visibility_map_exists = exists;
+  state.outputs.observer_bridge_ranked_events_png_exists = exists;
+  state.outputs.observer_bridge_geometry_3d_html_exists = exists;
 }}
 function inputFor(field, value) {{
   if (field.kind === "select") {{
@@ -611,6 +702,7 @@ async function sampleUheSource() {{
       state.outputs.gbw_vs_iim_probability_comparison_exists = false;
       state.outputs.gbw_vs_iim_interaction_locations_exists = false;
       state.outputs.gbw_vs_iim_summary_exists = false;
+      setObserverBridgeOutputs(false);
       state.forward_geodesics_status = Object.assign({{}}, state.forward_geodesics_status || {{}}, {{
         input_uhe_source_found: true,
         paths_exists: false,
@@ -694,6 +786,7 @@ async function propagateForwardGeodesics() {{
       state.outputs.gbw_vs_iim_probability_comparison_exists = false;
       state.outputs.gbw_vs_iim_interaction_locations_exists = false;
       state.outputs.gbw_vs_iim_summary_exists = false;
+      setObserverBridgeOutputs(false);
       state.forward_geodesics_status = Object.assign({{}}, state.forward_geodesics_status || {{}}, {{
         configured_status: state.values.forward_geodesics.status,
         input_uhe_source_found: true,
@@ -764,6 +857,7 @@ async function sampleDisInteractions() {{
       state.outputs.gbw_vs_iim_probability_comparison_exists = true;
       state.outputs.gbw_vs_iim_interaction_locations_exists = true;
       state.outputs.gbw_vs_iim_summary_exists = true;
+      setObserverBridgeOutputs(false);
       state.dis_interaction_sampler = Object.assign({{}}, state.dis_interaction_sampler || {{}}, {{
         configured_status: state.values.dis_interaction_sampler.status,
         input_uhe_source_found: true,
@@ -800,6 +894,36 @@ async function compareDisModels() {{
       state.outputs.dis_diagnostics_report_exists = true;
       activeTab = "DIS Interaction Sampler";
       disPreviewVersion = Date.now();
+      const logText = result.text;
+      render();
+      const log = document.querySelector("#log");
+      if (log) log.textContent = logText;
+    }}
+  }}
+  finally {{ button.disabled = false; }}
+}}
+async function computeObserverBridge() {{
+  const button = document.querySelector("#observer-bridge-button");
+  button.disabled = true;
+  try {{
+    const values = collect();
+    const result = await post("/api/observer-bridge", values);
+    if (result.ok && result.data && result.data.observer_bridge) {{
+      state.values = values;
+      state.values.observer_bridge.status = "observer_bridge_scored_no_event_generation";
+      state.observer_bridge_summary = result.data.observer_bridge;
+      setObserverBridgeOutputs(true);
+      state.observer_bridge = Object.assign({{}}, state.observer_bridge || {{}}, {{
+        configured_status: state.values.observer_bridge.status,
+        input_dis_found: true,
+        n_interactions_input: result.data.observer_bridge.n_interactions_input,
+        n_candidates_scored: result.data.observer_bridge.n_candidates_scored,
+        summary: result.data.observer_bridge,
+      }});
+      state.outputs.provenance_exists = true;
+      state.outputs.config_exists = true;
+      activeTab = "Observer Bridge";
+      observerBridgePreviewVersion = Date.now();
       const logText = result.text;
       render();
       const log = document.querySelector("#log");
@@ -1244,6 +1368,64 @@ function renderDisPanel() {{
     ${{outputLinks}}
   </div>`;
 }}
+function renderObserverBridgePanel() {{
+  const summary = state.observer_bridge_summary;
+  const status = state.observer_bridge || {{}};
+  const fields = Object.fromEntries(state.schema.flatMap(tab => tab.fields).filter(f => f.section === "observer_bridge").map(f => [f.key, f]));
+  const value = key => state.values.observer_bridge[key];
+  const input = key => `<label><span>${{fields[key].label}}</span>${{inputFor(fields[key], value(key))}}</label>`;
+  const disFound = Boolean(status.input_dis_found || state.outputs.dis_accepted_interactions_exists);
+  const configHtml = `<section><h2>Configuration</h2>
+    ${{input("observer_bridge_backend")}}
+    ${{input("bridge_mode")}}
+    ${{input("secondary_particle_proxy_model")}}
+    ${{input("escape_proxy_model")}}
+    ${{input("visibility_model")}}
+    ${{input("fov_policy")}}
+    ${{input("distance_weight_enabled")}}
+    ${{input("redshift_weight_enabled")}}
+    ${{input("line_of_sight_check_enabled")}}
+    ${{input("max_ranked_events")}}
+    ${{input("min_observer_weight")}}
+    ${{input("min_final_observation_score")}}
+  </section>`;
+  const inputHtml = `<section><h2>Inputs</h2><div class="summary-grid">
+    <div class="summary-item"><strong>DIS accepted interactions</strong><span class="${{disFound ? "ok" : "pending"}}">${{disFound ? "found" : "missing"}}</span></div>
+    <div class="summary-item"><strong>Input file</strong><code>${{outPath("dis_accepted_interactions")}}</code></div>
+    <div class="summary-item"><strong>Mode</strong><code>scoring_only</code></div>
+    <div class="summary-item"><strong>Runtime ../HADROS</strong>false</div>
+  </div></section>`;
+  const resultsHtml = summary ? `<section><h2>Results</h2><div class="summary-grid">
+    <div class="summary-item"><strong>n_interactions_input</strong>${{summary.n_interactions_input}}</div>
+    <div class="summary-item"><strong>n_candidates_scored</strong>${{summary.n_candidates_scored}}</div>
+    <div class="summary-item"><strong>n_inside_fov</strong>${{summary.n_inside_fov}}</div>
+    <div class="summary-item"><strong>n_visible_proxy</strong>${{summary.n_visible_proxy}}</div>
+    <div class="summary-item"><strong>score_min</strong>${{Number(summary.score_min || 0).toExponential(4)}}</div>
+    <div class="summary-item"><strong>score_mean</strong>${{Number(summary.score_mean || 0).toExponential(4)}}</div>
+    <div class="summary-item"><strong>score_max</strong>${{Number(summary.score_max || 0).toExponential(4)}}</div>
+    <div class="summary-item"><strong>top_event_id</strong><code>${{summary.top_event_id || "none"}}</code></div>
+    <div class="summary-item"><strong>physics_weight</strong><code>${{summary.physics_weight_definition}}</code></div>
+    <div class="summary-item"><strong>observer_weight</strong><code>${{summary.observer_weight_definition}}</code></div>
+    <div class="summary-item"><strong>final score</strong><code>${{summary.final_observation_score_definition}}</code></div>
+    <div class="summary-item"><strong>proxy_physics_risk</strong>${{String(summary.proxy_physics_risk)}}</div>
+  </div></section>` : `<section><h2>Results</h2><p class="note">No Observer Bridge scores yet.</p></section>`;
+  const links = `<section><h2>Outputs</h2><div class="output-link-grid">
+    ${{state.outputs.observer_bridge_candidates_exists ? `<a href="${{outUrl("observer_bridge_candidates")}}" target="_blank">Candidates JSONL<br><code>${{outPath("observer_bridge_candidates")}}</code></a>` : ""}}
+    ${{state.outputs.observer_bridge_ranked_events_exists ? `<a href="${{outUrl("observer_bridge_ranked_events")}}" target="_blank">Ranked events JSONL<br><code>${{outPath("observer_bridge_ranked_events")}}</code></a>` : ""}}
+    ${{state.outputs.observer_bridge_summary_json_exists ? `<a href="${{outUrl("observer_bridge_summary_json")}}" target="_blank">Summary JSON<br><code>${{outPath("observer_bridge_summary_json")}}</code></a>` : ""}}
+    ${{state.outputs.observer_bridge_summary_exists ? `<a href="${{outUrl("observer_bridge_summary")}}" target="_blank">Summary CSV<br><code>${{outPath("observer_bridge_summary")}}</code></a>` : ""}}
+    ${{state.outputs.observer_bridge_report_exists ? `<a href="${{outUrl("observer_bridge_report")}}" target="_blank">Report JSON<br><code>${{outPath("observer_bridge_report")}}</code></a>` : ""}}
+  </div></section>`;
+  return `<div class="source-panel">
+    ${{inputHtml}}
+    ${{configHtml}}
+    <section><h2>Run</h2><button type="button" id="observer-bridge-button" class="source-action" ${{disFound ? "" : "disabled"}}>Compute Observer Bridge Scores</button>
+    <p class="note">H3-W8 is scoring-only. Every accepted DIS interaction becomes a candidate; camera/FOV visibility changes observer weights and ranking but does not delete candidates.</p>
+    <p class="note">POWHEG, PYTHIA, GEANT4, photon transport and event generation remain disabled.</p></section>
+    ${{resultsHtml}}
+    ${{links}}
+  </div>`;
+}}
 function renderContextPanel() {{
   const geometryPreviewTabs = new Set(["Camera", "Black Hole", "Torus / Medium", "Funnel / Cone"]);
   if (geometryPreviewTabs.has(activeTab)) {{
@@ -1303,6 +1485,22 @@ function renderContextPanel() {{
     ].filter(Boolean).join("");
     const diagnostics = diagnosticCards ? `<section><h2>Diagnostics</h2><div class="diagnostic-card-grid">${{diagnosticCards}}</div></section>` : "";
     return `<aside class="panel"><h2>DIS Interaction Map</h2><div class="context-figure">${{figure}}</div>${{diagnostics}}</aside>`;
+  }}
+  if (activeTab === "Observer Bridge") {{
+    const figure = state.outputs.observer_bridge_geometry_3d_html_exists
+      ? `<iframe class="context-interactive" src="${{outUrl("observer_bridge_geometry_3d_html")}}?v=${{observerBridgePreviewVersion}}" title="Observer Bridge 3D geometry"></iframe>`
+      : state.outputs.observer_bridge_map_exists
+      ? `<img src="${{outUrl("observer_bridge_map")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge candidate map">`
+      : `<div class="context-empty">No Observer Bridge diagnostics generated yet.</div>`;
+    const diagnosticCards = [
+      state.outputs.observer_bridge_map_exists ? `<figure class="diagnostic-plot-card"><figcaption>Candidate map</figcaption><a href="${{outUrl("observer_bridge_map")}}" target="_blank"><img src="${{outUrl("observer_bridge_map")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge map"></a></figure>` : "",
+      state.outputs.observer_bridge_score_distribution_exists ? `<figure class="diagnostic-plot-card"><figcaption>Score distribution</figcaption><a href="${{outUrl("observer_bridge_score_distribution")}}" target="_blank"><img src="${{outUrl("observer_bridge_score_distribution")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge score distribution"></a></figure>` : "",
+      state.outputs.observer_bridge_weight_breakdown_exists ? `<figure class="diagnostic-plot-card"><figcaption>Weight breakdown</figcaption><a href="${{outUrl("observer_bridge_weight_breakdown")}}" target="_blank"><img src="${{outUrl("observer_bridge_weight_breakdown")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge weight breakdown"></a></figure>` : "",
+      state.outputs.observer_bridge_visibility_map_exists ? `<figure class="diagnostic-plot-card"><figcaption>Visibility map</figcaption><a href="${{outUrl("observer_bridge_visibility_map")}}" target="_blank"><img src="${{outUrl("observer_bridge_visibility_map")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge visibility map"></a></figure>` : "",
+      state.outputs.observer_bridge_ranked_events_png_exists ? `<figure class="diagnostic-plot-card"><figcaption>Ranked events</figcaption><a href="${{outUrl("observer_bridge_ranked_events_png")}}" target="_blank"><img src="${{outUrl("observer_bridge_ranked_events_png")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge ranked events"></a></figure>` : "",
+    ].filter(Boolean).join("");
+    const diagnostics = diagnosticCards ? `<section><h2>Diagnostics</h2><div class="diagnostic-card-grid">${{diagnosticCards}}</div></section>` : "";
+    return `<aside class="panel"><h2>Observer Bridge Geometry</h2><div class="context-figure">${{figure}}</div>${{diagnostics}}</aside>`;
   }}
   return "";
 }}
@@ -1398,6 +1596,23 @@ function renderOutputsPanel() {{
     ${{link(out.gbw_vs_iim_interaction_locations_exists, "gbw_vs_iim_interaction_locations", "GBW vs IIM interaction locations")}}
     ${{out.gbw_vs_iim_interaction_locations_exists ? `<img src="${{outUrl("gbw_vs_iim_interaction_locations")}}" alt="GBW vs IIM interaction locations">` : ""}}
     ${{link(out.gbw_vs_iim_summary_exists, "gbw_vs_iim_summary", "GBW vs IIM summary JSON")}}
+  `) + group("ObserverBridge/", `
+    ${{link(out.observer_bridge_candidates_exists, "observer_bridge_candidates", "Observer Bridge candidates")}}
+    ${{link(out.observer_bridge_ranked_events_exists, "observer_bridge_ranked_events", "Observer Bridge ranked events")}}
+    ${{link(out.observer_bridge_summary_json_exists, "observer_bridge_summary_json", "Observer Bridge summary JSON")}}
+    ${{link(out.observer_bridge_summary_exists, "observer_bridge_summary", "Observer Bridge summary CSV")}}
+    ${{link(out.observer_bridge_report_exists, "observer_bridge_report", "Observer Bridge report")}}
+    ${{link(out.observer_bridge_geometry_3d_html_exists, "observer_bridge_geometry_3d_html", "Observer Bridge geometry HTML")}}
+    ${{link(out.observer_bridge_map_exists, "observer_bridge_map", "Observer Bridge map")}}
+    ${{out.observer_bridge_map_exists ? `<img src="${{outUrl("observer_bridge_map")}}" alt="Observer Bridge map">` : ""}}
+    ${{link(out.observer_bridge_score_distribution_exists, "observer_bridge_score_distribution", "Observer Bridge score distribution")}}
+    ${{out.observer_bridge_score_distribution_exists ? `<img src="${{outUrl("observer_bridge_score_distribution")}}" alt="Observer Bridge score distribution">` : ""}}
+    ${{link(out.observer_bridge_weight_breakdown_exists, "observer_bridge_weight_breakdown", "Observer Bridge weight breakdown")}}
+    ${{out.observer_bridge_weight_breakdown_exists ? `<img src="${{outUrl("observer_bridge_weight_breakdown")}}" alt="Observer Bridge weight breakdown">` : ""}}
+    ${{link(out.observer_bridge_visibility_map_exists, "observer_bridge_visibility_map", "Observer Bridge visibility map")}}
+    ${{out.observer_bridge_visibility_map_exists ? `<img src="${{outUrl("observer_bridge_visibility_map")}}" alt="Observer Bridge visibility map">` : ""}}
+    ${{link(out.observer_bridge_ranked_events_png_exists, "observer_bridge_ranked_events_png", "Observer Bridge ranked events PNG")}}
+    ${{out.observer_bridge_ranked_events_png_exists ? `<img src="${{outUrl("observer_bridge_ranked_events_png")}}" alt="Observer Bridge ranked events">` : ""}}
   `) + group("Dashboard/", `
     ${{link(out.html_summary_exists, "html_summary", "Dashboard HTML")}}
   `);
@@ -1504,8 +1719,9 @@ function render() {{
   const runName = state.values.run.run_name || "HADROS3_run";
   const runStrip = `<div class="run-strip"><label><span>Run name</span><input id="runNameInput" type="text" value="${{runName}}"></label><span>Output</span><div class="output-folder">output/${{safeRunName(runName)}}</div></div>`;
   const nav = `<nav>${{tabs.map(tab => `<button class="tab-button ${{tabLabel(tab) === activeTab ? "active" : ""}}" data-tab="${{tabLabel(tab)}}">${{tabLabel(tab)}}</button>`).join("")}}</nav>`;
-  const genericFields = activeTab === "DIS Interaction Sampler" ? "" : renderFields(active);
-  root.innerHTML = runStrip + nav + `<div class="panel"><p class="note">Geometry/configuration shell only. Expensive event stages are disabled.</p>${{genericFields}}${{activeTab === "Camera" ? renderHadrosCameraPanel() + renderBackendTable() : ""}}${{activeTab === "UHE Source" ? renderSourcePanel() : ""}}${{activeTab === "Forward Geodesics" ? renderForwardPanel() : ""}}${{activeTab === "DIS Interaction Sampler" ? renderDisPanel() : ""}}${{activeTab === "Outputs" ? renderOutputsPanel() : ""}}` +
+  const customTabs = new Set(["DIS Interaction Sampler", "Observer Bridge"]);
+  const genericFields = customTabs.has(activeTab) ? "" : renderFields(active);
+  root.innerHTML = runStrip + nav + `<div class="panel"><p class="note">Geometry/configuration shell only. Expensive event stages are disabled.</p>${{genericFields}}${{activeTab === "Camera" ? renderHadrosCameraPanel() + renderBackendTable() : ""}}${{activeTab === "UHE Source" ? renderSourcePanel() : ""}}${{activeTab === "Forward Geodesics" ? renderForwardPanel() : ""}}${{activeTab === "DIS Interaction Sampler" ? renderDisPanel() : ""}}${{activeTab === "Observer Bridge" ? renderObserverBridgePanel() : ""}}${{activeTab === "Outputs" ? renderOutputsPanel() : ""}}` +
     `<pre id="log"></pre></div>` +
     renderContextPanel();
   bindHadrosCameraPanel();
@@ -1517,6 +1733,8 @@ function render() {{
   if (disButton) disButton.onclick = sampleDisInteractions;
   const disCompareButton = document.querySelector("#dis-compare-button");
   if (disCompareButton) disCompareButton.onclick = compareDisModels;
+  const observerBridgeButton = document.querySelector("#observer-bridge-button");
+  if (observerBridgeButton) observerBridgeButton.onclick = computeObserverBridge;
   bindNumberInputs();
   drawGeometrySvg();
   document.querySelector("#runNameInput").addEventListener("input", event => {{
@@ -1721,6 +1939,7 @@ class Handler(BaseHTTPRequestHandler):
             source_summary = generate_uhe_source_products(values, output_dir=output_dir)
             clear_forward_geodesics_outputs(output_dir)
             clear_dis_outputs(output_dir)
+            clear_observer_bridge_outputs(output_dir)
             render_summary = render_hadros_web(values, root=ROOT, source_summary=source_summary)
             summary = {"status": "ok", "source": source_summary, "render": render_summary}
             self._send(200, json.dumps(summary, indent=2, sort_keys=True) + "\n", "application/json")
@@ -1740,6 +1959,7 @@ class Handler(BaseHTTPRequestHandler):
             values["forward_geodesics"]["status"] = "forward_kerr_geodesics_propagated_no_interactions"
             forward_summary = generate_forward_geodesic_products(values, run_output_dir=output_dir)
             clear_dis_outputs(output_dir)
+            clear_observer_bridge_outputs(output_dir)
             render_summary = render_hadros_web(values, root=ROOT, forward_geodesic_summary=forward_summary)
             summary = {"status": "ok", "forward": forward_summary, "render": render_summary}
             self._send(200, json.dumps(summary, indent=2, sort_keys=True) + "\n", "application/json")
@@ -1758,8 +1978,27 @@ class Handler(BaseHTTPRequestHandler):
             ensure_output_layout(output_dir)
             values["dis_interaction_sampler"]["status"] = "dis_optical_depth_sampled_no_observer_bridge"
             dis_summary = generate_dis_interaction_products(values, run_output_dir=output_dir)
+            clear_observer_bridge_outputs(output_dir)
             render_summary = render_hadros_web(values, root=ROOT, dis_summary=dis_summary)
             summary = {"status": "ok", "dis": dis_summary, "render": render_summary}
+            self._send(200, json.dumps(summary, indent=2, sort_keys=True) + "\n", "application/json")
+            return
+        if self.path == "/api/observer-bridge":
+            problems = validate_values(values)
+            if problems:
+                self._send(
+                    400,
+                    json.dumps({"status": "error", "validation_errors": problems}, indent=2, sort_keys=True) + "\n",
+                    "application/json",
+                )
+                return
+            output_dir = ROOT / run_output_dir(values)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            ensure_output_layout(output_dir)
+            values["observer_bridge"]["status"] = "observer_bridge_scored_no_event_generation"
+            observer_bridge_summary = generate_observer_bridge_products(values, run_output_dir=output_dir)
+            render_summary = render_hadros_web(values, root=ROOT, observer_bridge_summary=observer_bridge_summary)
+            summary = {"status": "ok", "observer_bridge": observer_bridge_summary, "render": render_summary}
             self._send(200, json.dumps(summary, indent=2, sort_keys=True) + "\n", "application/json")
             return
         if self.path == "/api/compare-dis-models":
@@ -1802,6 +2041,7 @@ def main() -> int:
     parser.add_argument("--sample-uhe-source", action="store_true", help="Generate H3-W5 UHE source samples through hadros-web orchestration and exit.")
     parser.add_argument("--propagate-forward-geodesics", action="store_true", help="Generate H3-W6 forward neutrino geodesics through hadros-web orchestration and exit.")
     parser.add_argument("--sample-dis-interactions", action="store_true", help="Generate H3-W7 DIS optical-depth interaction samples through hadros-web orchestration and exit.")
+    parser.add_argument("--observer-bridge", action="store_true", help="Generate H3-W8 Observer Bridge scoring products through hadros-web orchestration and exit.")
     parser.add_argument("--serve", action="store_true", help="Serve the web control surface.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8877)
@@ -1851,6 +2091,7 @@ def main() -> int:
         source_summary = generate_uhe_source_products(values, output_dir=output_dir)
         clear_forward_geodesics_outputs(output_dir)
         clear_dis_outputs(output_dir)
+        clear_observer_bridge_outputs(output_dir)
         render_summary = render_hadros_web(values, root=ROOT, output_dir=output_dir, source_summary=source_summary)
         print(json.dumps({"status": "ok", "source": source_summary, "render": render_summary}, indent=2, sort_keys=True))
         return 0
@@ -1862,6 +2103,7 @@ def main() -> int:
         values["forward_geodesics"]["status"] = "forward_kerr_geodesics_propagated_no_interactions"
         forward_summary = generate_forward_geodesic_products(values, run_output_dir=output_dir)
         clear_dis_outputs(output_dir)
+        clear_observer_bridge_outputs(output_dir)
         render_summary = render_hadros_web(values, root=ROOT, output_dir=output_dir, forward_geodesic_summary=forward_summary)
         print(json.dumps({"status": "ok", "forward": forward_summary, "render": render_summary}, indent=2, sort_keys=True))
         return 0
@@ -1872,8 +2114,19 @@ def main() -> int:
         ensure_output_layout(output_dir)
         values["dis_interaction_sampler"]["status"] = "dis_optical_depth_sampled_no_observer_bridge"
         dis_summary = generate_dis_interaction_products(values, run_output_dir=output_dir)
+        clear_observer_bridge_outputs(output_dir)
         render_summary = render_hadros_web(values, root=ROOT, output_dir=output_dir, dis_summary=dis_summary)
         print(json.dumps({"status": "ok", "dis": dis_summary, "render": render_summary}, indent=2, sort_keys=True))
+        return 0
+    if args.observer_bridge:
+        output_dir = args.output_dir if args.output_dir is not None else ROOT / run_output_dir(values)
+        if not output_dir.is_absolute():
+            output_dir = ROOT / output_dir
+        ensure_output_layout(output_dir)
+        values["observer_bridge"]["status"] = "observer_bridge_scored_no_event_generation"
+        observer_bridge_summary = generate_observer_bridge_products(values, run_output_dir=output_dir)
+        render_summary = render_hadros_web(values, root=ROOT, output_dir=output_dir, observer_bridge_summary=observer_bridge_summary)
+        print(json.dumps({"status": "ok", "observer_bridge": observer_bridge_summary, "render": render_summary}, indent=2, sort_keys=True))
         return 0
     summary = render_hadros_web(values, root=ROOT, output_dir=args.output_dir)
     print(json.dumps(summary, indent=2, sort_keys=True))

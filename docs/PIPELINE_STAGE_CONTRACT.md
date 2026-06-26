@@ -174,6 +174,37 @@ Examples include geometric visibility proxies, escape-probability proxies,
 redshift proxies, or camera-plane projection proxies. Proxy outputs must not be
 presented as full POWHEG, PYTHIA, GEANT4, or photon-transport results.
 
+## Theory Documentation Requirement
+
+The implemented physics reference is:
+
+```text
+docs/Theory/HADROS3_Physics_Theory.tex
+docs/Theory/HADROS3_Physics_Theory.pdf
+```
+
+Any stage that implements new physics must update both the LaTeX source and the
+regenerated PDF. The update must document:
+
+```text
+physical inputs consumed by the stage
+implemented equations
+approximations and proxies
+statistical weights
+outputs passed to the next stage
+physical risks and limitations
+```
+
+A stage must not be considered complete if its implemented physics is absent
+from the theory document. If the work is infrastructure, UI, refactoring, or a
+visual diagnostic that adds no new physics, the commit or review note should
+state explicitly that the theory PDF did not need an update.
+
+If a stage changes equations or statistical weights already documented in the
+theory PDF, the PDF must be updated in the same commit or in a separate commit
+immediately before the physics change. Planned or proposed physics must not be
+documented as implemented until it is part of the official pipeline.
+
 ## Presets And Runtime State
 
 Static presets, including:

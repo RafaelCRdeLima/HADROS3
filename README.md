@@ -50,6 +50,11 @@ contract covers the `inputs -> run() -> outputs -> diagnostics -> provenance`
 pattern for future stages without requiring refactors of the existing H3-W5
 through H3-W8 layers.
 
+The official reference for implemented HADROS3 physics is
+[`docs/Theory/HADROS3_Physics_Theory.pdf`](docs/Theory/HADROS3_Physics_Theory.pdf);
+new physical stages must update it with the implemented equations, weights,
+approximations, outputs, and risks.
+
 Render the preview/configuration products directly and exit:
 
 ```bash

@@ -50,6 +50,11 @@ proxy models implemented in the current HADROS3 pipeline. It is not a user
 manual, dashboard guide, installation guide, or proposal for future stages.
 Where the implementation uses diagnostic renderers or physics proxies, that
 status is stated explicitly.
+
+This is a living theory document for HADROS3. It describes exclusively the
+physics currently implemented in the official HADROS3 pipeline. Future or
+planned models are not described here until they become part of the official
+implementation.
 \end{minipage}
 \end{titlepage}
 
@@ -69,6 +74,37 @@ writes to its own output directory. The stages covered here are the camera
 preview, Kerr geometry utilities, analytic medium, UHE source, forward null
 geodesics, DIS optical-depth sampler, Observer Bridge scoring, and POWHEG
 dry-run hard-process preparation.
+
+This document is maintained as a required living reference for implemented
+physics. When a new HADROS3 stage changes or adds physical equations,
+statistical weights, physical approximations, or proxy models, this source file
+and the regenerated PDF must be updated with the implementation.
+
+\begin{longtable}{>{\raggedright\arraybackslash}p{0.28\textwidth}
+                  >{\raggedright\arraybackslash}p{0.32\textwidth}
+                  >{\raggedright\arraybackslash}p{0.25\textwidth}}
+\caption{Implemented-stage coverage in this theory document. Planned stages are
+listed only to mark that their physics is not yet documented as implemented.}\\
+\toprule
+HADROS3 stage & Implementation status & Theory documented \\
+\midrule
+\endfirsthead
+\toprule
+HADROS3 stage & Implementation status & Theory documented \\
+\midrule
+\endhead
+H3-W5 UHE Source & implemented & yes \\
+H3-W6 Forward Geodesics & implemented & yes \\
+H3-W7 DIS Interaction Sampler & implemented & yes \\
+H3-W8 Observer Bridge & implemented/proxy & yes \\
+H3-W9a POWHEG Dry Run & implemented/dry run & yes \\
+H3-W9b POWHEG Real Run & planned & no \\
+H3-W10 PYTHIA & planned & no \\
+H3-W11 GEANT4 & planned & no \\
+H3-W12 Photon Transport & planned & no \\
+H3-W13 Spectra & planned & no \\
+\bottomrule
+\end{longtable}
 
 All radii in the dynamical Kerr calculation are expressed in gravitational
 radius units,

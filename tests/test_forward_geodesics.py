@@ -98,6 +98,28 @@ def test_forward_geodesics_consume_h3_w5_source_and_write_outputs(tmp_path: Path
     assert abs(momentum["p_phi"]) < 1.0e-7
 
 
+def test_forward_geodesics_respects_updated_sample_count_in_same_run(tmp_path: Path) -> None:
+    values = _values()
+    values["uhe_neutrino_source"]["n_samples"] = 20
+    generate_uhe_source_products(values, output_dir=tmp_path)
+
+    values["forward_geodesics"]["n_samples_to_propagate"] = 5
+    summary_5 = generate_forward_geodesic_products(values, run_output_dir=tmp_path)
+    config_5 = json.loads((tmp_path / "RunMetadata" / "hadros3_config.json").read_text(encoding="utf-8"))
+    assert config_5["hadros3_values"]["forward_geodesics"]["n_samples_to_propagate"] == 5
+    assert summary_5["n_input_samples"] == 20
+    assert summary_5["n_samples_requested"] == 5
+    assert summary_5["n_paths"] == 5
+
+    values["forward_geodesics"]["n_samples_to_propagate"] = 12
+    summary_12 = generate_forward_geodesic_products(values, run_output_dir=tmp_path)
+    config_12 = json.loads((tmp_path / "RunMetadata" / "hadros3_config.json").read_text(encoding="utf-8"))
+    assert config_12["hadros3_values"]["forward_geodesics"]["n_samples_to_propagate"] == 12
+    assert summary_12["n_input_samples"] == 20
+    assert summary_12["n_samples_requested"] == 12
+    assert summary_12["n_paths"] == 12
+
+
 def test_forward_geodesic_segments_are_finite_and_auditable(tmp_path: Path) -> None:
     values = _values()
     generate_uhe_source_products(values, output_dir=tmp_path)

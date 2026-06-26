@@ -143,6 +143,9 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert "Forward Geodesics" in html
     assert "DIS Interaction Sampler" in html
     assert "Propagate Forward Geodesics" in html
+    assert "Requested paths" in html
+    assert "Propagated paths" in html
+    assert "Available UHE samples" in html
     assert "Compute DIS Optical Depth / Sample Interactions" in html
     assert "cpp_hadros_original_port" in html
     assert "Full Kerr null geodesic propagation" in html

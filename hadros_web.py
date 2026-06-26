@@ -1135,6 +1135,9 @@ function renderForwardPanel() {{
   const stops = summary && summary.stop_condition_counts ? Object.entries(summary.stop_condition_counts).map(([k, v]) => `${{k}}=${{v}}`).join(", ") : "none";
   const summaryHtml = summary ? `${{inputStatus}}<div class="summary-grid">
     <div class="summary-item"><strong>Status</strong>${{summary.status}}</div>
+    <div class="summary-item"><strong>Requested paths</strong>${{summary.n_samples_requested}}</div>
+    <div class="summary-item"><strong>Propagated paths</strong>${{summary.n_paths}}</div>
+    <div class="summary-item"><strong>Available UHE samples</strong>${{summary.n_input_samples}}</div>
     <div class="summary-item"><strong>Trajectories propagated</strong>${{summary.n_samples_propagated}}</div>
     <div class="summary-item"><strong>Paths</strong>${{summary.n_paths}}</div>
     <div class="summary-item"><strong>Segments</strong>${{summary.n_segments}}</div>
@@ -1520,8 +1523,12 @@ function render() {{
     state.values = collect();
     document.querySelector(".output-folder").textContent = "output/" + safeRunName(event.target.value);
   }});
-  document.querySelectorAll("[data-section]").forEach(el => el.addEventListener("input", drawGeometrySvg));
-  document.querySelectorAll("[data-section]").forEach(el => el.addEventListener("change", drawGeometrySvg));
+  const syncValuesAndGeometry = () => {{
+    state.values = collect();
+    drawGeometrySvg();
+  }};
+  document.querySelectorAll("[data-section]").forEach(el => el.addEventListener("input", syncValuesAndGeometry));
+  document.querySelectorAll("[data-section]").forEach(el => el.addEventListener("change", syncValuesAndGeometry));
   document.querySelectorAll(".tab-button").forEach(btn => btn.addEventListener("click", () => {{
     state.values = collect();
     activeTab = btn.dataset.tab;

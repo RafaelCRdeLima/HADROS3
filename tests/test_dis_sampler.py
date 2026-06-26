@@ -166,6 +166,12 @@ def test_dis_sampler_consumes_source_and_forward_outputs(tmp_path: Path) -> None
         assert interaction["interaction_point_rho_g_cm3"] > 0.0
         assert interaction["interaction_rho_g_cm3"] > 0.0
         assert interaction["interaction_point_sampling_attempts"] >= 1
+    locations_html = (dis_dir / "dis_interaction_locations_3d.html").read_text(encoding="utf-8")
+    assert "hard radial shell" in locations_html
+    assert "angular profile=Gaussian" in locations_html
+    assert "angular rings are density levels, not boundaries" in locations_html
+    assert "rho: p.rho, inside: p.inside" in locations_html
+    assert "torusHalfHeight" not in locations_html
     diagnostics = json.loads((dis_dir / "dis_diagnostics_report.json").read_text(encoding="utf-8"))
     assert diagnostics["diagnostics_generated"] is True
     assert diagnostics["medium_density_map_generated"] is True

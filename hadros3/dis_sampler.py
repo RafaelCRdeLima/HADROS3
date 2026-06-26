@@ -314,21 +314,68 @@ def _xyz(r: float, theta: float, phi: float) -> tuple[float, float, float]:
     )
 
 
+def _rz(r: float, theta: float) -> tuple[float, float]:
+    return r * math.sin(theta), r * math.cos(theta)
+
+
 def draw_interaction_locations(accepted: list[dict[str, Any]], segments: list[dict[str, Any]], values: dict[str, dict[str, Any]], output_path: Path) -> None:
     import matplotlib
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    from matplotlib.colors import LogNorm
 
     fig, ax = plt.subplots(figsize=(7.6, 7.0), facecolor="#f8fafc")
-    for segment in segments[:: max(1, len(segments) // 900)]:
-        x0, _, z0 = _xyz(float(segment["r_start_rg"]), float(segment["theta_start_rad"]), float(segment["phi_start_rad"]))
-        x1, _, z1 = _xyz(float(segment["r_end_rg"]), float(segment["theta_end_rad"]), float(segment["phi_end_rad"]))
-        ax.plot([x0, x1], [z0, z1], color="#93c5fd", alpha=0.18, linewidth=0.55)
+    config = dis_config_from_values(values)
     torus = values["analytic_torus"]
     r_inner = float(torus["r_inner_rg"])
     r_outer = float(torus["r_outer_rg"])
     half_angle = math.radians(float(torus["half_opening_angle_deg"]))
+    limit = max(float(values["forward_geodesics"]["outer_radius_rg"]) * 0.35, r_outer * 1.25, 5.0)
+    n_r = 220
+    n_z = 260
+    r_axis = [limit * i / (n_r - 1) for i in range(n_r)]
+    z_axis = [-limit + 2.0 * limit * i / (n_z - 1) for i in range(n_z)]
+    density_grid: list[list[float]] = []
+    positive: list[float] = []
+    for z in z_axis:
+        row: list[float] = []
+        for cylindrical_r in r_axis:
+            radius = math.hypot(cylindrical_r, z)
+            theta = math.atan2(cylindrical_r, z) if radius > 0.0 else 0.0
+            rho = analytic_torus_density_g_cm3(radius, theta, values, density_floor_g_cm3=config.density_floor_g_cm3)
+            row.append(rho)
+            if rho > 0.0:
+                positive.append(rho)
+        density_grid.append(row)
+    if positive:
+        image = ax.imshow(
+            density_grid,
+            origin="lower",
+            extent=[min(r_axis), max(r_axis), min(z_axis), max(z_axis)],
+            aspect="equal",
+            cmap="magma",
+            norm=LogNorm(vmin=max(min(positive), 1.0e-30), vmax=max(positive)),
+            alpha=0.78,
+            zorder=0,
+        )
+        cbar = fig.colorbar(image, ax=ax, shrink=0.82)
+        cbar.set_label(r"$\rho$ [g cm$^{-3}$]")
+        contour_levels = [max(positive) * factor for factor in (1.0e-4, 1.0e-3, 1.0e-2, 1.0e-1)]
+        ax.contour(
+            r_axis,
+            z_axis,
+            density_grid,
+            levels=[level for level in contour_levels if min(positive) < level < max(positive)],
+            colors="#f8fafc",
+            linewidths=0.55,
+            alpha=0.64,
+            zorder=2,
+        )
+    for segment in segments[:: max(1, len(segments) // 900)]:
+        r0, z0 = _rz(float(segment["r_start_rg"]), float(segment["theta_start_rad"]))
+        r1, z1 = _rz(float(segment["r_end_rg"]), float(segment["theta_end_rad"]))
+        ax.plot([r0, r1], [z0, z1], color="#93c5fd", alpha=0.18, linewidth=0.55, zorder=3)
     ax.add_patch(plt.Circle((0.0, 0.0), r_inner, fill=False, edgecolor="#38bdf8", linestyle="--", linewidth=1.2, alpha=0.85, label="hard radial cuts"))
     ax.add_patch(plt.Circle((0.0, 0.0), r_outer, fill=False, edgecolor="#38bdf8", linestyle="--", linewidth=1.2, alpha=0.85))
     ray_length = r_outer * 1.15
@@ -362,18 +409,17 @@ def draw_interaction_locations(accepted: list[dict[str, Any]], segments: list[di
     if accepted:
         xs, zs, colors = [], [], []
         for record in accepted:
-            x, _, z = _xyz(float(record["interaction_r_rg"]), float(record["interaction_theta_rad"]), float(record["interaction_phi_rad"]))
-            xs.append(x)
+            r_meridional, z = _rz(float(record["interaction_r_rg"]), float(record["interaction_theta_rad"]))
+            xs.append(r_meridional)
             zs.append(z)
-            colors.append(float(record["interaction_E_nu_local_gev"]))
+            colors.append(float(record.get("interaction_point_rho_g_cm3", record["interaction_rho_g_cm3"])))
         scatter = ax.scatter(xs, zs, c=colors, s=28, cmap="viridis", edgecolors="black", linewidths=0.25, zorder=5)
         cbar = fig.colorbar(scatter, ax=ax, shrink=0.82)
-        cbar.set_label(r"$E_{\nu,\rm local}$ [GeV]")
-    ax.set_title(f"DIS interaction locations\naccepted={len(accepted)}")
-    ax.set_xlabel(r"$x$ [$r_g$]")
+        cbar.set_label(r"accepted point $\rho$ [g cm$^{-3}$]")
+    ax.set_title(f"DIS interaction locations on sampler density field\naccepted={len(accepted)}")
+    ax.set_xlabel(r"$R=r\sin\theta$ [$r_g$]")
     ax.set_ylabel(r"$z$ [$r_g$]")
-    limit = max(float(values["forward_geodesics"]["outer_radius_rg"]) * 0.35, r_outer * 1.25, 5.0)
-    ax.set_xlim(-limit, limit)
+    ax.set_xlim(0.0, limit)
     ax.set_ylim(-limit, limit)
     ax.set_aspect("equal", adjustable="box")
     ax.grid(True, color="#cbd5e1", alpha=0.45, linewidth=0.55)
@@ -389,6 +435,8 @@ def write_interaction_locations_html(accepted: list[dict[str, Any]], values: dic
             "y": _xyz(float(row["interaction_r_rg"]), float(row["interaction_theta_rad"]), float(row["interaction_phi_rad"]))[1],
             "z": _xyz(float(row["interaction_r_rg"]), float(row["interaction_theta_rad"]), float(row["interaction_phi_rad"]))[2],
             "energy": float(row["interaction_E_nu_local_gev"]),
+            "rho": float(row.get("interaction_point_rho_g_cm3", row["interaction_rho_g_cm3"])),
+            "inside": bool(row.get("interaction_point_inside_medium", False)),
         }
         for row in accepted
     ]
@@ -401,6 +449,9 @@ def write_interaction_locations_html(accepted: list[dict[str, Any]], values: dic
             "rOuter": float(torus["r_outer_rg"]),
             "rPeak": float(torus["r_peak_rg"]),
             "halfOpeningRad": math.radians(float(torus["half_opening_angle_deg"])),
+            "thetaProfile": "gaussian",
+            "thetaIsHardCut": False,
+            "hardRadialCut": True,
         },
         "cone": {
             "enabled": bool(cone["enabled"]),
@@ -415,7 +466,7 @@ def write_interaction_locations_html(accepted: list[dict[str, Any]], values: dic
         f"""<!doctype html>
 <html><head><meta charset="utf-8"><title>HADROS3 DIS Interaction Locations</title>
 <style>body{{font-family:system-ui,sans-serif;margin:0;background:#f8fafc;color:#172033}}canvas{{display:block;width:100vw;height:82vh;background:#101318;cursor:grab}}.note{{padding:12px 16px}}</style></head>
-<body><canvas id="canvas" width="1200" height="760"></canvas><div class="note">DIS interaction locations in the HADROS3 coordinate frame. Drag to rotate, wheel to zoom. Accepted interactions: {len(points)}</div>
+<body><canvas id="canvas" width="1200" height="760"></canvas><div class="note">DIS interaction locations in the HADROS3 coordinate frame. The analytic torus has a hard radial cut and a Gaussian angular profile; the opening angle is a width parameter, not a hard boundary. Drag to rotate, wheel to zoom. Accepted interactions: {len(points)}</div>
 <script>
 const points = {payload};
 const geometry = {geometry_payload};
@@ -426,7 +477,7 @@ function rotate(p) {{
   const x1 = cy * p.x - sy * p.y;
   const y1 = sy * p.x + cy * p.y;
   const z1 = p.z;
-  return {{x: x1, y: cp * y1 - sp * z1, z: sp * y1 + cp * z1, energy: p.energy}};
+  return {{x: x1, y: cp * y1 - sp * z1, z: sp * y1 + cp * z1, energy: p.energy, rho: p.rho, inside: p.inside}};
 }}
 function draw() {{
   ctx.clearRect(0,0,c.width,c.height);
@@ -455,6 +506,15 @@ function draw() {{
     const a = 2 * Math.PI * i / 144;
     return {{x: radius * Math.cos(a), y: radius * Math.sin(a), z}};
   }});
+  const latitudeRing = (radius, theta) => Array.from({{length: 145}}, (_, i) => {{
+    const phi = 2 * Math.PI * i / 144;
+    const R = radius * Math.sin(theta);
+    return {{x: R * Math.cos(phi), y: R * Math.sin(phi), z: radius * Math.cos(theta)}};
+  }});
+  const meridian = (radius, phi) => Array.from({{length: 97}}, (_, i) => {{
+    const theta = Math.PI * i / 96;
+    return {{x: radius * Math.sin(theta) * Math.cos(phi), y: radius * Math.sin(theta) * Math.sin(phi), z: radius * Math.cos(theta)}};
+  }});
   const coneEdge = (sign, side) => {{
     const a = geometry.cone.openingRad;
     const s = Math.sin(a) * side;
@@ -469,17 +529,34 @@ function draw() {{
     ctx.beginPath(); ctx.moveTo(sx(-lim), sy(i*lim/4)); ctx.lineTo(sx(lim), sy(i*lim/4)); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(sx(i*lim/4), sy(-lim)); ctx.lineTo(sx(i*lim/4), sy(lim)); ctx.stroke();
   }}
-  const torusHalfHeight = geometry.torus.rPeak * Math.tan(geometry.torus.halfOpeningRad);
   ctx.lineWidth = 2;
-  ctx.strokeStyle = "rgba(251,146,60,0.78)";
-  polyline(ring(geometry.torus.rOuter, 0));
-  polyline(ring(geometry.torus.rInner, 0));
+  ctx.setLineDash([]);
+  ctx.strokeStyle = "rgba(56,189,248,0.82)";
+  for (const radius of [geometry.torus.rInner, geometry.torus.rOuter]) {{
+    polyline(ring(radius, 0));
+    for (let i = 0; i < 6; i++) polyline(meridian(radius, i * Math.PI / 6));
+  }}
   ctx.lineWidth = 1.2;
-  ctx.strokeStyle = "rgba(251,146,60,0.36)";
-  polyline(ring(geometry.torus.rOuter, torusHalfHeight));
-  polyline(ring(geometry.torus.rOuter, -torusHalfHeight));
-  polyline(ring(geometry.torus.rPeak, torusHalfHeight));
-  polyline(ring(geometry.torus.rPeak, -torusHalfHeight));
+  ctx.setLineDash([5, 5]);
+  const sigma = geometry.torus.halfOpeningRad;
+  const angularLevels = [
+    {{offset: 0, alpha: 0.76, label: "peak"}},
+    {{offset: 1, alpha: 0.50, label: "1 sigma"}},
+    {{offset: 2, alpha: 0.28, label: "2 sigma"}},
+  ];
+  for (const level of angularLevels) {{
+    const offsets = level.offset === 0 ? [0] : [-level.offset, level.offset];
+    ctx.strokeStyle = `rgba(251,191,36,${{level.alpha}})`;
+    for (const offset of offsets) {{
+      const theta = Math.PI / 2 + offset * sigma;
+      if (theta > 0.02 && theta < Math.PI - 0.02) {{
+        polyline(latitudeRing(geometry.torus.rInner, theta));
+        polyline(latitudeRing(geometry.torus.rPeak, theta));
+        polyline(latitudeRing(geometry.torus.rOuter, theta));
+      }}
+    }}
+  }}
+  ctx.setLineDash([]);
   if (geometry.cone.enabled) {{
     ctx.lineWidth = 2;
     ctx.strokeStyle = "rgba(96,165,250,0.82)";
@@ -487,15 +564,19 @@ function draw() {{
     if (geometry.cone.bipolar) {{ polyline(coneEdge(-1, 1)); polyline(coneEdge(-1, -1)); }}
   }}
   ctx.fillStyle = "black"; ctx.beginPath(); ctx.arc(sx(0), sy(0), Math.max(4, 0.55*c.width/lim), 0, 2*Math.PI); ctx.fill();
+  const maxRho = Math.max(1e-300, ...points.map(p => p.rho || 0));
   for (const p of rotated) {{
     const depth = 0.55 + 0.45 * Math.max(0, Math.min(1, (p.y + lim) / (2*lim)));
-    ctx.fillStyle = `rgba(34,197,94,${{depth.toFixed(3)}})`;
+    const rhoLevel = Math.max(0.25, Math.min(1, Math.log10(Math.max(p.rho || 0, 1e-300)) / Math.log10(maxRho)));
+    ctx.fillStyle = p.inside ? `rgba(34,197,94,${{depth.toFixed(3)}})` : "rgba(239,68,68,0.92)";
     ctx.beginPath(); ctx.arc(sx(p.x), sy(p.z), 4 + 3 * depth, 0, 2*Math.PI); ctx.fill();
-    ctx.strokeStyle = "rgba(4,18,12,0.55)"; ctx.stroke();
+    ctx.strokeStyle = p.inside ? `rgba(240,253,244,${{rhoLevel.toFixed(3)}})` : "rgba(127,29,29,0.95)";
+    ctx.stroke();
   }}
   ctx.fillStyle="#e5e7eb"; ctx.font="20px system-ui"; ctx.fillText("HADROS3 DIS Interaction Locations", 18, 32);
   ctx.font="14px system-ui"; ctx.fillText(`yaw=${{yaw.toFixed(2)}} pitch=${{pitch.toFixed(2)}} zoom=${{zoom.toFixed(2)}}`, 18, 54);
-  ctx.fillText(`torus Rin=${{geometry.torus.rInner.toFixed(1)}} Rout=${{geometry.torus.rOuter.toFixed(1)}} rg; cone=${{(geometry.cone.openingRad*180/Math.PI).toFixed(1)}} deg`, 18, 76);
+  ctx.fillText(`medium: hard radial shell Rin=${{geometry.torus.rInner.toFixed(1)}} Rout=${{geometry.torus.rOuter.toFixed(1)}} rg; angular profile=Gaussian`, 18, 76);
+  ctx.fillText(`accepted inside medium=${{points.filter(p => p.inside && p.rho > 0).length}}/${{points.length}}; angular rings are density levels, not boundaries`, 18, 98);
 }}
 c.addEventListener("mousedown", e => {{ dragging = true; lastX = e.clientX; lastY = e.clientY; }});
 window.addEventListener("mouseup", () => dragging = false);

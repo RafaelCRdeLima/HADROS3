@@ -1,0 +1,1 @@
+run_id,date,git_commit,software_version,physics_version,pipeline_version,theory_version,stage,case_name,description,spin_a,rho0_g_cm3,E_min_GeV,E_max_GeV,n_source_samples,n_forward_paths,n_dis_interactions,n_observer_candidates,n_kerr_matched,n_powheg_jobs,n_lhe_events,main_output_dir,main_figures,validation_status,paper_candidate,notes

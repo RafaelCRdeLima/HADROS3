@@ -99,6 +99,31 @@ when a new physical stage becomes the most advanced implemented pipeline stage.
 Each release target rebuilds the Theory PDF; always run `make validate`
 afterward.
 
+## Scientific Results Catalog
+
+Curated HADROS3 results live under [`results/`](results/). The central catalog
+tracks reproducible runs and paper-candidate figures:
+
+```text
+results/catalog/HADROS3_RESULTS_CATALOG.csv
+results/catalog/HADROS3_RESULTS_CATALOG.json
+results/catalog/FIGURE_INDEX.md
+```
+
+Register an existing generated run without modifying the run outputs:
+
+```bash
+python scripts/results/register_result.py \
+  --run-dir output/<run-name> \
+  --stage validation/observer_bridge \
+  --case-name observer_bridge_smoke \
+  --validation-status pass
+```
+
+The catalog records software, physics, pipeline, and theory versions from
+provenance, plus key counts from UHE source, Forward Geodesics, DIS, Observer
+Bridge, Kerr ray matching, and POWHEG products when present.
+
 Render the preview/configuration products directly and exit:
 
 ```bash

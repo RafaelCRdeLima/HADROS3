@@ -91,8 +91,17 @@ def build_provenance(
     forward_active = bool(forward_geodesic_summary and forward_geodesic_summary.get("forward_neutrino_geodesics_invoked"))
     dis_active = bool(dis_summary and dis_summary.get("optical_depth_dis_sampler_invoked"))
     observer_bridge_active = bool(observer_bridge_summary and observer_bridge_summary.get("observer_bridge_invoked"))
-    powheg_active = bool(powheg_summary and (powheg_summary.get("powheg_dry_run_invoked") or powheg_summary.get("powheg_real_smoke_invoked") or powheg_summary.get("powheg_invoked")))
+    powheg_active = bool(
+        powheg_summary
+        and (
+            powheg_summary.get("powheg_dry_run_invoked")
+            or powheg_summary.get("powheg_real_smoke_invoked")
+            or powheg_summary.get("powheg_real_free_invoked")
+            or powheg_summary.get("powheg_invoked")
+        )
+    )
     powheg_real_smoke_active = bool(powheg_summary and powheg_summary.get("powheg_real_smoke_invoked"))
+    powheg_real_free_active = bool(powheg_summary and powheg_summary.get("powheg_real_free_invoked"))
     paint_swatch_disk_diagnostic_mode = bool(camera_preview and camera_preview.get("paint_swatch_disk_diagnostic_mode"))
     paint_swatch_disk_uses_forced_thin_disk = bool(camera_preview and camera_preview.get("paint_swatch_disk_uses_forced_thin_disk"))
     paint_swatch_disk_physical_torus_emission = (
@@ -160,8 +169,8 @@ def build_provenance(
         "summary": dis_summary,
     }
     return {
-        "hadros3_stage": ("H3-W0_to_H3-W9b_powheg_real_smoke" if powheg_real_smoke_active else ("H3-W0_to_H3-W9a_powheg_dry_run" if powheg_active else ("H3-W0_to_H3-W8_observer_bridge_scoring" if observer_bridge_active else ("H3-W0_to_H3-W7_dis_interaction_sampler" if dis_active else ("H3-W0_to_H3-W6_forward_neutrino_geodesics" if forward_active else ("H3-W0_to_H3-W5_hadros_web_uhe_source_shell" if source_active else "H3-W0_to_H3-W4_hadros_web_geometry_shell")))))),
-        "status": ("powheg_real_smoke_lhe_generated" if powheg_real_smoke_active else ("powheg_jobs_prepared_no_lhe" if powheg_active else ("observer_bridge_scored_no_event_generation" if observer_bridge_active else ("dis_interactions_sampled_no_observer_bridge" if dis_active else ("forward_geodesics_propagated_no_interactions" if forward_active else ("uhe_source_sampled_no_expensive_events" if source_active else "geometry_configured_no_expensive_events")))))),
+        "hadros3_stage": ("H3-W0_to_H3-W9b_powheg_real_free" if powheg_real_free_active else ("H3-W0_to_H3-W9b_powheg_real_smoke" if powheg_real_smoke_active else ("H3-W0_to_H3-W9a_powheg_dry_run" if powheg_active else ("H3-W0_to_H3-W8_observer_bridge_scoring" if observer_bridge_active else ("H3-W0_to_H3-W7_dis_interaction_sampler" if dis_active else ("H3-W0_to_H3-W6_forward_neutrino_geodesics" if forward_active else ("H3-W0_to_H3-W5_hadros_web_uhe_source_shell" if source_active else "H3-W0_to_H3-W4_hadros_web_geometry_shell"))))))),
+        "status": ("powheg_real_free_lhe_generated" if powheg_real_free_active else ("powheg_real_smoke_lhe_generated" if powheg_real_smoke_active else ("powheg_jobs_prepared_no_lhe" if powheg_active else ("observer_bridge_scored_no_event_generation" if observer_bridge_active else ("dis_interactions_sampled_no_observer_bridge" if dis_active else ("forward_geodesics_propagated_no_interactions" if forward_active else ("uhe_source_sampled_no_expensive_events" if source_active else "geometry_configured_no_expensive_events"))))))),
         "created_utc": created_utc,
         "hadros3_version": __version__,
         "git_commit": git_commit,
@@ -176,7 +185,7 @@ def build_provenance(
         "parameters": values,
         "reused_hadros_components": discover_original_hadros(),
         "disabled_expensive_or_future_stages": {
-            "powheg": ("active_H3_W9b_real_smoke_local_pwhg_main" if powheg_real_smoke_active else ("active_H3_W9a_dry_run_no_pwhg_main" if powheg_active else "disabled")),
+            "powheg": ("active_H3_W9b_real_free_local_pwhg_main" if powheg_real_free_active else ("active_H3_W9b_real_smoke_local_pwhg_main" if powheg_real_smoke_active else ("active_H3_W9a_dry_run_no_pwhg_main" if powheg_active else "disabled"))),
             "pythia": "disabled",
             "geant4": "disabled",
             "forward_neutrino_geodesics": "active_H3_W6" if forward_active else "not_invoked",
@@ -324,6 +333,7 @@ def build_provenance(
         "powheg": {
             "powheg_dry_run_invoked": bool(powheg_summary.get("powheg_dry_run_invoked")) if powheg_active else False,
             "powheg_real_smoke_invoked": bool(powheg_summary.get("powheg_real_smoke_invoked")) if powheg_active else False,
+            "powheg_real_free_invoked": bool(powheg_summary.get("powheg_real_free_invoked")) if powheg_active else False,
             "powheg_backend": powheg_summary.get("powheg_backend") if powheg_active else values.get("powheg", {}).get("powheg_backend"),
             "powheg_process": powheg_summary.get("powheg_process") if powheg_active else values.get("powheg", {}).get("powheg_process"),
             "powheg_run_mode": powheg_summary.get("powheg_run_mode") if powheg_active else values.get("powheg", {}).get("run_mode"),
@@ -338,9 +348,15 @@ def build_provenance(
             "powheg_invoked": bool(powheg_summary.get("powheg_invoked")) if powheg_active else False,
             "pwhg_main_executed": bool(powheg_summary.get("pwhg_main_executed")) if powheg_active else False,
             "n_powheg_jobs": powheg_summary.get("n_powheg_jobs") if powheg_active else 0,
+            "n_powheg_jobs_requested": powheg_summary.get("n_powheg_jobs_requested") if powheg_active else 0,
+            "n_powheg_jobs_run": powheg_summary.get("n_powheg_jobs_run") if powheg_active else 0,
+            "events_per_candidate_requested": powheg_summary.get("events_per_candidate_requested") if powheg_active else 0,
             "n_lhe_events": powheg_summary.get("n_lhe_events") if powheg_active else 0,
+            "n_lhe_events_total": powheg_summary.get("n_lhe_events_total") if powheg_active else 0,
             "powheg_lhe_path": powheg_summary.get("powheg_lhe_path") if powheg_active else None,
             "powheg_log_path": powheg_summary.get("powheg_log_path") if powheg_active else None,
+            "real_free_mode": bool(powheg_summary.get("real_free_mode")) if powheg_active else False,
+            "real_smoke_safety_clamp": bool(powheg_summary.get("real_smoke_safety_clamp")) if powheg_active else False,
             "powheg_runtime_self_contained": powheg_summary.get("powheg_runtime_self_contained") if powheg_active else True,
             "backend_language": powheg_summary.get("backend_language") if powheg_active else "C++17",
             "backend_executable": powheg_summary.get("backend_executable") if powheg_active else "bin/hadros3_powheg_driver",

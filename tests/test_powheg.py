@@ -265,6 +265,9 @@ LHE
     assert summary["powheg_run_mode"] == "real_smoke"
     assert summary["powheg_dry_run_invoked"] is False
     assert summary["powheg_real_smoke_invoked"] is True
+    assert summary["powheg_real_free_invoked"] is False
+    assert summary["real_smoke_safety_clamp"] is True
+    assert summary["real_free_mode"] is False
     assert summary["powheg_invoked"] is True
     assert summary["pwhg_main_executed"] is True
     assert summary["powheg_lhe_generated"] is True
@@ -299,6 +302,8 @@ LHE
     assert validation["run_mode"] == "real_smoke"
     assert validation["powheg_run_mode"] == "real_smoke"
     assert validation["n_lhe_events"] == 1
+    assert validation["real_smoke_safety_clamp"] is True
+    assert validation["real_free_mode"] is False
     assert validation["lhe_parser_invoked"] is True
     assert validation["n_lhe_particles"] == 4
 
@@ -334,6 +339,8 @@ LHE
     assert provenance["status"] == "powheg_real_smoke_lhe_generated"
     assert provenance["disabled_expensive_or_future_stages"]["powheg"] == "active_H3_W9b_real_smoke_local_pwhg_main"
     assert provenance["powheg"]["powheg_invoked"] is True
+    assert provenance["powheg"]["powheg_real_free_invoked"] is False
+    assert provenance["powheg"]["real_smoke_safety_clamp"] is True
     assert provenance["powheg"]["pwhg_main_executed"] is True
     assert provenance["powheg"]["powheg_lhe_generated"] is True
     assert provenance["powheg"]["n_lhe_events"] == 1
@@ -344,3 +351,99 @@ LHE
     assert provenance["powheg"]["pythia_invoked"] is False
     assert provenance["powheg"]["geant4_invoked"] is False
     assert provenance["powheg"]["photon_transport_invoked"] is False
+
+
+def test_powheg_real_free_runs_configured_jobs_and_aggregates_lhe_products(tmp_path: Path, monkeypatch) -> None:
+    _write_ranked_events(tmp_path)
+    fake_pwhg = tmp_path / "external" / "powheg" / "build" / "DIS" / "pwhg_main"
+    fake_pwhg.parent.mkdir(parents=True, exist_ok=True)
+    fake_pwhg.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+test -f powheg.input
+numevts="$(awk '$1 == "numevts" {print $2}' powheg.input)"
+cat > pwgevents.lhe <<'LHE_HEAD'
+<LesHouchesEvents version="1.0">
+<header></header>
+<init></init>
+LHE_HEAD
+for i in $(seq 1 "${numevts}"); do
+cat >> pwgevents.lhe <<'LHE_EVENT'
+<event>
+4 1 1.0 1.0 1.0 1.0
+12 -1 0 0 0 0 0.0 0.0 4.0000000000E+09 4.0000000000E+09 0.0 0.0 9.0
+1 -1 0 0 501 0 0.0 0.0 -9.3827200000E-01 9.3827200000E-01 0.0 0.0 9.0
+11 1 1 2 0 0 1.0E+03 2.0E+03 3.0E+03 3.8E+03 5.11E-04 0.0 9.0
+2 1 1 2 501 0 -1.0E+03 -2.0E+03 3.999996E+09 3.999996E+09 0.0 0.0 9.0
+</event>
+LHE_EVENT
+done
+cat >> pwgevents.lhe <<'LHE_TAIL'
+</LesHouchesEvents>
+LHE_TAIL
+""",
+        encoding="utf-8",
+    )
+    fake_pwhg.chmod(0o755)
+    monkeypatch.setattr(powheg_module, "POWHEG_BINARY", fake_pwhg)
+
+    values = defaults()
+    values["powheg"].update({"run_mode": "real_free", "max_powheg_events": 2, "events_per_candidate": 2})
+    summary = generate_powheg_products(values, run_output_dir=tmp_path)
+    requests = _requests(tmp_path)
+
+    assert summary["powheg_run_mode"] == "real_free"
+    assert summary["powheg_real_free_invoked"] is True
+    assert summary["powheg_real_smoke_invoked"] is False
+    assert summary["real_free_mode"] is True
+    assert summary["real_smoke_safety_clamp"] is False
+    assert summary["powheg_invoked"] is True
+    assert summary["pwhg_main_executed"] is True
+    assert summary["powheg_lhe_generated"] is True
+    assert summary["max_powheg_events"] == 2
+    assert summary["events_per_candidate"] == 2
+    assert summary["n_powheg_jobs_requested"] == 2
+    assert summary["n_powheg_jobs_run"] == 2
+    assert summary["events_per_candidate_requested"] == 2
+    assert summary["n_lhe_events"] == 4
+    assert summary["n_lhe_events_total"] == 4
+    assert summary["n_lhe_particles"] == 16
+    assert summary["n_final_state_particles"] == 8
+    assert summary["powheg_lhe_products_generated"] is True
+    assert len(summary["powheg_lhe_paths"]) == 2
+    assert all(Path(path).exists() for path in summary["powheg_lhe_paths"])
+    assert [row["powheg_status"] for row in requests] == ["real_free_lhe_generated", "real_free_lhe_generated"]
+    assert all(row["powheg_invoked"] is True for row in requests)
+    assert all(row["n_lhe_events"] == 2 for row in requests)
+
+    events_path = tmp_path / "POWHEG" / "powheg_lhe_events_summary.jsonl"
+    particles_path = tmp_path / "POWHEG" / "powheg_lhe_particles.jsonl"
+    assert len(events_path.read_text(encoding="utf-8").splitlines()) == 4
+    assert len(particles_path.read_text(encoding="utf-8").splitlines()) == 16
+    validation = json.loads((tmp_path / "POWHEG" / "powheg_validation_report.json").read_text(encoding="utf-8"))
+    assert validation["powheg_run_mode"] == "real_free"
+    assert validation["n_powheg_jobs_run"] == 2
+    assert validation["n_lhe_events_total"] == 4
+    assert validation["real_free_mode"] is True
+    assert validation["real_smoke_safety_clamp"] is False
+    assert validation["pythia_invoked"] is False
+    assert validation["geant4_invoked"] is False
+    assert validation["photon_transport_invoked"] is False
+
+    provenance = build_provenance(
+        root=Path.cwd(),
+        values=values,
+        products=summary["products"],
+        validation={"configuration_valid": True},
+        powheg_summary=summary,
+    )
+    assert provenance["hadros3_stage"] == "H3-W0_to_H3-W9b_powheg_real_free"
+    assert provenance["status"] == "powheg_real_free_lhe_generated"
+    assert provenance["disabled_expensive_or_future_stages"]["powheg"] == "active_H3_W9b_real_free_local_pwhg_main"
+    assert provenance["powheg"]["powheg_real_free_invoked"] is True
+    assert provenance["powheg"]["n_powheg_jobs_requested"] == 2
+    assert provenance["powheg"]["n_powheg_jobs_run"] == 2
+    assert provenance["powheg"]["events_per_candidate_requested"] == 2
+    assert provenance["powheg"]["n_lhe_events_total"] == 4
+    assert provenance["powheg"]["real_free_mode"] is True
+    assert provenance["powheg"]["real_smoke_safety_clamp"] is False

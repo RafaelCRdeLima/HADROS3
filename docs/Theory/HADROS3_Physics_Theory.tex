@@ -30,12 +30,12 @@
 \newcommand{\gcm}{\mathrm{g\,cm^{-3}}}
 \newcommand{\sigmanun}{\sigma_{\nu N}}
 \newcommand{\SoftwareVersion}{0.9.0}
-\newcommand{\PhysicsVersion}{1.1}
-\newcommand{\TheoryVersion}{1.1}
-\newcommand{\TheoryCompatibleCommit}{7251499}
-\newcommand{\TheoryGenerationDate}{2026-06-26}
+\newcommand{\PhysicsVersion}{1.2}
+\newcommand{\TheoryVersion}{1.2}
+\newcommand{\TheoryCompatibleCommit}{f14befe}
+\newcommand{\TheoryGenerationDate}{2026-06-27}
 \newcommand{\TheoryPipelineVersion}{H3-W9b}
-\newcommand{\TheoryImplementationStatus}{implemented through H3-W9b POWHEG real-smoke execution}
+\newcommand{\TheoryImplementationStatus}{implemented through H3-W9b POWHEG real-smoke and real-free execution}
 
 \begin{document}
 
@@ -46,7 +46,7 @@
 \vspace{1.0cm}
 {\Large Rafael C. R. de Lima\par}
 \vfill
-{\large Implemented theory through H3-W9b POWHEG real-smoke execution\par}
+{\large Implemented theory through H3-W9b POWHEG real-smoke and real-free execution\par}
 \vspace{0.5cm}
 {\large \TheoryGenerationDate\par}
 \vfill
@@ -128,7 +128,7 @@ H3-W6 Forward Geodesics & implemented and documented \\
 H3-W7 DIS Interaction Sampler & implemented and documented \\
 H3-W8 Observer Bridge & implemented/proxy and documented \\
 H3-W9a POWHEG Dry Run & implemented/dry run and documented \\
-H3-W9b POWHEG Real Smoke & implemented/smoke and documented \\
+H3-W9b POWHEG Real Smoke/Free & implemented/smoke+free and documented \\
 H3-W10 PYTHIA & planned, not documented as implemented \\
 H3-W11 GEANT4 & planned, not documented as implemented \\
 H3-W12 Photon Transport & planned, not documented as implemented \\
@@ -177,7 +177,7 @@ H3-W6 Forward Geodesics & implemented & yes \\
 H3-W7 DIS Interaction Sampler & implemented & yes \\
 H3-W8 Observer Bridge & implemented/proxy & yes \\
 H3-W9a POWHEG Dry Run & implemented/dry run & yes \\
-H3-W9b POWHEG Real Smoke & implemented/smoke & yes \\
+H3-W9b POWHEG Real Smoke/Free & implemented/smoke+free & yes \\
 H3-W10 PYTHIA & planned & no \\
 H3-W11 GEANT4 & planned & no \\
 H3-W12 Photon Transport & planned & no \\
@@ -895,7 +895,7 @@ For the implemented seed mode, the seed is
 \code{random_seed}+\code{candidate_rank}.
 \end{equation}
 
-\section{Real-smoke LHE validation}
+\section{Real-smoke and real-free LHE validation}
 
 In H3-W9b real-smoke mode, the prepared POWHEG card is copied into an isolated
 work directory and \code{pwhg_main} is executed with that directory as its
@@ -915,6 +915,20 @@ The validation report records \code{powheg_invoked=true},
 \code{n_lhe_events}. This smoke mode does not modify
 \code{ObserverBridge/}, \code{DIS/}, \code{ForwardGeodesics/}, or
 \code{UHEsource/}.
+
+H3-W9b real-free mode uses the same local POWHEG execution and LHE validation
+rules, but it removes the real-smoke safety clamp. The number of interaction
+candidates is set by \code{max_powheg_events}, and the number of independent
+POWHEG hard-scattering realizations per selected interaction is set by
+\code{events_per_candidate}. Each selected candidate is executed in its own
+isolated POWHEG work directory. The produced LHE files are copied under
+\code{POWHEG/powheg_lhe/<powheg_request_id>/pwgevents.lhe}, and the parser
+aggregates all produced LHE files into the POWHEG particle and event summaries.
+The provenance records \code{powheg_real_free_invoked=true},
+\code{real_free_mode=true}, \code{n_powheg_jobs_requested},
+\code{n_powheg_jobs_run}, \code{events_per_candidate_requested}, and
+\code{n_lhe_events_total}. This mode still does not invoke PYTHIA, GEANT4,
+photon transport, or spectra.
 
 \section{Event requests}
 
@@ -940,7 +954,9 @@ every dry-run request. In real-smoke mode the initial status is
 \code{real_smoke_ready}; after successful validation the request records
 \code{real_smoke_lhe_generated}, \code{powheg_invoked=true},
 \code{pwhg_main_executed=true}, the LHE path, the log path, and
-\code{n_lhe_events}.
+\code{n_lhe_events}. In real-free mode the analogous statuses are
+\code{real_free_ready} and \code{real_free_lhe_generated}; multiple validated
+LHE products may be recorded in a single POWHEG run.
 
 \section{Inputs and outputs}
 
@@ -952,7 +968,7 @@ Inputs & \code{ObserverBridge/observer_bridge_ranked_events.jsonl} and POWHEG
 configuration values.\\
 Outputs & \code{POWHEG/powheg_event_requests.jsonl}, input cards, summary
 JSON/CSV, report JSON, validation report, diagnostic plots, and in real-smoke
-mode one validated \code{pwgevents.lhe}.\\
+or real-free mode validated \code{pwgevents.lhe} products.\\
 Still disabled & No PYTHIA; no GEANT4; no photon transport; no spectra.\\
 Backend & C++17 executable \code{bin/hadros3_powheg_driver}. Python handles
 orchestration and plots.\\

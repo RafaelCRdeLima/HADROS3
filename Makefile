@@ -11,7 +11,7 @@ NVCCFLAGS ?= -O3 -std=c++17
 CPP_INCLUDES := -Icpp/include
 KERR_PORT_SRC := cpp/src/kerr/kerr_metric.cpp cpp/src/kerr/kerr_geodesic.cpp cpp/src/cascade/kerr_local_tetrad.cpp cpp/src/cascade/packet_kerr_null_propagator.cpp
 
-.PHONY: help install-dev test cpp hadros3-forward-geodesics hadros3-dis-sampler hadros3-observer-bridge hadros3-powheg-driver hadros3-geodesic-preview-cuda powheg-fetch powheg-build powheg-smoke powheg powheg-real-smoke hadros-web render-hadros-web render-camera-preview launch-camera-preview sample-uhe-source propagate-forward-geodesics sample-dis-interactions observer-bridge serve-hadros-web release-software release-physics release-pipeline theory check validate clean
+.PHONY: help install-dev test cpp hadros3-forward-geodesics hadros3-dis-sampler hadros3-observer-bridge hadros3-powheg-driver hadros3-geodesic-preview-cuda powheg-fetch powheg-build powheg-smoke powheg powheg-real-smoke powheg-real-free hadros-web render-hadros-web render-camera-preview launch-camera-preview sample-uhe-source propagate-forward-geodesics sample-dis-interactions observer-bridge serve-hadros-web release-software release-physics release-pipeline theory check validate clean
 
 help:
 	@echo "HADROS3 commands:"
@@ -32,6 +32,7 @@ help:
 	@echo "  make powheg-smoke     Run a minimal local POWHEG DIS smoke test"
 	@echo "  make powheg           Prepare H3-W9a POWHEG dry-run jobs through hadros-web"
 	@echo "  make powheg-real-smoke Run H3-W9b one-candidate local POWHEG LHE smoke mode"
+	@echo "  make powheg-real-free Run H3-W9b local POWHEG with configured candidate/event counts"
 	@echo "  make propagate-forward-geodesics Generate H3-W6 forward geodesics through hadros-web"
 	@echo "  make sample-dis-interactions Generate H3-W7 DIS interaction samples through hadros-web"
 	@echo "  make observer-bridge   Generate H3-W8 Observer Bridge scoring products through hadros-web"
@@ -111,6 +112,9 @@ powheg:
 
 powheg-real-smoke:
 	$(PYTHON) hadros_web.py --powheg-real-smoke
+
+powheg-real-free:
+	$(PYTHON) hadros_web.py --powheg-real-free
 
 hadros-web:
 	$(PYTHON) hadros_web.py --serve --host $(HOST) --port $(PORT)

@@ -1797,6 +1797,9 @@ function renderPowhegPanel() {{
   const realSmokeNotice = value("run_mode") === "real_smoke"
     ? `<p class="note"><strong>Real smoke safety mode:</strong> only the top candidate is executed, with at most 2 POWHEG events, regardless of the production values above. This intentional limit applies only to real_smoke; dry_run respects the configured values.</p>`
     : "";
+  const realFreeNotice = value("run_mode") === "real_free"
+    ? `<p class="note"><strong>Real free mode may be computationally expensive.</strong> It will execute pwhg_main for the requested number of interaction candidates and events per interaction.</p>`
+    : "";
   const bridgeFound = Boolean(status.input_observer_bridge_found || state.outputs.observer_bridge_ranked_events_exists);
   const inputHtml = `<section><h2>Inputs</h2><div class="summary-grid">
     <div class="summary-item"><strong>Observer Bridge ranked events</strong><span class="${{bridgeFound ? "ok" : "pending"}}">${{bridgeFound ? "found" : "missing"}}</span></div>
@@ -1817,6 +1820,7 @@ function renderPowhegPanel() {{
       ${{input("powheg_seed_mode")}}
       ${{input("min_final_observation_score")}}
       ${{realSmokeNotice}}
+      ${{realFreeNotice}}
     </div>
   </section>`;
   const resultsHtml = summary ? `<section><h2>Results</h2><div class="summary-grid">
@@ -1825,6 +1829,9 @@ function renderPowhegPanel() {{
     <div class="summary-item"><strong>Input cards generated</strong>${{summary.powheg_cards_generated || 0}}</div>
     <div class="summary-item"><strong>LHE generated</strong><span class="${{summary.powheg_lhe_generated ? "ok" : "pending"}}">${{summary.powheg_lhe_generated ? "YES" : "NO"}}</span></div>
     <div class="summary-item"><strong>LHE events</strong>${{summary.n_lhe_events || 0}}</div>
+    <div class="summary-item"><strong>POWHEG jobs run</strong>${{summary.n_powheg_jobs_run || 0}}</div>
+    <div class="summary-item"><strong>Requested POWHEG jobs</strong>${{summary.n_powheg_jobs_requested || summary.max_powheg_events || 0}}</div>
+    <div class="summary-item"><strong>Events per interaction requested</strong>${{summary.events_per_candidate_requested || summary.events_per_candidate || 0}}</div>
     <div class="summary-item"><strong>Run mode</strong><span class="ok">${{summary.powheg_run_mode || "dry_run"}}</span></div>
     <div class="summary-item"><strong>pwhg_main</strong><span class="${{summary.pwhg_main_executed ? "ok" : "pending"}}">${{summary.pwhg_main_executed ? "executed" : "NOT executed"}}</span></div>
     <div class="summary-item"><strong>powheg_invoked</strong>${{String(summary.powheg_invoked)}}</div>
@@ -1864,8 +1871,8 @@ function renderPowhegPanel() {{
   return `<div class="source-panel">
     ${{inputHtml}}
     ${{configHtml}}
-    <section><h2>Run</h2><button type="button" id="powheg-button" class="source-action" ${{bridgeFound ? "" : "disabled"}}>${{value("run_mode") === "real_smoke" ? "Run POWHEG Real Smoke" : "Prepare POWHEG Jobs"}}</button>
-    <p class="note">Dry run prepares requests, deterministic seeds and real POWHEG input cards without executing pwhg_main. Real smoke executes the local pwhg_main for one top candidate and validates a minimal LHE.</p>
+    <section><h2>Run</h2><button type="button" id="powheg-button" class="source-action" ${{bridgeFound ? "" : "disabled"}}>${{value("run_mode") === "real_smoke" ? "Run POWHEG Real Smoke" : (value("run_mode") === "real_free" ? "Run POWHEG Real Free" : "Prepare POWHEG Jobs")}}</button>
+    <p class="note">Dry run prepares requests, deterministic seeds and real POWHEG input cards without executing pwhg_main. Real smoke executes the local pwhg_main for one top candidate and validates a minimal LHE. Real free executes pwhg_main for the configured candidate and event counts.</p>
     <p class="note">PYTHIA, GEANT4, photon transport and spectra remain disabled.</p></section>
     ${{resultsHtml}}
     ${{lheHtml}}
@@ -2591,6 +2598,7 @@ def main() -> int:
     parser.add_argument("--observer-bridge", action="store_true", help="Generate H3-W8 Observer Bridge scoring products through hadros-web orchestration and exit.")
     parser.add_argument("--powheg", action="store_true", help="Prepare H3-W9a POWHEG dry-run jobs through hadros-web orchestration and exit.")
     parser.add_argument("--powheg-real-smoke", action="store_true", help="Run H3-W9b one-candidate local POWHEG real-smoke mode and exit.")
+    parser.add_argument("--powheg-real-free", action="store_true", help="Run local POWHEG for the configured candidate and event counts.")
     parser.add_argument("--serve", action="store_true", help="Serve the web control surface.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8877)
@@ -2699,6 +2707,16 @@ def main() -> int:
         values["powheg"]["ranking_policy"] = "top_score"
         values["powheg"]["max_powheg_events"] = 1
         values["powheg"]["events_per_candidate"] = min(2, int(float(values["powheg"].get("events_per_candidate", 2))))
+        powheg_summary = generate_powheg_products(values, run_output_dir=output_dir)
+        render_summary = render_hadros_web(values, root=ROOT, output_dir=output_dir, powheg_summary=powheg_summary)
+        print(json.dumps({"status": "ok", "powheg": powheg_summary, "render": render_summary}, indent=2, sort_keys=True))
+        return 0
+    if args.powheg_real_free:
+        output_dir = args.output_dir if args.output_dir is not None else ROOT / run_output_dir(values)
+        if not output_dir.is_absolute():
+            output_dir = ROOT / output_dir
+        ensure_output_layout(output_dir)
+        values["powheg"]["run_mode"] = "real_free"
         powheg_summary = generate_powheg_products(values, run_output_dir=output_dir)
         render_summary = render_hadros_web(values, root=ROOT, output_dir=output_dir, powheg_summary=powheg_summary)
         print(json.dumps({"status": "ok", "powheg": powheg_summary, "render": render_summary}, indent=2, sort_keys=True))

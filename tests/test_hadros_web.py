@@ -65,6 +65,7 @@ def test_powheg_controls_use_physical_labels_and_unbounded_positive_defaults() -
     assert powheg["events_per_candidate"] == 1
     assert fields["max_powheg_events"]["label"] == "Interaction Candidates to Simulate"
     assert fields["events_per_candidate"]["label"] == "POWHEG Events per Interaction"
+    assert "real_free" in fields["run_mode"]["options"]
     assert fields["max_powheg_events"]["min"] == 1
     assert fields["events_per_candidate"]["min"] == 1
     assert fields["max_powheg_events"]["step"] == 1
@@ -83,6 +84,8 @@ def test_powheg_controls_use_physical_labels_and_unbounded_positive_defaults() -
     assert "Real smoke safety mode:" in html
     assert "only the top candidate is executed, with at most 2 POWHEG events" in html
     assert "dry_run respects the configured values" in html
+    assert "Real free mode may be computationally expensive." in html
+    assert "Run POWHEG Real Free" in html
     assert "Max POWHEG jobs" not in html
     assert "Events per candidate" not in html
 
@@ -150,12 +153,12 @@ def test_render_hadros_web_writes_first_stage_products(tmp_path: Path) -> None:
     assert provenance["disabled_expensive_or_future_stages"]["powheg"] == "disabled"
     assert provenance["camera_preview"]["requested_mode"] in {"analytic_geometry_only", "kerr_like_cuda", "full_kerr"}
     assert provenance["camera_preview"]["medium_renderer_used"] is False
+    version_payload = json.loads(Path("VERSION.json").read_text(encoding="utf-8"))
     assert provenance["theory_document"] == "docs/Theory/HADROS3_Physics_Theory.pdf"
-    assert provenance["theory_version"] == "1.1"
+    assert provenance["theory_version"] == version_payload["theory_version"]
     assert provenance["theory_commit"]
     assert provenance["theory_generation_date"]
     assert provenance["scientific_theory"]["theory_pipeline_version"] == "H3-W9b"
-    version_payload = json.loads(Path("VERSION.json").read_text(encoding="utf-8"))
     for key in ["software_version", "physics_version", "pipeline_version", "theory_version"]:
         assert key in version_payload
         assert key in provenance["scientific_release"]

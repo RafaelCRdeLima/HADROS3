@@ -154,8 +154,8 @@ static Config load_config(const fs::path& path) {
   c.run_mode = json_string(powheg, "run_mode", c.run_mode);
   if (c.backend != "local_powheg") throw std::runtime_error("powheg_backend must be local_powheg");
   if (c.process != "nudis") throw std::runtime_error("powheg_process must be nudis");
-  if (c.run_mode != "dry_run" && c.run_mode != "real_smoke") {
-    throw std::runtime_error("POWHEG run_mode must be dry_run or real_smoke");
+  if (c.run_mode != "dry_run" && c.run_mode != "real_smoke" && c.run_mode != "real_free") {
+    throw std::runtime_error("POWHEG run_mode must be dry_run, real_smoke, or real_free");
   }
   if (c.run_mode == "real_smoke") {
     c.max_powheg_events = 1;
@@ -223,6 +223,8 @@ static std::string powheg_card(const Candidate& c, const Config& cfg, int seed) 
   out << "! HADROS3 POWHEG DIS card.\n";
   if (cfg.run_mode == "real_smoke") {
     out << "! H3-W9b real smoke mode: pwhg_main executes locally for this card.\n";
+  } else if (cfg.run_mode == "real_free") {
+    out << "! H3-W9b real free mode: pwhg_main executes locally for this card.\n";
   } else {
     out << "! H3-W9a dry run: pwhg_main is NOT executed in this stage.\n";
   }
@@ -275,7 +277,7 @@ static void write_requests(const fs::path& path, const std::vector<Request>& req
   if (!out) throw std::runtime_error("cannot write " + path.string());
   out << std::setprecision(17);
   for (const auto& r : requests) {
-    const std::string status = cfg.run_mode == "real_smoke" ? "real_smoke_ready" : "dry_run_ready";
+    const std::string status = cfg.run_mode == "real_smoke" ? "real_smoke_ready" : (cfg.run_mode == "real_free" ? "real_free_ready" : "dry_run_ready");
     out << "{"
         << "\"powheg_request_id\":" << quote(r.request_id) << ","
         << "\"candidate_rank\":" << r.candidate.candidate_rank << ","
@@ -300,7 +302,7 @@ static void write_summary_csv(const fs::path& path, const std::vector<Request>& 
   out << "powheg_request_id,candidate_rank,interaction_id,event_id,interaction_E_nu_local_gev,final_observation_score,powheg_seed,powheg_status\n";
   out << std::setprecision(17);
   for (const auto& r : requests) {
-    const std::string status = cfg.run_mode == "real_smoke" ? "real_smoke_ready" : "dry_run_ready";
+    const std::string status = cfg.run_mode == "real_smoke" ? "real_smoke_ready" : (cfg.run_mode == "real_free" ? "real_free_ready" : "dry_run_ready");
     out << r.request_id << "," << r.candidate.candidate_rank << "," << r.candidate.interaction_id << ","
         << r.candidate.event_id << "," << r.candidate.energy_gev << "," << r.candidate.final_score << ","
         << r.seed << "," << status << "\n";
@@ -321,15 +323,17 @@ static void write_summary_json(const fs::path& path, const Config& cfg, int inpu
   std::ofstream out(path);
   if (!out) throw std::runtime_error("cannot write " + path.string());
   const bool real_smoke = cfg.run_mode == "real_smoke";
-  const std::string stage_name = real_smoke ? "H3-W9b POWHEG Real Run Smoke Mode" : "H3-W9a POWHEG Integration Dry Run";
+  const bool real_free = cfg.run_mode == "real_free";
+  const std::string stage_name = real_smoke ? "H3-W9b POWHEG Real Run Smoke Mode" : (real_free ? "H3-W9b POWHEG Real Free Mode" : "H3-W9a POWHEG Integration Dry Run");
   out << std::setprecision(17);
   out << "{\n"
       << "  \"stage_name\": " << quote(stage_name) << ",\n"
       << "  \"powheg_backend\": " << quote(cfg.backend) << ",\n"
       << "  \"powheg_process\": " << quote(cfg.process) << ",\n"
       << "  \"powheg_run_mode\": " << quote(cfg.run_mode) << ",\n"
-      << "  \"powheg_dry_run_invoked\": " << (real_smoke ? "false" : "true") << ",\n"
+      << "  \"powheg_dry_run_invoked\": " << ((real_smoke || real_free) ? "false" : "true") << ",\n"
       << "  \"powheg_real_smoke_invoked\": " << (real_smoke ? "true" : "false") << ",\n"
+      << "  \"powheg_real_free_invoked\": " << (real_free ? "true" : "false") << ",\n"
       << "  \"powheg_invoked\": false,\n"
       << "  \"pwhg_main_executed\": false,\n"
       << "  \"powheg_jobs_prepared\": " << requests.size() << ",\n"
@@ -413,6 +417,9 @@ int main(int argc, char** argv) {
     if (cfg.run_mode == "real_smoke") {
       std::cout << "H3-W9b POWHEG real-smoke prepared " << requests.size()
                 << " job; local pwhg_main execution is delegated to the Python wrapper\n";
+    } else if (cfg.run_mode == "real_free") {
+      std::cout << "H3-W9b POWHEG real-free prepared " << requests.size()
+                << " jobs; local pwhg_main execution is delegated to the Python wrapper\n";
     } else {
       std::cout << "H3-W9a POWHEG dry run prepared " << requests.size() << " jobs; pwhg_main NOT executed\n";
     }

@@ -385,8 +385,7 @@ def _draw_lhe_momentum_spectrum(particles: list[dict[str, Any]], path: Path) -> 
     plt.close(fig)
 
 
-def generate_lhe_diagnostics(lhe_path: Path, output_dir: Path, *, powheg_job_id: str | None = None) -> dict[str, Any]:
-    particles, events = parse_lhe_particles(lhe_path, powheg_job_id=powheg_job_id)
+def _write_lhe_diagnostics(particles: list[dict[str, Any]], events: list[dict[str, Any]], output_dir: Path) -> dict[str, Any]:
     particle_summary = _aggregate_particle_summary(particles)
     particles_path = output_dir / "powheg_lhe_particles.jsonl"
     events_path = output_dir / "powheg_lhe_events_summary.jsonl"
@@ -428,6 +427,21 @@ def generate_lhe_diagnostics(lhe_path: Path, output_dir: Path, *, powheg_job_id:
     }
 
 
+def generate_lhe_diagnostics(lhe_path: Path, output_dir: Path, *, powheg_job_id: str | None = None) -> dict[str, Any]:
+    particles, events = parse_lhe_particles(lhe_path, powheg_job_id=powheg_job_id)
+    return _write_lhe_diagnostics(particles, events, output_dir)
+
+
+def generate_lhe_diagnostics_for_paths(lhe_paths: list[Path], output_dir: Path) -> dict[str, Any]:
+    particles: list[dict[str, Any]] = []
+    events: list[dict[str, Any]] = []
+    for lhe_path in lhe_paths:
+        job_particles, job_events = parse_lhe_particles(lhe_path, powheg_job_id=lhe_path.parent.name)
+        particles.extend(job_particles)
+        events.extend(job_events)
+    return _write_lhe_diagnostics(particles, events, output_dir)
+
+
 def _count_lhe_events(text: str) -> int:
     return text.count("<event>")
 
@@ -457,19 +471,11 @@ def _powheg_runtime_env() -> dict[str, str]:
     return env
 
 
-def _run_real_smoke(output_dir: Path, requests: list[dict[str, Any]]) -> dict[str, Any]:
-    if not requests:
-        raise RuntimeError("POWHEG real_smoke requested, but no POWHEG request was prepared.")
-    if len(requests) != 1:
-        raise RuntimeError(f"POWHEG real_smoke must prepare exactly one request; got {len(requests)}.")
-    if not POWHEG_BINARY.exists():
-        raise FileNotFoundError(f"Local POWHEG pwhg_main not found: {POWHEG_BINARY}. Run make powheg-fetch && make powheg-build first.")
-
-    request = requests[0]
+def _run_powheg_request(output_dir: Path, request: dict[str, Any], run_mode: str) -> dict[str, Any]:
     request_id = str(request["powheg_request_id"])
     card_path = output_dir.parent / str(request["powheg_input_path"])
     if not card_path.exists():
-        raise FileNotFoundError(f"POWHEG input card not found for real_smoke: {card_path}")
+        raise FileNotFoundError(f"POWHEG input card not found for {run_mode}: {card_path}")
 
     work_dir = output_dir / "powheg_work" / request_id
     lhe_dir = output_dir / "powheg_lhe" / request_id
@@ -489,20 +495,20 @@ def _run_real_smoke(output_dir: Path, requests: list[dict[str, Any]]) -> dict[st
         try:
             subprocess.run([str(POWHEG_BINARY)], cwd=work_dir, env=_powheg_runtime_env(), stdout=handle, stderr=subprocess.STDOUT, check=True)
         except subprocess.CalledProcessError as exc:
-            raise RuntimeError(f"POWHEG real_smoke failed with exit code {exc.returncode}. See {log_path}") from exc
+            raise RuntimeError(f"POWHEG {run_mode} failed for {request_id} with exit code {exc.returncode}. See {log_path}") from exc
 
     if not produced_lhe.exists() or produced_lhe.stat().st_size == 0:
-        raise RuntimeError(f"POWHEG real_smoke did not create a non-empty LHE file: {produced_lhe}. See {log_path}")
+        raise RuntimeError(f"POWHEG {run_mode} did not create a non-empty LHE file for {request_id}: {produced_lhe}. See {log_path}")
     text = produced_lhe.read_text(encoding="utf-8", errors="replace")
     n_events = _count_lhe_events(text)
     valid = "<LesHouchesEvents" in text and "</LesHouchesEvents>" in text and n_events > 0
     if not valid:
-        raise RuntimeError(f"POWHEG real_smoke produced an invalid LHE file: {produced_lhe}. See {log_path}")
+        raise RuntimeError(f"POWHEG {run_mode} produced an invalid LHE file for {request_id}: {produced_lhe}. See {log_path}")
     shutil.copy2(produced_lhe, final_lhe)
 
     request.update(
         {
-            "powheg_status": "real_smoke_lhe_generated",
+            "powheg_status": f"{run_mode}_lhe_generated",
             "powheg_invoked": True,
             "pwhg_main_executed": True,
             "powheg_lhe_generated": True,
@@ -512,20 +518,44 @@ def _run_real_smoke(output_dir: Path, requests: list[dict[str, Any]]) -> dict[st
         }
     )
     return {
-        "powheg_validation_status": "ok",
         "powheg_request_id": request_id,
-        "run_mode": "real_smoke",
-        "powheg_run_mode": "real_smoke",
+        "powheg_lhe_path": str(final_lhe),
+        "powheg_log_path": str(log_path),
+        "powheg_work_dir": str(work_dir),
+        "n_lhe_events": n_events,
+        "lhe_valid": True,
+    }
+
+
+def _run_real_powheg(output_dir: Path, requests: list[dict[str, Any]], *, run_mode: str) -> dict[str, Any]:
+    if not requests:
+        raise RuntimeError(f"POWHEG {run_mode} requested, but no POWHEG request was prepared.")
+    if run_mode == "real_smoke" and len(requests) != 1:
+        raise RuntimeError(f"POWHEG real_smoke must prepare exactly one request; got {len(requests)}.")
+    if run_mode not in {"real_smoke", "real_free"}:
+        raise ValueError(f"unsupported real POWHEG run_mode: {run_mode}")
+    if not POWHEG_BINARY.exists():
+        raise FileNotFoundError(f"Local POWHEG pwhg_main not found: {POWHEG_BINARY}. Run make powheg-fetch && make powheg-build first.")
+
+    jobs = [_run_powheg_request(output_dir, request, run_mode) for request in requests]
+    total_events = sum(int(job["n_lhe_events"]) for job in jobs)
+    return {
+        "powheg_validation_status": "ok",
+        "powheg_request_id": str(requests[0]["powheg_request_id"]),
+        "run_mode": run_mode,
+        "powheg_run_mode": run_mode,
         "pwhg_main": str(POWHEG_BINARY),
         "pwhg_main_executed": True,
         "powheg_invoked": True,
         "powheg_lhe_generated": True,
         "lhe_found": True,
         "lhe_valid": True,
-        "n_lhe_events": n_events,
-        "powheg_lhe_path": str(final_lhe),
-        "powheg_log_path": str(log_path),
-        "powheg_work_dir": str(work_dir),
+        "n_lhe_events": total_events,
+        "n_powheg_jobs_run": len(jobs),
+        "powheg_lhe_path": str(jobs[0]["powheg_lhe_path"]),
+        "powheg_log_path": str(jobs[0]["powheg_log_path"]),
+        "powheg_work_dir": str(jobs[0]["powheg_work_dir"]),
+        "powheg_jobs": jobs,
         "pythia_invoked": False,
         "geant4_invoked": False,
         "photon_transport_invoked": False,
@@ -556,11 +586,13 @@ def _augment_summary(summary: dict[str, Any], output_dir: Path, requests: list[d
     )
     run_mode = str(summary.get("powheg_run_mode", "dry_run"))
     is_real_smoke = run_mode == "real_smoke"
+    is_real_free = run_mode == "real_free"
     summary.update(
         {
             "products": products,
             "powheg_dry_run_invoked": run_mode == "dry_run",
             "powheg_real_smoke_invoked": is_real_smoke,
+            "powheg_real_free_invoked": is_real_free,
             "powheg_invoked": False,
             "pwhg_main_executed": False,
             "powheg_lhe_generated": False,
@@ -578,6 +610,12 @@ def _augment_summary(summary: dict[str, Any], output_dir: Path, requests: list[d
             "unique_particle_types": 0,
             "powheg_lhe_products_generated": False,
             "powheg_lhe_message": "No LHE available: POWHEG dry run only.",
+            "n_powheg_jobs_requested": int(summary.get("max_powheg_events", len(requests))),
+            "n_powheg_jobs_run": 0,
+            "events_per_candidate_requested": int(summary.get("events_per_candidate", 0)),
+            "n_lhe_events_total": 0,
+            "real_free_mode": is_real_free,
+            "real_smoke_safety_clamp": is_real_smoke,
             "pythia_invoked": False,
             "geant4_invoked": False,
             "photon_transport_invoked": False,
@@ -639,27 +677,38 @@ def generate_powheg_products(values: dict[str, dict[str, Any]], *, run_output_di
         "lhe_particles_are_hard_process": True,
         "hadronization_invoked": False,
     }
-    if run_mode == "real_smoke":
-        validation_report = _run_real_smoke(output_dir, requests)
-        lhe_diagnostics = generate_lhe_diagnostics(Path(validation_report["powheg_lhe_path"]), output_dir, powheg_job_id=str(validation_report["powheg_request_id"]))
+    if run_mode in {"real_smoke", "real_free"}:
+        validation_report = _run_real_powheg(output_dir, requests, run_mode=run_mode)
+        lhe_paths = [Path(job["powheg_lhe_path"]) for job in validation_report["powheg_jobs"]]
+        lhe_diagnostics = generate_lhe_diagnostics_for_paths(lhe_paths, output_dir)
+        real_free = run_mode == "real_free"
         summary.update(
             {
-                "stage_name": "H3-W9b POWHEG Real Run Smoke Mode",
+                "stage_name": "H3-W9b POWHEG Real Free Mode" if real_free else "H3-W9b POWHEG Real Run Smoke Mode",
                 "powheg_dry_run_invoked": False,
-                "powheg_real_smoke_invoked": True,
+                "powheg_real_smoke_invoked": not real_free,
+                "powheg_real_free_invoked": real_free,
                 "powheg_invoked": True,
                 "pwhg_main_executed": True,
                 "powheg_lhe_generated": True,
                 "lhe_found": True,
                 "lhe_valid": True,
                 "n_lhe_events": int(validation_report["n_lhe_events"]),
-                "n_powheg_jobs": 1,
-                "powheg_jobs_prepared": 1,
-                "powheg_cards_generated": 1,
+                "n_lhe_events_total": int(validation_report["n_lhe_events"]),
+                "n_powheg_jobs": len(requests),
+                "n_powheg_jobs_requested": int(summary.get("max_powheg_events", len(requests))),
+                "n_powheg_jobs_run": int(validation_report["n_powheg_jobs_run"]),
+                "events_per_candidate_requested": int(summary.get("events_per_candidate", 0)),
+                "powheg_jobs_prepared": len(requests),
+                "powheg_cards_generated": len(requests),
                 "powheg_validation_report_generated": True,
                 "powheg_validation_report": str(validation_report_path),
                 "powheg_lhe_path": validation_report["powheg_lhe_path"],
                 "powheg_log_path": validation_report["powheg_log_path"],
+                "powheg_lhe_paths": [job["powheg_lhe_path"] for job in validation_report["powheg_jobs"]],
+                "powheg_log_paths": [job["powheg_log_path"] for job in validation_report["powheg_jobs"]],
+                "real_free_mode": real_free,
+                "real_smoke_safety_clamp": not real_free,
                 "lhe_parser_invoked": True,
                 "lhe_particles_are_hard_process": True,
                 "hadronization_invoked": False,
@@ -688,6 +737,12 @@ def generate_powheg_products(values: dict[str, dict[str, Any]], *, run_output_di
                 "n_lhe_particles": int(lhe_diagnostics["n_lhe_particles"]),
                 "n_final_state_particles": int(lhe_diagnostics["n_final_state_particles"]),
                 "unique_particle_types": int(lhe_diagnostics["unique_particle_types"]),
+                "n_powheg_jobs_requested": int(summary.get("n_powheg_jobs_requested", len(requests))),
+                "n_powheg_jobs_run": int(validation_report["n_powheg_jobs_run"]),
+                "events_per_candidate_requested": int(summary.get("events_per_candidate_requested", 0)),
+                "n_lhe_events_total": int(validation_report["n_lhe_events"]),
+                "real_free_mode": real_free,
+                "real_smoke_safety_clamp": not real_free,
             }
         )
         _write_jsonl(requests_path, requests)

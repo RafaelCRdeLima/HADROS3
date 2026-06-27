@@ -1,10 +1,10 @@
 {
   "software_version": "0.9.0",
-  "physics_version": "1.1",
+  "physics_version": "1.2",
   "pipeline_version": "H3-W9b",
-  "theory_version": "1.1",
+  "theory_version": "1.2",
   "theory_document": "docs/Theory/HADROS3_Physics_Theory.pdf",
-  "last_release_date": "2026-06-26",
-  "git_commit": "7251499",
+  "last_release_date": "2026-06-27",
+  "git_commit": "f14befe",
   "current_stage": "H3-W9b"
 }

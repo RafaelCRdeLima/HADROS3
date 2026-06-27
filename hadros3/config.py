@@ -380,7 +380,19 @@ def schema() -> list[dict[str, Any]]:
                 field("powheg", "random_seed", "Random seed", 12345, kind="number"),
                 field("powheg", "powheg_seed_mode", "Seed mode", "base_plus_candidate_rank", kind="select", options=["base_plus_candidate_rank"]),
                 field("powheg", "min_final_observation_score", "Min final score", 0.0, kind="number"),
-                field("powheg", "run_mode", "Run mode", "dry_run", kind="select", options=["dry_run", "real_smoke"]),
+                field(
+                    "powheg",
+                    "run_mode",
+                    "Run mode",
+                    "dry_run",
+                    kind="select",
+                    options=["dry_run", "real_smoke", "real_free"],
+                    help_text=(
+                        "dry_run: prepares POWHEG cards only; pwhg_main is not executed. "
+                        "real_smoke: safety mode; runs only the top candidate with at most 2 events. "
+                        "real_free: production mode; runs pwhg_main for the selected number of interaction candidates and events per interaction."
+                    ),
+                ),
             ],
         },
         {
@@ -696,8 +708,8 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
         problems.append("powheg.powheg_seed_mode must be base_plus_candidate_rank in H3-W9a")
     if float(powheg.get("min_final_observation_score", 0.0)) < 0.0:
         problems.append("powheg.min_final_observation_score must be non-negative")
-    if str(powheg.get("run_mode", "dry_run")) not in {"dry_run", "real_smoke"}:
-        problems.append("powheg.run_mode must be dry_run or real_smoke")
+    if str(powheg.get("run_mode", "dry_run")) not in {"dry_run", "real_smoke", "real_free"}:
+        problems.append("powheg.run_mode must be dry_run, real_smoke, or real_free")
     return problems
 
 

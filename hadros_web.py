@@ -734,7 +734,8 @@ def render_html(values: dict[str, dict[str, Any]], config_path: Path) -> str:
     .toggle-row {{ display: flex; grid-template-columns: none; gap: 8px; align-items: flex-start; margin: 0; padding: 8px; border: 1px solid #d6dce5; border-radius: 5px; background: white; }}
     .toggle-main {{ display: grid; gap: 3px; }}
     .toggle-name {{ font-weight: 650; }}
-    .toggle-help {{ color: #627084; font-size: 12px; }}
+    .toggle-help, .field-help {{ color: #627084; font-size: 12px; }}
+    .field-label {{ display: grid; gap: 3px; }}
     .camera-controls-card {{ margin-top: 12px; border-top: 1px solid #d6dce5; padding-top: 12px; }}
     .camera-controls-card h3 {{ margin: 0 0 8px; font-size: 14px; }}
     .camera-controls-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }}
@@ -824,15 +825,21 @@ function setPowhegOutputs(exists) {{
   state.outputs.powheg_lhe_momentum_spectrum_exists = exists;
 }}
 function inputFor(field, value) {{
+  const attrs = [
+    `data-section="${{field.section}}"`,
+    `data-key="${{field.key}}"`,
+    field.min !== undefined ? `min="${{field.min}}"` : "",
+    field.step !== undefined ? `step="${{field.step}}"` : "",
+  ].filter(Boolean).join(" ");
   if (field.kind === "select") {{
-    return `<select data-section="${{field.section}}" data-key="${{field.key}}">` +
+    return `<select ${{attrs}}>` +
       field.options.map(o => `<option value="${{o}}" ${{String(value) === String(o) ? "selected" : ""}}>${{o}}</option>`).join("") +
       `</select>`;
   }}
   if (field.kind === "checkbox") {{
-    return `<input type="checkbox" data-section="${{field.section}}" data-key="${{field.key}}" ${{value ? "checked" : ""}}>`;
+    return `<input type="checkbox" ${{attrs}} ${{value ? "checked" : ""}}>`;
   }}
-  return `<input type="${{field.kind === "number" ? "number" : "text"}}" data-section="${{field.section}}" data-key="${{field.key}}" value="${{value}}">`;
+  return `<input type="${{field.kind === "number" ? "number" : "text"}}" ${{attrs}} value="${{value}}">`;
 }}
 function coerce(field, raw, checked) {{
   if (field.kind === "checkbox") return checked;
@@ -1786,7 +1793,10 @@ function renderPowhegPanel() {{
   const status = state.powheg || {{}};
   const fields = Object.fromEntries(state.schema.flatMap(tab => tab.fields).filter(f => f.section === "powheg").map(f => [f.key, f]));
   const value = key => state.values.powheg[key];
-  const input = key => `<label><span>${{fields[key].label}}</span>${{inputFor(fields[key], value(key))}}</label>`;
+  const input = key => `<label><span class="field-label"><span>${{fields[key].label}}</span>${{fields[key].help ? `<span class="field-help">${{fields[key].help}}</span>` : ""}}</span>${{inputFor(fields[key], value(key))}}</label>`;
+  const realSmokeNotice = value("run_mode") === "real_smoke"
+    ? `<p class="note"><strong>Real smoke safety mode:</strong> only the top candidate is executed, with at most 2 POWHEG events, regardless of the production values above. This intentional limit applies only to real_smoke; dry_run respects the configured values.</p>`
+    : "";
   const bridgeFound = Boolean(status.input_observer_bridge_found || state.outputs.observer_bridge_ranked_events_exists);
   const inputHtml = `<section><h2>Inputs</h2><div class="summary-grid">
     <div class="summary-item"><strong>Observer Bridge ranked events</strong><span class="${{bridgeFound ? "ok" : "pending"}}">${{bridgeFound ? "found" : "missing"}}</span></div>
@@ -1806,6 +1816,7 @@ function renderPowhegPanel() {{
       ${{input("random_seed")}}
       ${{input("powheg_seed_mode")}}
       ${{input("min_final_observation_score")}}
+      ${{realSmokeNotice}}
     </div>
   </section>`;
   const resultsHtml = summary ? `<section><h2>Results</h2><div class="summary-grid">

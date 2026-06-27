@@ -16,8 +16,8 @@ struct Config {
   std::string backend = "local_powheg";
   std::string process = "nudis";
   std::string ranking_policy = "top_score";
-  int max_powheg_events = 5;
-  int events_per_candidate = 2;
+  int max_powheg_events = 50;
+  int events_per_candidate = 1;
   int random_seed = 12345;
   std::string seed_mode = "base_plus_candidate_rank";
   double min_score = 0.0;

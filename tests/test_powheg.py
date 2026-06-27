@@ -12,6 +12,15 @@ from hadros3.powheg import generate_powheg_products, parse_lhe_particles
 from hadros3.provenance import build_provenance
 
 
+def test_cpp_powheg_driver_fallbacks_match_dashboard_defaults() -> None:
+    source = Path("cpp/apps/hadros3_powheg_driver.cpp").read_text(encoding="utf-8")
+
+    assert "int max_powheg_events = 50;" in source
+    assert "int events_per_candidate = 1;" in source
+    assert "int max_powheg_events = 5;" not in source
+    assert "int events_per_candidate = 2;" not in source
+
+
 def _write_ranked_events(run_dir: Path) -> Path:
     bridge_dir = run_dir / "ObserverBridge"
     bridge_dir.mkdir(parents=True, exist_ok=True)

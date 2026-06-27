@@ -50,6 +50,43 @@ def test_default_config_is_valid() -> None:
     assert validate_values(defaults()) == []
 
 
+def test_powheg_controls_use_physical_labels_and_unbounded_positive_defaults() -> None:
+    values = defaults()
+    powheg = values["powheg"]
+    fields = {
+        field["key"]: field
+        for tab in schema()
+        for field in tab["fields"]
+        if field["section"] == "powheg"
+    }
+    html = render_html(values, Path("presets/hadros_web/default_config.json"))
+
+    assert powheg["max_powheg_events"] == 50
+    assert powheg["events_per_candidate"] == 1
+    assert fields["max_powheg_events"]["label"] == "Interaction Candidates to Simulate"
+    assert fields["events_per_candidate"]["label"] == "POWHEG Events per Interaction"
+    assert fields["max_powheg_events"]["min"] == 1
+    assert fields["events_per_candidate"]["min"] == 1
+    assert fields["max_powheg_events"]["step"] == 1
+    assert fields["events_per_candidate"]["step"] == 1
+    assert "max" not in fields["max_powheg_events"]
+    assert "max" not in fields["events_per_candidate"]
+    high_values = defaults()
+    high_values["powheg"]["max_powheg_events"] = 10000
+    high_values["powheg"]["events_per_candidate"] = 250
+    assert validate_values(high_values) == []
+    powheg_panel = html[html.index("function renderPowhegPanel") : html.index("function renderContextPanel")]
+    assert "field-help" in powheg_panel
+    assert "Number of distinct interaction sites selected from the Observer Bridge that will be sent to POWHEG." in html
+    assert "Number of independent POWHEG Monte Carlo hard-scattering realizations generated for each selected interaction site." in html
+    assert 'value("run_mode") === "real_smoke"' in powheg_panel
+    assert "Real smoke safety mode:" in html
+    assert "only the top candidate is executed, with at most 2 POWHEG events" in html
+    assert "dry_run respects the configured values" in html
+    assert "Max POWHEG jobs" not in html
+    assert "Events per candidate" not in html
+
+
 def test_versioned_hadros_web_preset_is_valid() -> None:
     values = json.loads(Path("presets/hadros_web/default_config.json").read_text(encoding="utf-8"))
     assert validate_values(values) == []

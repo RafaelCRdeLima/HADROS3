@@ -18,6 +18,9 @@ def field(
     kind: str = "text",
     options: list[str] | None = None,
     visibility: str = "NORMAL",
+    help_text: str | None = None,
+    minimum: int | float | None = None,
+    step: int | float | None = None,
 ) -> dict[str, Any]:
     out: dict[str, Any] = {
         "section": section,
@@ -29,6 +32,12 @@ def field(
     }
     if options is not None:
         out["options"] = options
+    if help_text is not None:
+        out["help"] = help_text
+    if minimum is not None:
+        out["min"] = minimum
+    if step is not None:
+        out["step"] = step
     return out
 
 
@@ -348,8 +357,26 @@ def schema() -> list[dict[str, Any]]:
                 field("powheg", "powheg_backend", "POWHEG backend", "local_powheg", kind="select", options=["local_powheg"]),
                 field("powheg", "powheg_process", "POWHEG process", "nudis", kind="select", options=["nudis"]),
                 field("powheg", "ranking_policy", "Ranking policy", "top_score", kind="select", options=["top_score", "all_candidates", "score_threshold"]),
-                field("powheg", "max_powheg_events", "Max POWHEG jobs", 5, kind="number"),
-                field("powheg", "events_per_candidate", "Events per candidate", 2, kind="number"),
+                field(
+                    "powheg",
+                    "max_powheg_events",
+                    "Interaction Candidates to Simulate",
+                    50,
+                    kind="number",
+                    help_text="Number of distinct interaction sites selected from the Observer Bridge that will be sent to POWHEG.",
+                    minimum=1,
+                    step=1,
+                ),
+                field(
+                    "powheg",
+                    "events_per_candidate",
+                    "POWHEG Events per Interaction",
+                    1,
+                    kind="number",
+                    help_text="Number of independent POWHEG Monte Carlo hard-scattering realizations generated for each selected interaction site.",
+                    minimum=1,
+                    step=1,
+                ),
                 field("powheg", "random_seed", "Random seed", 12345, kind="number"),
                 field("powheg", "powheg_seed_mode", "Seed mode", "base_plus_candidate_rank", kind="select", options=["base_plus_candidate_rank"]),
                 field("powheg", "min_final_observation_score", "Min final score", 0.0, kind="number"),
@@ -657,9 +684,9 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
         problems.append("powheg.powheg_process must be nudis in H3-W9a")
     if str(powheg.get("ranking_policy", "top_score")) not in {"top_score", "all_candidates", "score_threshold"}:
         problems.append("powheg.ranking_policy must be top_score, all_candidates, or score_threshold")
-    if int(float(powheg.get("max_powheg_events", 5))) <= 0:
+    if int(float(powheg.get("max_powheg_events", 50))) <= 0:
         problems.append("powheg.max_powheg_events must be positive")
-    if int(float(powheg.get("events_per_candidate", 2))) <= 0:
+    if int(float(powheg.get("events_per_candidate", 1))) <= 0:
         problems.append("powheg.events_per_candidate must be positive")
     try:
         int(float(powheg.get("random_seed", 0)))

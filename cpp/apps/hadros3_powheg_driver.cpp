@@ -15,12 +15,9 @@ namespace fs = std::filesystem;
 struct Config {
   std::string backend = "local_powheg";
   std::string process = "nudis";
-  std::string ranking_policy = "top_score";
-  int max_powheg_events = 50;
   int events_per_candidate = 1;
   int random_seed = 12345;
   std::string seed_mode = "base_plus_candidate_rank";
-  double min_score = 0.0;
   std::string run_mode = "dry_run";
 };
 
@@ -34,6 +31,8 @@ struct Candidate {
   double physics_weight = 0.0;
   double observer_weight = 0.0;
   double final_score = 0.0;
+  std::string selection_policy;
+  std::string selection_reason;
 };
 
 struct Request {
@@ -145,12 +144,9 @@ static Config load_config(const fs::path& path) {
   const std::string powheg = section_text(read_text(path), "powheg");
   c.backend = json_string(powheg, "powheg_backend", c.backend);
   c.process = json_string(powheg, "powheg_process", c.process);
-  c.ranking_policy = json_string(powheg, "ranking_policy", c.ranking_policy);
-  c.max_powheg_events = std::max(1, static_cast<int>(json_number(powheg, "max_powheg_events", c.max_powheg_events)));
   c.events_per_candidate = std::max(1, static_cast<int>(json_number(powheg, "events_per_candidate", c.events_per_candidate)));
   c.random_seed = static_cast<int>(json_number(powheg, "random_seed", c.random_seed));
   c.seed_mode = json_string(powheg, "powheg_seed_mode", c.seed_mode);
-  c.min_score = std::max(0.0, json_number(powheg, "min_final_observation_score", c.min_score));
   c.run_mode = json_string(powheg, "run_mode", c.run_mode);
   if (c.backend != "local_powheg") throw std::runtime_error("powheg_backend must be local_powheg");
   if (c.process != "nudis") throw std::runtime_error("powheg_process must be nudis");
@@ -158,7 +154,6 @@ static Config load_config(const fs::path& path) {
     throw std::runtime_error("POWHEG run_mode must be dry_run, real_smoke, or real_free");
   }
   if (c.run_mode == "real_smoke") {
-    c.max_powheg_events = 1;
     c.events_per_candidate = std::min(c.events_per_candidate, 2);
   }
   return c;
@@ -167,7 +162,7 @@ static Config load_config(const fs::path& path) {
 static Candidate candidate_from_line(const std::string& line, std::size_t index) {
   Candidate c;
   c.input_index = index;
-  c.candidate_rank = static_cast<int>(index + 1);
+  c.candidate_rank = static_cast<int>(json_number(line, "selection_rank", static_cast<double>(index + 1)));
   c.interaction_id = json_scalar_string(line, "interaction_id", "interaction-" + std::to_string(index + 1));
   c.event_id = json_scalar_string(line, "event_id", "event-" + std::to_string(index + 1));
   c.source_sample_id = json_scalar_string(line, "source_sample_id", "0");
@@ -175,12 +170,14 @@ static Candidate candidate_from_line(const std::string& line, std::size_t index)
   c.physics_weight = json_number(line, "physics_weight", 0.0);
   c.observer_weight = json_number(line, "observer_weight", 0.0);
   c.final_score = json_number(line, "final_observation_score", 0.0);
+  c.selection_policy = json_scalar_string(line, "selection_policy", "");
+  c.selection_reason = json_scalar_string(line, "selection_reason", "");
   return c;
 }
 
 static std::vector<Candidate> read_candidates(const fs::path& path) {
   std::ifstream in(path);
-  if (!in) throw std::runtime_error("ObserverBridge ranked events not found: " + path.string());
+  if (!in) throw std::runtime_error("ObserverBridge selected candidates not found. Run Observer Bridge with downstream selection first: " + path.string());
   std::vector<Candidate> rows;
   std::string line;
   while (std::getline(in, line)) {
@@ -188,20 +185,6 @@ static std::vector<Candidate> read_candidates(const fs::path& path) {
     rows.push_back(candidate_from_line(line, rows.size()));
   }
   return rows;
-}
-
-static std::vector<Candidate> select_candidates(std::vector<Candidate> candidates, const Config& cfg) {
-  std::sort(candidates.begin(), candidates.end(), [](const Candidate& a, const Candidate& b) {
-    if (a.final_score != b.final_score) return a.final_score > b.final_score;
-    return a.input_index < b.input_index;
-  });
-  std::vector<Candidate> out;
-  for (const auto& c : candidates) {
-    if (cfg.ranking_policy == "score_threshold" && c.final_score < cfg.min_score) continue;
-    out.push_back(c);
-    if (static_cast<int>(out.size()) >= cfg.max_powheg_events) break;
-  }
-  return out;
 }
 
 static double qmax_for_energy(double energy_gev) {
@@ -288,6 +271,10 @@ static void write_requests(const fs::path& path, const std::vector<Request>& req
         << "\"physics_weight\":" << r.candidate.physics_weight << ","
         << "\"observer_weight\":" << r.candidate.observer_weight << ","
         << "\"final_observation_score\":" << r.candidate.final_score << ","
+        << "\"powheg_candidate_source\":\"ObserverBridge/observer_bridge_selected_candidates.jsonl\","
+        << "\"powheg_selection_performed_by\":\"ObserverBridge\","
+        << "\"powheg_selection_policy\":" << quote(r.candidate.selection_policy) << ","
+        << "\"selection_reason\":" << quote(r.candidate.selection_reason) << ","
         << "\"powheg_input_path\":" << quote(rel_to(r.card_path, run_output)) << ","
         << "\"powheg_seed\":" << r.seed << ","
         << "\"powheg_status\":" << quote(status) << ","
@@ -325,6 +312,7 @@ static void write_summary_json(const fs::path& path, const Config& cfg, int inpu
   const bool real_smoke = cfg.run_mode == "real_smoke";
   const bool real_free = cfg.run_mode == "real_free";
   const std::string stage_name = real_smoke ? "H3-W9b POWHEG Real Run Smoke Mode" : (real_free ? "H3-W9b POWHEG Real Free Mode" : "H3-W9a POWHEG Integration Dry Run");
+  const std::string selection_policy = requests.empty() ? "" : requests.front().candidate.selection_policy;
   out << std::setprecision(17);
   out << "{\n"
       << "  \"stage_name\": " << quote(stage_name) << ",\n"
@@ -336,22 +324,23 @@ static void write_summary_json(const fs::path& path, const Config& cfg, int inpu
       << "  \"powheg_real_free_invoked\": " << (real_free ? "true" : "false") << ",\n"
       << "  \"powheg_invoked\": false,\n"
       << "  \"pwhg_main_executed\": false,\n"
-      << "  \"powheg_jobs_prepared\": " << requests.size() << ",\n"
       << "  \"powheg_cards_generated\": " << requests.size() << ",\n"
       << "  \"powheg_lhe_generated\": false,\n"
       << "  \"powheg_runtime_self_contained\": true,\n"
       << "  \"backend_language\": \"C++17\",\n"
       << "  \"backend_executable\": \"bin/hadros3_powheg_driver\",\n"
+      << "  \"powheg_candidate_source\": \"ObserverBridge/observer_bridge_selected_candidates.jsonl\",\n"
+      << "  \"powheg_n_selected_candidates_input\": " << input_count << ",\n"
+      << "  \"powheg_selection_performed_by\": \"ObserverBridge\",\n"
+      << "  \"powheg_selection_policy\": " << quote(selection_policy) << ",\n"
+      << "  \"powheg_jobs_prepared\": " << requests.size() << ",\n"
       << "  \"n_candidates_input\": " << input_count << ",\n"
       << "  \"n_powheg_jobs\": " << requests.size() << ",\n"
       << "  \"n_lhe_events\": 0,\n"
       << "  \"lhe_found\": false,\n"
-      << "  \"ranking_policy\": " << quote(cfg.ranking_policy) << ",\n"
-      << "  \"max_powheg_events\": " << cfg.max_powheg_events << ",\n"
       << "  \"events_per_candidate\": " << cfg.events_per_candidate << ",\n"
       << "  \"random_seed\": " << cfg.random_seed << ",\n"
       << "  \"powheg_seed_mode\": " << quote(cfg.seed_mode) << ",\n"
-      << "  \"min_final_observation_score\": " << cfg.min_score << ",\n"
       << "  \"top_powheg_request_id\": " << quote(requests.empty() ? "" : requests.front().request_id) << ",\n"
       << "  \"min_score\": " << min_score << ",\n"
       << "  \"max_score\": " << max_score << ",\n"
@@ -390,14 +379,17 @@ int main(int argc, char** argv) {
     }
     if (run_output.empty()) throw std::runtime_error("--run-output is required");
     const fs::path config_path = run_output / "RunMetadata" / "hadros3_config.json";
-    const fs::path input_path = run_output / "ObserverBridge" / "observer_bridge_ranked_events.jsonl";
+    const fs::path input_path = run_output / "ObserverBridge" / "observer_bridge_selected_candidates.jsonl";
     const fs::path output_dir = run_output / "POWHEG";
     fs::create_directories(output_dir);
     fs::create_directories(output_dir / "powheg_input_cards");
 
     const Config cfg = load_config(config_path);
     const std::vector<Candidate> candidates = read_candidates(input_path);
-    const std::vector<Candidate> selected = select_candidates(candidates, cfg);
+    std::vector<Candidate> selected = candidates;
+    if (cfg.run_mode == "real_smoke" && selected.size() > 1) {
+      selected.resize(1);
+    }
     std::vector<Request> requests;
     for (std::size_t i = 0; i < selected.size(); ++i) {
       std::ostringstream id;

@@ -320,6 +320,34 @@ def schema() -> list[dict[str, Any]]:
                 field("observer_bridge", "min_final_observation_score", "Min final score", 0.0, kind="number"),
                 field(
                     "observer_bridge",
+                    "downstream_selection_policy",
+                    "Selection policy",
+                    "top_n",
+                    kind="select",
+                    options=["all_candidates", "top_n", "score_threshold"],
+                    help_text="Observer Bridge policy for selecting ranked candidates that downstream stages such as POWHEG may consume.",
+                ),
+                field(
+                    "observer_bridge",
+                    "downstream_top_n_candidates",
+                    "Top N candidates",
+                    50,
+                    kind="number",
+                    help_text="Number of highest-scoring Observer Bridge candidates selected for downstream stages when policy is top_n.",
+                    minimum=1,
+                    step=1,
+                ),
+                field(
+                    "observer_bridge",
+                    "downstream_min_final_observation_score",
+                    "Minimum observation score",
+                    0.0,
+                    kind="number",
+                    help_text="Minimum final_observation_score selected for downstream stages when policy is score_threshold.",
+                    minimum=0.0,
+                ),
+                field(
+                    "observer_bridge",
                     "candidate_overlay_mapping",
                     "Candidate overlay mapping",
                     "kerr_pixel_match",
@@ -356,17 +384,6 @@ def schema() -> list[dict[str, Any]]:
             "fields": [
                 field("powheg", "powheg_backend", "POWHEG backend", "local_powheg", kind="select", options=["local_powheg"]),
                 field("powheg", "powheg_process", "POWHEG process", "nudis", kind="select", options=["nudis"]),
-                field("powheg", "ranking_policy", "Ranking policy", "top_score", kind="select", options=["top_score", "all_candidates", "score_threshold"]),
-                field(
-                    "powheg",
-                    "max_powheg_events",
-                    "Interaction Candidates to Simulate",
-                    50,
-                    kind="number",
-                    help_text="Number of distinct interaction sites selected from the Observer Bridge that will be sent to POWHEG.",
-                    minimum=1,
-                    step=1,
-                ),
                 field(
                     "powheg",
                     "events_per_candidate",
@@ -379,7 +396,6 @@ def schema() -> list[dict[str, Any]]:
                 ),
                 field("powheg", "random_seed", "Random seed", 12345, kind="number"),
                 field("powheg", "powheg_seed_mode", "Seed mode", "base_plus_candidate_rank", kind="select", options=["base_plus_candidate_rank"]),
-                field("powheg", "min_final_observation_score", "Min final score", 0.0, kind="number"),
                 field(
                     "powheg",
                     "run_mode",
@@ -674,6 +690,12 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
         problems.append("observer_bridge.min_observer_weight must be non-negative")
     if float(bridge.get("min_final_observation_score", 0.0)) < 0.0:
         problems.append("observer_bridge.min_final_observation_score must be non-negative")
+    if str(bridge.get("downstream_selection_policy", "top_n")) not in {"all_candidates", "top_n", "score_threshold"}:
+        problems.append("observer_bridge.downstream_selection_policy must be all_candidates, top_n, or score_threshold")
+    if int(float(bridge.get("downstream_top_n_candidates", 50))) <= 0:
+        problems.append("observer_bridge.downstream_top_n_candidates must be positive")
+    if float(bridge.get("downstream_min_final_observation_score", 0.0)) < 0.0:
+        problems.append("observer_bridge.downstream_min_final_observation_score must be non-negative")
     if str(bridge.get("candidate_overlay_mapping", "kerr_pixel_match")) not in {"kerr_pixel_match", "geometric_proxy"}:
         problems.append("observer_bridge.candidate_overlay_mapping must be kerr_pixel_match or geometric_proxy")
     if int(float(bridge.get("kerr_pixel_match_resolution_x", 32))) <= 0:
@@ -694,9 +716,7 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
         problems.append("powheg.powheg_backend must be local_powheg in H3-W9a")
     if str(powheg.get("powheg_process", "nudis")) != "nudis":
         problems.append("powheg.powheg_process must be nudis in H3-W9a")
-    if str(powheg.get("ranking_policy", "top_score")) not in {"top_score", "all_candidates", "score_threshold"}:
-        problems.append("powheg.ranking_policy must be top_score, all_candidates, or score_threshold")
-    if int(float(powheg.get("max_powheg_events", 50))) <= 0:
+    if "max_powheg_events" in powheg and int(float(powheg.get("max_powheg_events", 50))) <= 0:
         problems.append("powheg.max_powheg_events must be positive")
     if int(float(powheg.get("events_per_candidate", 1))) <= 0:
         problems.append("powheg.events_per_candidate must be positive")
@@ -706,7 +726,7 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
         problems.append("powheg.random_seed must be an integer")
     if str(powheg.get("powheg_seed_mode", "base_plus_candidate_rank")) != "base_plus_candidate_rank":
         problems.append("powheg.powheg_seed_mode must be base_plus_candidate_rank in H3-W9a")
-    if float(powheg.get("min_final_observation_score", 0.0)) < 0.0:
+    if "min_final_observation_score" in powheg and float(powheg.get("min_final_observation_score", 0.0)) < 0.0:
         problems.append("powheg.min_final_observation_score must be non-negative")
     if str(powheg.get("run_mode", "dry_run")) not in {"dry_run", "real_smoke", "real_free"}:
         problems.append("powheg.run_mode must be dry_run, real_smoke, or real_free")

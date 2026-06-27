@@ -38,9 +38,11 @@ def test_schema_exposes_hadros3_first_stage_controls() -> None:
         ("observer_bridge", "observer_bridge_backend"),
         ("observer_bridge", "bridge_mode"),
         ("observer_bridge", "candidate_overlay_mapping"),
+        ("observer_bridge", "downstream_selection_policy"),
+        ("observer_bridge", "downstream_top_n_candidates"),
         ("observer_bridge", "interactive_max_candidates"),
         ("powheg", "powheg_backend"),
-        ("powheg", "ranking_policy"),
+        ("powheg", "events_per_candidate"),
         ("provenance", "trust_boundary"),
     }
     assert expected <= keys
@@ -50,44 +52,57 @@ def test_default_config_is_valid() -> None:
     assert validate_values(defaults()) == []
 
 
-def test_powheg_controls_use_physical_labels_and_unbounded_positive_defaults() -> None:
+def test_downstream_selection_lives_in_observer_bridge_and_powheg_consumes_it() -> None:
     values = defaults()
+    bridge = values["observer_bridge"]
     powheg = values["powheg"]
-    fields = {
+    powheg_fields = {
         field["key"]: field
         for tab in schema()
         for field in tab["fields"]
         if field["section"] == "powheg"
     }
+    bridge_fields = {
+        field["key"]: field
+        for tab in schema()
+        for field in tab["fields"]
+        if field["section"] == "observer_bridge"
+    }
     html = render_html(values, Path("presets/hadros_web/default_config.json"))
 
-    assert powheg["max_powheg_events"] == 50
+    assert bridge["downstream_selection_policy"] == "top_n"
+    assert bridge["downstream_top_n_candidates"] == 50
     assert powheg["events_per_candidate"] == 1
-    assert fields["max_powheg_events"]["label"] == "Interaction Candidates to Simulate"
-    assert fields["events_per_candidate"]["label"] == "POWHEG Events per Interaction"
-    assert "real_free" in fields["run_mode"]["options"]
-    assert fields["max_powheg_events"]["min"] == 1
-    assert fields["events_per_candidate"]["min"] == 1
-    assert fields["max_powheg_events"]["step"] == 1
-    assert fields["events_per_candidate"]["step"] == 1
-    assert "max" not in fields["max_powheg_events"]
-    assert "max" not in fields["events_per_candidate"]
+    assert bridge_fields["downstream_selection_policy"]["label"] == "Selection policy"
+    assert bridge_fields["downstream_top_n_candidates"]["label"] == "Top N candidates"
+    assert powheg_fields["events_per_candidate"]["label"] == "POWHEG Events per Interaction"
+    assert "ranking_policy" not in powheg_fields
+    assert "max_powheg_events" not in powheg_fields
+    assert "min_final_observation_score" not in powheg_fields
+    assert "real_free" in powheg_fields["run_mode"]["options"]
+    assert powheg_fields["events_per_candidate"]["min"] == 1
+    assert powheg_fields["events_per_candidate"]["step"] == 1
+    assert "max" not in powheg_fields["events_per_candidate"]
     high_values = defaults()
-    high_values["powheg"]["max_powheg_events"] = 10000
+    high_values["observer_bridge"]["downstream_top_n_candidates"] = 10000
     high_values["powheg"]["events_per_candidate"] = 250
     assert validate_values(high_values) == []
     powheg_panel = html[html.index("function renderPowhegPanel") : html.index("function renderContextPanel")]
+    observer_panel = html[html.index("function renderObserverBridgePanel") : html.index("function renderPowhegPanel")]
     assert "field-help" in powheg_panel
-    assert "Number of distinct interaction sites selected from the Observer Bridge that will be sent to POWHEG." in html
+    assert "Downstream Candidate Selection" in observer_panel
+    assert "Observer Bridge selects the ranked candidates that downstream stages consume." in html
+    assert "Number of highest-scoring Observer Bridge candidates selected for downstream stages when policy is top_n." in html
     assert "Number of independent POWHEG Monte Carlo hard-scattering realizations generated for each selected interaction site." in html
     assert 'value("run_mode") === "real_smoke"' in powheg_panel
     assert "Real smoke safety mode:" in html
-    assert "only the top candidate is executed, with at most 2 POWHEG events" in html
-    assert "dry_run respects the configured values" in html
+    assert "only the first selected Observer Bridge candidate is executed" in html
     assert "Real free mode may be computationally expensive." in html
     assert "Run POWHEG Real Free" in html
     assert "Max POWHEG jobs" not in html
     assert "Events per candidate" not in html
+    assert "Interaction Candidates to Simulate" not in powheg_panel
+    assert "Ranking policy" not in powheg_panel
 
 
 def test_versioned_hadros_web_preset_is_valid() -> None:
@@ -202,6 +217,8 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert payload["outputs"]["paths"]["gbw_vs_iim_summary"] == "DIS/gbw_vs_iim_summary.json"
     assert payload["outputs"]["paths"]["observer_bridge_candidates"] == "ObserverBridge/observer_bridge_candidates.jsonl"
     assert payload["outputs"]["paths"]["observer_bridge_ranked_events"] == "ObserverBridge/observer_bridge_ranked_events.jsonl"
+    assert payload["outputs"]["paths"]["observer_bridge_selected_candidates"] == "ObserverBridge/observer_bridge_selected_candidates.jsonl"
+    assert payload["outputs"]["paths"]["observer_bridge_selection_summary"] == "ObserverBridge/observer_bridge_selection_summary.json"
     assert payload["outputs"]["paths"]["observer_bridge_summary_json"] == "ObserverBridge/observer_bridge_summary.json"
     assert payload["outputs"]["paths"]["observer_bridge_summary"] == "ObserverBridge/observer_bridge_summary.csv"
     assert payload["outputs"]["paths"]["observer_bridge_report"] == "ObserverBridge/observer_bridge_report.json"
@@ -316,6 +333,8 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert "ObserverBridge/" in html
     assert "observer_bridge_candidates.jsonl" in html
     assert "observer_bridge_ranked_events.jsonl" in html
+    assert "observer_bridge_selected_candidates.jsonl" in html
+    assert "observer_bridge_selection_summary.json" in html
     assert "observer_bridge_summary.json" in html
     assert "observer_bridge_summary.csv" in html
     assert "observer_bridge_report.json" in html

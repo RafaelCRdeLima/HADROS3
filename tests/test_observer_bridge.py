@@ -8,7 +8,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 from hadros3.config import defaults
-from hadros3.observer_bridge import _kerr_pixel_match_candidates, _project_camera, _spherical, generate_observer_bridge_products
+from hadros3.observer_bridge import _kerr_pixel_match_candidates, _project_camera, _select_downstream_candidates, _spherical, generate_observer_bridge_products
 from hadros3.pipeline import render_hadros_web
 
 
@@ -119,6 +119,8 @@ def test_observer_bridge_scores_all_dis_interactions_without_modifying_dis(tmp_p
     for filename in [
         "observer_bridge_candidates.jsonl",
         "observer_bridge_ranked_events.jsonl",
+        "observer_bridge_selected_candidates.jsonl",
+        "observer_bridge_selection_summary.json",
         "observer_bridge_summary.json",
         "observer_bridge_summary.csv",
         "observer_bridge_report.json",
@@ -162,6 +164,13 @@ def test_observer_bridge_scores_all_dis_interactions_without_modifying_dis(tmp_p
     assert summary["camera_overlay_candidates_inside_fov"] == summary["kerr_pixel_match_n_matched"]
     assert summary["camera_overlay_top_n"] == 5
     assert summary["observer_bridge_kerr_interactive_view_generated"] is True
+    assert summary["observer_bridge_selected_candidates_generated"] is True
+    assert summary["observer_bridge_selection_summary_generated"] is True
+    assert summary["downstream_candidate_selection_enabled"] is True
+    assert summary["downstream_selection_policy"] == "top_n"
+    assert summary["downstream_n_candidates_ranked"] == 3
+    assert summary["downstream_n_candidates_selected"] == 3
+    assert summary["downstream_stage_target"] == "powheg"
     assert summary["interactive_view_uses_kerr_ray_matching"] is True
     assert summary["interactive_view_not_final_observed_image"] is True
     assert summary["interactive_view_diagnostic_only"] is True
@@ -213,6 +222,44 @@ def test_observer_bridge_scores_all_dis_interactions_without_modifying_dis(tmp_p
     scores = [row["final_observation_score"] for row in ranked]
     assert scores == sorted(scores, reverse=True)
     assert ranked[0]["event_id"] == "event-inside-high"
+    selected = [json.loads(line) for line in (bridge_dir / "observer_bridge_selected_candidates.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert len(selected) == 3
+    assert all(row["selected_for_downstream"] is True for row in selected)
+    assert all(row["downstream_stage_target"] == "powheg" for row in selected)
+    assert [row["selection_rank"] for row in selected] == [1, 2, 3]
+    selection_summary = json.loads((bridge_dir / "observer_bridge_selection_summary.json").read_text(encoding="utf-8"))
+    assert selection_summary["n_candidates_ranked"] == 3
+    assert selection_summary["n_candidates_selected"] == 3
+    assert selection_summary["selection_policy"] == "top_n"
+
+
+def test_observer_bridge_downstream_selection_policies(tmp_path: Path) -> None:
+    ranked = [
+        {"interaction_id": "a", "final_observation_score": 0.9},
+        {"interaction_id": "b", "final_observation_score": 0.5},
+        {"interaction_id": "c", "final_observation_score": 0.1},
+    ]
+    values = defaults()
+
+    values["observer_bridge"].update({"downstream_selection_policy": "all_candidates"})
+    all_summary = _select_downstream_candidates(ranked, values, tmp_path)
+    all_rows = [json.loads(line) for line in (tmp_path / "observer_bridge_selected_candidates.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert all_summary["downstream_n_candidates_selected"] == 3
+    assert [row["interaction_id"] for row in all_rows] == ["a", "b", "c"]
+
+    values["observer_bridge"].update({"downstream_selection_policy": "top_n", "downstream_top_n_candidates": 2})
+    top_summary = _select_downstream_candidates(ranked, values, tmp_path)
+    top_rows = [json.loads(line) for line in (tmp_path / "observer_bridge_selected_candidates.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert top_summary["downstream_n_candidates_selected"] == 2
+    assert [row["interaction_id"] for row in top_rows] == ["a", "b"]
+    assert top_rows[0]["selection_reason"] == "rank<=2"
+
+    values["observer_bridge"].update({"downstream_selection_policy": "score_threshold", "downstream_min_final_observation_score": 0.5})
+    threshold_summary = _select_downstream_candidates(ranked, values, tmp_path)
+    threshold_rows = [json.loads(line) for line in (tmp_path / "observer_bridge_selected_candidates.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert threshold_summary["downstream_n_candidates_selected"] == 2
+    assert [row["interaction_id"] for row in threshold_rows] == ["a", "b"]
+    assert threshold_rows[0]["selection_policy"] == "score_threshold"
 
 
 def test_observer_bridge_provenance_is_scoring_only(tmp_path: Path) -> None:
@@ -258,6 +305,11 @@ def test_observer_bridge_provenance_is_scoring_only(tmp_path: Path) -> None:
     assert provenance["observer_bridge"]["camera_overlay_top_n"] == 5
     assert provenance["observer_bridge"]["observer_bridge_kerr_interactive_view_generated"] is True
     assert provenance["observer_bridge"]["interactive_view_uses_kerr_ray_matching"] is True
+    assert provenance["observer_bridge"]["downstream_candidate_selection_enabled"] is True
+    assert provenance["observer_bridge"]["downstream_selection_policy"] == "top_n"
+    assert provenance["observer_bridge"]["downstream_n_candidates_ranked"] == 3
+    assert provenance["observer_bridge"]["downstream_n_candidates_selected"] == 3
+    assert provenance["observer_bridge"]["downstream_stage_target"] == "powheg"
     assert provenance["observer_bridge"]["interactive_view_not_final_observed_image"] is True
     assert provenance["observer_bridge"]["interactive_view_diagnostic_only"] is True
     assert provenance["observer_bridge"]["interactive_rays_displayed"] <= 2

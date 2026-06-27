@@ -164,6 +164,8 @@ def ensure_output_layout(run_output: Path) -> None:
         OBSERVER_BRIDGE_DIR: [
             "observer_bridge_candidates.jsonl",
             "observer_bridge_ranked_events.jsonl",
+            "observer_bridge_selected_candidates.jsonl",
+            "observer_bridge_selection_summary.json",
             "observer_bridge_summary.json",
             "observer_bridge_summary.csv",
             "observer_bridge_report.json",

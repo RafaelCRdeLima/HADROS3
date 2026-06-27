@@ -1271,9 +1271,13 @@ def _augment_summary(summary: dict[str, Any], output_dir: Path, requests: list[d
             "powheg_hard_process_event_display_generated": False,
             "powheg_hard_process_event_display_view_generated": False,
             "powheg_lhe_event_view_generated": False,
-            "n_powheg_jobs_requested": int(summary.get("max_powheg_events", len(requests))),
+            "n_powheg_jobs_requested": int(summary.get("powheg_n_selected_candidates_input", len(requests))),
             "n_powheg_jobs_run": 0,
             "events_per_candidate_requested": int(summary.get("events_per_candidate", 0)),
+            "powheg_candidate_source": summary.get("powheg_candidate_source", "ObserverBridge/observer_bridge_selected_candidates.jsonl"),
+            "powheg_n_selected_candidates_input": int(summary.get("powheg_n_selected_candidates_input", len(requests))),
+            "powheg_selection_performed_by": summary.get("powheg_selection_performed_by", "ObserverBridge"),
+            "powheg_selection_policy": summary.get("powheg_selection_policy"),
             "n_lhe_events_total": 0,
             "real_free_mode": is_real_free,
             "real_smoke_safety_clamp": is_real_smoke,
@@ -1294,9 +1298,12 @@ def generate_powheg_products(values: dict[str, dict[str, Any]], *, run_output_di
     if not POWHEG_CPP_EXECUTABLE.exists():
         raise FileNotFoundError(f"POWHEG dry-run C++ backend not found: {POWHEG_CPP_EXECUTABLE}")
 
-    ranked_path = observer_bridge_dir(run_output_dir) / "observer_bridge_ranked_events.jsonl"
-    if not ranked_path.exists():
-        raise FileNotFoundError(f"Observer Bridge ranked events not found: {ranked_path}")
+    selected_path = observer_bridge_dir(run_output_dir) / "observer_bridge_selected_candidates.jsonl"
+    if not selected_path.exists():
+        raise FileNotFoundError(
+            "ObserverBridge selected candidates not found. Run Observer Bridge with downstream selection first: "
+            f"{selected_path}"
+        )
 
     output_dir = powheg_dir(run_output_dir)
     clear_powheg_outputs(run_output_dir)
@@ -1357,9 +1364,13 @@ def generate_powheg_products(values: dict[str, dict[str, Any]], *, run_output_di
                 "n_lhe_events": int(validation_report["n_lhe_events"]),
                 "n_lhe_events_total": int(validation_report["n_lhe_events"]),
                 "n_powheg_jobs": len(requests),
-                "n_powheg_jobs_requested": int(summary.get("max_powheg_events", len(requests))),
+                "n_powheg_jobs_requested": int(summary.get("powheg_n_selected_candidates_input", len(requests))),
                 "n_powheg_jobs_run": int(validation_report["n_powheg_jobs_run"]),
                 "events_per_candidate_requested": int(summary.get("events_per_candidate", 0)),
+                "powheg_candidate_source": summary.get("powheg_candidate_source", "ObserverBridge/observer_bridge_selected_candidates.jsonl"),
+                "powheg_n_selected_candidates_input": int(summary.get("powheg_n_selected_candidates_input", len(requests))),
+                "powheg_selection_performed_by": summary.get("powheg_selection_performed_by", "ObserverBridge"),
+                "powheg_selection_policy": summary.get("powheg_selection_policy"),
                 "powheg_jobs_prepared": len(requests),
                 "powheg_cards_generated": len(requests),
                 "powheg_validation_report_generated": True,

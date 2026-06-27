@@ -16,9 +16,8 @@ from hadros3.provenance import build_provenance
 def test_cpp_powheg_driver_fallbacks_match_dashboard_defaults() -> None:
     source = Path("cpp/apps/hadros3_powheg_driver.cpp").read_text(encoding="utf-8")
 
-    assert "int max_powheg_events = 50;" in source
     assert "int events_per_candidate = 1;" in source
-    assert "int max_powheg_events = 5;" not in source
+    assert "max_powheg_events" not in source
     assert "int events_per_candidate = 2;" not in source
 
 
@@ -33,41 +32,43 @@ def test_powheg_particle_plot_labels_use_latex_names() -> None:
     assert powheg_module._particle_display_name(-1) == "d̄"
 
 
-def _write_ranked_events(run_dir: Path) -> Path:
+def _write_selected_candidates(run_dir: Path, rows: list[dict[str, object]] | None = None) -> Path:
     bridge_dir = run_dir / "ObserverBridge"
     bridge_dir.mkdir(parents=True, exist_ok=True)
-    ranked_path = bridge_dir / "observer_bridge_ranked_events.jsonl"
-    rows = [
-        {
-            "interaction_id": "int-low",
-            "event_id": "evt-low",
-            "source_sample_id": "src-low",
-            "interaction_E_nu_local_gev": 1.0e8,
-            "physics_weight": 0.4,
-            "observer_weight": 0.5,
-            "final_observation_score": 0.2,
-        },
-        {
-            "interaction_id": "int-high",
-            "event_id": "evt-high",
-            "source_sample_id": "src-high",
-            "interaction_E_nu_local_gev": 4.0e9,
-            "physics_weight": 0.8,
-            "observer_weight": 0.9,
-            "final_observation_score": 0.72,
-        },
-        {
-            "interaction_id": "int-mid",
-            "event_id": "evt-mid",
-            "source_sample_id": "src-mid",
-            "interaction_E_nu_local_gev": 7.0e8,
-            "physics_weight": 0.7,
-            "observer_weight": 0.6,
-            "final_observation_score": 0.42,
-        },
-    ]
-    ranked_path.write_text("\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n", encoding="utf-8")
-    return ranked_path
+    selected_path = bridge_dir / "observer_bridge_selected_candidates.jsonl"
+    if rows is None:
+        rows = [
+            {
+                "interaction_id": "int-high",
+                "event_id": "evt-high",
+                "source_sample_id": "src-high",
+                "interaction_E_nu_local_gev": 4.0e9,
+                "physics_weight": 0.8,
+                "observer_weight": 0.9,
+                "final_observation_score": 0.72,
+                "selection_policy": "top_n",
+                "selected_for_downstream": True,
+                "downstream_stage_target": "powheg",
+                "selection_rank": 1,
+                "selection_reason": "rank<=2",
+            },
+            {
+                "interaction_id": "int-mid",
+                "event_id": "evt-mid",
+                "source_sample_id": "src-mid",
+                "interaction_E_nu_local_gev": 7.0e8,
+                "physics_weight": 0.7,
+                "observer_weight": 0.6,
+                "final_observation_score": 0.42,
+                "selection_policy": "top_n",
+                "selected_for_downstream": True,
+                "downstream_stage_target": "powheg",
+                "selection_rank": 2,
+                "selection_reason": "rank<=2",
+            },
+        ]
+    selected_path.write_text("\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n", encoding="utf-8")
+    return selected_path
 
 
 def _sha256(path: Path) -> str:
@@ -80,13 +81,11 @@ def _requests(run_dir: Path) -> list[dict[str, object]]:
 
 
 def test_powheg_dry_run_generates_ranked_cards_without_lhe_or_observer_modification(tmp_path: Path) -> None:
-    ranked_path = _write_ranked_events(tmp_path)
-    before = _sha256(ranked_path)
+    selected_path = _write_selected_candidates(tmp_path)
+    before = _sha256(selected_path)
     values = defaults()
     values["powheg"].update(
         {
-            "ranking_policy": "top_score",
-            "max_powheg_events": 2,
             "events_per_candidate": 3,
             "random_seed": 1000,
             "powheg_seed_mode": "base_plus_candidate_rank",
@@ -97,7 +96,7 @@ def test_powheg_dry_run_generates_ranked_cards_without_lhe_or_observer_modificat
     summary = generate_powheg_products(values, run_output_dir=tmp_path)
     requests = _requests(tmp_path)
 
-    assert _sha256(ranked_path) == before
+    assert _sha256(selected_path) == before
     assert summary["powheg_dry_run_invoked"] is True
     assert summary["powheg_invoked"] is False
     assert summary["pwhg_main_executed"] is False
@@ -107,15 +106,20 @@ def test_powheg_dry_run_generates_ranked_cards_without_lhe_or_observer_modificat
     assert summary["powheg_lhe_message"] == "No LHE available: POWHEG dry run only."
     assert summary["powheg_jobs_prepared"] == 2
     assert summary["powheg_cards_generated"] == 2
+    assert summary["powheg_candidate_source"] == "ObserverBridge/observer_bridge_selected_candidates.jsonl"
+    assert summary["powheg_n_selected_candidates_input"] == 2
+    assert summary["powheg_selection_performed_by"] == "ObserverBridge"
+    assert summary["powheg_selection_policy"] == "top_n"
     assert summary["backend_language"] == "C++17"
     assert requests[0]["interaction_id"] == "int-high"
     assert requests[1]["interaction_id"] == "int-mid"
     assert requests[0]["powheg_request_id"] == "H3PWHG-000001"
     assert len({row["powheg_request_id"] for row in requests}) == len(requests)
-    assert requests[0]["powheg_seed"] == 1002
-    assert requests[1]["powheg_seed"] == 1003
+    assert requests[0]["powheg_seed"] == 1001
+    assert requests[1]["powheg_seed"] == 1002
     assert all(row["powheg_status"] == "dry_run_ready" for row in requests)
     assert all(row["powheg_invoked"] is False for row in requests)
+    assert all(row["powheg_selection_performed_by"] == "ObserverBridge" for row in requests)
 
     first_card = tmp_path / requests[0]["powheg_input_path"]
     card = first_card.read_text(encoding="utf-8")
@@ -126,7 +130,7 @@ def test_powheg_dry_run_generates_ranked_cards_without_lhe_or_observer_modificat
     assert "lhans1" in card
     assert "lhans2" in card
     assert "Qmax" in card
-    assert "iseed 1002" in card
+    assert "iseed 1001" in card
     assert "channel_type 3" in card
     assert "vtype 2" in card
     assert not list((tmp_path / "POWHEG").rglob("*.lhe"))
@@ -149,29 +153,64 @@ def test_powheg_dry_run_generates_ranked_cards_without_lhe_or_observer_modificat
         assert (tmp_path / "POWHEG" / filename).exists()
 
 
-def test_powheg_ranking_policies_and_seed_reproducibility(tmp_path: Path) -> None:
-    _write_ranked_events(tmp_path)
+def test_powheg_uses_selected_candidates_without_applying_own_ranking(tmp_path: Path) -> None:
+    _write_selected_candidates(
+        tmp_path,
+        [
+            {
+                "interaction_id": "int-low-first",
+                "event_id": "evt-low-first",
+                "source_sample_id": "src-low",
+                "interaction_E_nu_local_gev": 1.0e8,
+                "physics_weight": 0.4,
+                "observer_weight": 0.5,
+                "final_observation_score": 0.2,
+                "selection_policy": "all_candidates",
+                "selected_for_downstream": True,
+                "downstream_stage_target": "powheg",
+                "selection_rank": 1,
+                "selection_reason": "all_candidates",
+            },
+            {
+                "interaction_id": "int-high-second",
+                "event_id": "evt-high-second",
+                "source_sample_id": "src-high",
+                "interaction_E_nu_local_gev": 4.0e9,
+                "physics_weight": 0.8,
+                "observer_weight": 0.9,
+                "final_observation_score": 0.72,
+                "selection_policy": "all_candidates",
+                "selected_for_downstream": True,
+                "downstream_stage_target": "powheg",
+                "selection_rank": 2,
+                "selection_reason": "all_candidates",
+            },
+        ],
+    )
     values = defaults()
-    values["powheg"].update({"ranking_policy": "score_threshold", "min_final_observation_score": 0.4, "max_powheg_events": 10, "random_seed": 700})
+    values["powheg"].update({"events_per_candidate": 4, "random_seed": 700})
 
-    generate_powheg_products(values, run_output_dir=tmp_path)
-    threshold_requests = _requests(tmp_path)
-    assert [row["interaction_id"] for row in threshold_requests] == ["int-high", "int-mid"]
-    assert [row["powheg_seed"] for row in threshold_requests] == [702, 703]
+    summary = generate_powheg_products(values, run_output_dir=tmp_path)
+    requests = _requests(tmp_path)
+    assert [row["interaction_id"] for row in requests] == ["int-low-first", "int-high-second"]
+    assert [row["powheg_seed"] for row in requests] == [701, 702]
+    assert summary["powheg_jobs_prepared"] == 2
+    assert summary["n_powheg_jobs_requested"] == 2
+    assert summary["events_per_candidate_requested"] == 4
+    assert summary["powheg_selection_performed_by"] == "ObserverBridge"
 
     generate_powheg_products(values, run_output_dir=tmp_path)
     repeated = _requests(tmp_path)
-    assert [row["powheg_seed"] for row in repeated] == [702, 703]
+    assert [row["powheg_seed"] for row in repeated] == [701, 702]
 
-    values["powheg"].update({"ranking_policy": "all_candidates", "max_powheg_events": 10, "min_final_observation_score": 0.0})
-    summary = generate_powheg_products(values, run_output_dir=tmp_path)
-    all_requests = _requests(tmp_path)
-    assert summary["powheg_jobs_prepared"] == 3
-    assert [row["interaction_id"] for row in all_requests] == ["int-high", "int-mid", "int-low"]
+def test_powheg_fails_without_selected_candidates(tmp_path: Path) -> None:
+    values = defaults()
+    with pytest.raises(FileNotFoundError, match="ObserverBridge selected candidates not found"):
+        generate_powheg_products(values, run_output_dir=tmp_path)
 
 
 def test_powheg_provenance_marks_dry_run_without_real_powheg_invocation(tmp_path: Path) -> None:
-    _write_ranked_events(tmp_path)
+    _write_selected_candidates(tmp_path)
     values = defaults()
     summary = generate_powheg_products(values, run_output_dir=tmp_path)
     provenance = build_provenance(
@@ -235,9 +274,9 @@ def test_lhe_parser_extracts_particle_kinematics(tmp_path: Path) -> None:
 
 
 def test_powheg_real_smoke_fails_clearly_without_local_pwhg_main(tmp_path: Path, monkeypatch) -> None:
-    _write_ranked_events(tmp_path)
+    _write_selected_candidates(tmp_path)
     values = defaults()
-    values["powheg"].update({"run_mode": "real_smoke", "max_powheg_events": 3, "events_per_candidate": 2})
+    values["powheg"].update({"run_mode": "real_smoke", "events_per_candidate": 2})
     monkeypatch.setattr(powheg_module, "POWHEG_BINARY", tmp_path / "missing" / "pwhg_main")
 
     with pytest.raises(FileNotFoundError, match="Local POWHEG pwhg_main not found"):
@@ -245,8 +284,8 @@ def test_powheg_real_smoke_fails_clearly_without_local_pwhg_main(tmp_path: Path,
 
 
 def test_powheg_real_smoke_executes_local_pwhg_main_and_generates_parseable_lhe(tmp_path: Path, monkeypatch) -> None:
-    ranked_path = _write_ranked_events(tmp_path)
-    before = _sha256(ranked_path)
+    selected_path = _write_selected_candidates(tmp_path)
+    before = _sha256(selected_path)
     fake_pwhg = tmp_path / "external" / "powheg" / "build" / "DIS" / "pwhg_main"
     fake_pwhg.parent.mkdir(parents=True, exist_ok=True)
     fake_pwhg.write_text(
@@ -273,11 +312,11 @@ LHE
     monkeypatch.setattr(powheg_module, "POWHEG_BINARY", fake_pwhg)
 
     values = defaults()
-    values["powheg"].update({"run_mode": "real_smoke", "max_powheg_events": 10, "events_per_candidate": 2})
+    values["powheg"].update({"run_mode": "real_smoke", "events_per_candidate": 2})
     summary = generate_powheg_products(values, run_output_dir=tmp_path)
     requests = _requests(tmp_path)
 
-    assert _sha256(ranked_path) == before
+    assert _sha256(selected_path) == before
     assert summary["powheg_run_mode"] == "real_smoke"
     assert summary["powheg_dry_run_invoked"] is False
     assert summary["powheg_real_smoke_invoked"] is True
@@ -422,7 +461,7 @@ LHE
 
 
 def test_powheg_real_free_runs_configured_jobs_and_aggregates_lhe_products(tmp_path: Path, monkeypatch) -> None:
-    _write_ranked_events(tmp_path)
+    _write_selected_candidates(tmp_path)
     fake_pwhg = tmp_path / "external" / "powheg" / "build" / "DIS" / "pwhg_main"
     fake_pwhg.parent.mkdir(parents=True, exist_ok=True)
     fake_pwhg.write_text(
@@ -456,7 +495,7 @@ LHE_TAIL
     monkeypatch.setattr(powheg_module, "POWHEG_BINARY", fake_pwhg)
 
     values = defaults()
-    values["powheg"].update({"run_mode": "real_free", "max_powheg_events": 2, "events_per_candidate": 2})
+    values["powheg"].update({"run_mode": "real_free", "events_per_candidate": 2})
     summary = generate_powheg_products(values, run_output_dir=tmp_path)
     requests = _requests(tmp_path)
 
@@ -468,7 +507,6 @@ LHE_TAIL
     assert summary["powheg_invoked"] is True
     assert summary["pwhg_main_executed"] is True
     assert summary["powheg_lhe_generated"] is True
-    assert summary["max_powheg_events"] == 2
     assert summary["events_per_candidate"] == 2
     assert summary["n_powheg_jobs_requested"] == 2
     assert summary["n_powheg_jobs_run"] == 2

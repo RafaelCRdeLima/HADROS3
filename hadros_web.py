@@ -192,6 +192,8 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
     dis_gbw_iim_summary_path = dis_output_dir / "gbw_vs_iim_summary.json"
     bridge_candidates_path = bridge_dir / "observer_bridge_candidates.jsonl"
     bridge_ranked_path = bridge_dir / "observer_bridge_ranked_events.jsonl"
+    bridge_selected_path = bridge_dir / "observer_bridge_selected_candidates.jsonl"
+    bridge_selection_summary_path = bridge_dir / "observer_bridge_selection_summary.json"
     bridge_summary_json_path = bridge_dir / "observer_bridge_summary.json"
     bridge_summary_csv_path = bridge_dir / "observer_bridge_summary.csv"
     bridge_report_path = bridge_dir / "observer_bridge_report.json"
@@ -382,6 +384,8 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             "products": {
                 "observer_bridge_candidates": bridge_candidates_path.exists(),
                 "observer_bridge_ranked_events": bridge_ranked_path.exists(),
+                "observer_bridge_selected_candidates": bridge_selected_path.exists(),
+                "observer_bridge_selection_summary": bridge_selection_summary_path.exists(),
                 "observer_bridge_summary_json": bridge_summary_json_path.exists(),
                 "observer_bridge_summary": bridge_summary_csv_path.exists(),
                 "observer_bridge_report": bridge_report_path.exists(),
@@ -400,6 +404,8 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             "links": {
                 "observer_bridge_candidates": rel(bridge_candidates_path, output_dir),
                 "observer_bridge_ranked_events": rel(bridge_ranked_path, output_dir),
+                "observer_bridge_selected_candidates": rel(bridge_selected_path, output_dir),
+                "observer_bridge_selection_summary": rel(bridge_selection_summary_path, output_dir),
                 "observer_bridge_summary_json": rel(bridge_summary_json_path, output_dir),
                 "observer_bridge_summary": rel(bridge_summary_csv_path, output_dir),
                 "observer_bridge_report": rel(bridge_report_path, output_dir),
@@ -417,7 +423,7 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
         },
         "powheg": {
             "configured_status": values.get("powheg", {}).get("status"),
-            "input_observer_bridge_found": bridge_ranked_path.exists(),
+            "input_observer_bridge_found": bridge_selected_path.exists(),
             "output_dir": rel(powheg_output_dir, output_dir),
             "n_candidates_input": powheg_summary.get("n_candidates_input", 0) if powheg_summary else 0,
             "powheg_jobs_prepared": powheg_summary.get("powheg_jobs_prepared", 0) if powheg_summary else 0,
@@ -558,6 +564,8 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             "observer_bridge_score_distribution_exists": bridge_score_distribution_path.exists(),
             "observer_bridge_weight_breakdown_exists": bridge_weight_breakdown_path.exists(),
             "observer_bridge_visibility_map_exists": bridge_visibility_map_path.exists(),
+            "observer_bridge_selected_candidates_exists": bridge_selected_path.exists(),
+            "observer_bridge_selection_summary_exists": bridge_selection_summary_path.exists(),
             "observer_bridge_ranked_events_png_exists": bridge_ranked_png_path.exists(),
             "observer_bridge_geometry_3d_html_exists": bridge_geometry_3d_html_path.exists(),
             "observer_bridge_camera_view_exists": bridge_camera_view_path.exists(),
@@ -652,6 +660,8 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "gbw_vs_iim_summary": rel(dis_gbw_iim_summary_path, output_dir),
                 "observer_bridge_candidates": rel(bridge_candidates_path, output_dir),
                 "observer_bridge_ranked_events": rel(bridge_ranked_path, output_dir),
+                "observer_bridge_selected_candidates": rel(bridge_selected_path, output_dir),
+                "observer_bridge_selection_summary": rel(bridge_selection_summary_path, output_dir),
                 "observer_bridge_summary_json": rel(bridge_summary_json_path, output_dir),
                 "observer_bridge_summary": rel(bridge_summary_csv_path, output_dir),
                 "observer_bridge_report": rel(bridge_report_path, output_dir),
@@ -825,6 +835,8 @@ function setObserverBridgeOutputs(exists) {{
   state.observer_bridge_summary = exists ? state.observer_bridge_summary : null;
   state.outputs.observer_bridge_candidates_exists = exists;
   state.outputs.observer_bridge_ranked_events_exists = exists;
+  state.outputs.observer_bridge_selected_candidates_exists = exists;
+  state.outputs.observer_bridge_selection_summary_exists = exists;
   state.outputs.observer_bridge_summary_json_exists = exists;
   state.outputs.observer_bridge_summary_exists = exists;
   state.outputs.observer_bridge_report_exists = exists;
@@ -1758,7 +1770,7 @@ function renderObserverBridgePanel() {{
   const status = state.observer_bridge || {{}};
   const fields = Object.fromEntries(state.schema.flatMap(tab => tab.fields).filter(f => f.section === "observer_bridge").map(f => [f.key, f]));
   const value = key => state.values.observer_bridge[key];
-  const input = key => `<label><span>${{fields[key].label}}</span>${{inputFor(fields[key], value(key))}}</label>`;
+  const input = key => `<label><span class="field-label"><span>${{fields[key].label}}</span>${{fields[key].help ? `<span class="field-help">${{fields[key].help}}</span>` : ""}}</span>${{inputFor(fields[key], value(key))}}</label>`;
   const disFound = Boolean(status.input_dis_found || state.outputs.dis_accepted_interactions_exists);
   const configHtml = `<section><h2>Configuration</h2>
     ${{input("observer_bridge_backend")}}
@@ -1773,6 +1785,12 @@ function renderObserverBridgePanel() {{
     ${{input("max_ranked_events")}}
     ${{input("min_observer_weight")}}
     ${{input("min_final_observation_score")}}
+    <section><h2>Downstream Candidate Selection</h2>
+      ${{input("downstream_selection_policy")}}
+      ${{input("downstream_top_n_candidates")}}
+      ${{input("downstream_min_final_observation_score")}}
+      <p class="note">Observer Bridge selects the ranked candidates that downstream stages consume. POWHEG uses this selected list directly and does not apply its own ranking policy.</p>
+    </section>
     ${{input("candidate_overlay_mapping")}}
     ${{input("kerr_pixel_match_resolution_x")}}
     ${{input("kerr_pixel_match_resolution_y")}}
@@ -1798,6 +1816,10 @@ function renderObserverBridgePanel() {{
     <div class="summary-item"><strong>score_mean</strong>${{Number(summary.score_mean || 0).toExponential(4)}}</div>
     <div class="summary-item"><strong>score_max</strong>${{Number(summary.score_max || 0).toExponential(4)}}</div>
     <div class="summary-item"><strong>top_event_id</strong><code>${{summary.top_event_id || "none"}}</code></div>
+    <div class="summary-item"><strong>Ranked candidates</strong>${{summary.downstream_n_candidates_ranked ?? summary.n_candidates_scored ?? 0}}</div>
+    <div class="summary-item"><strong>Selected for downstream</strong>${{summary.downstream_n_candidates_selected ?? 0}}</div>
+    <div class="summary-item"><strong>Selection policy</strong><code>${{summary.downstream_selection_policy || "pending"}}</code></div>
+    <div class="summary-item"><strong>Downstream target</strong><code>${{summary.downstream_stage_target || "powheg"}}</code></div>
     <div class="summary-item"><strong>physics_weight</strong><code>${{summary.physics_weight_definition}}</code></div>
     <div class="summary-item"><strong>observer_weight</strong><code>${{summary.observer_weight_definition}}</code></div>
     <div class="summary-item"><strong>final score</strong><code>${{summary.final_observation_score_definition}}</code></div>
@@ -1823,6 +1845,8 @@ function renderObserverBridgePanel() {{
   const links = `<section><h2>Outputs</h2><div class="output-link-grid">
     ${{state.outputs.observer_bridge_candidates_exists ? `<a href="${{outUrl("observer_bridge_candidates")}}" target="_blank">Candidates JSONL<br><code>${{outPath("observer_bridge_candidates")}}</code></a>` : ""}}
     ${{state.outputs.observer_bridge_ranked_events_exists ? `<a href="${{outUrl("observer_bridge_ranked_events")}}" target="_blank">Ranked events JSONL<br><code>${{outPath("observer_bridge_ranked_events")}}</code></a>` : ""}}
+    ${{state.outputs.observer_bridge_selected_candidates_exists ? `<a href="${{outUrl("observer_bridge_selected_candidates")}}" target="_blank">Selected candidates JSONL<br><code>${{outPath("observer_bridge_selected_candidates")}}</code></a>` : ""}}
+    ${{state.outputs.observer_bridge_selection_summary_exists ? `<a href="${{outUrl("observer_bridge_selection_summary")}}" target="_blank">Selection summary JSON<br><code>${{outPath("observer_bridge_selection_summary")}}</code></a>` : ""}}
     ${{state.outputs.observer_bridge_summary_json_exists ? `<a href="${{outUrl("observer_bridge_summary_json")}}" target="_blank">Summary JSON<br><code>${{outPath("observer_bridge_summary_json")}}</code></a>` : ""}}
     ${{state.outputs.observer_bridge_summary_exists ? `<a href="${{outUrl("observer_bridge_summary")}}" target="_blank">Summary CSV<br><code>${{outPath("observer_bridge_summary")}}</code></a>` : ""}}
     ${{state.outputs.observer_bridge_report_exists ? `<a href="${{outUrl("observer_bridge_report")}}" target="_blank">Report JSON<br><code>${{outPath("observer_bridge_report")}}</code></a>` : ""}}
@@ -1844,15 +1868,22 @@ function renderPowhegPanel() {{
   const value = key => state.values.powheg[key];
   const input = key => `<label><span class="field-label"><span>${{fields[key].label}}</span>${{fields[key].help ? `<span class="field-help">${{fields[key].help}}</span>` : ""}}</span>${{inputFor(fields[key], value(key))}}</label>`;
   const realSmokeNotice = value("run_mode") === "real_smoke"
-    ? `<p class="note"><strong>Real smoke safety mode:</strong> only the top candidate is executed, with at most 2 POWHEG events, regardless of the production values above. This intentional limit applies only to real_smoke; dry_run respects the configured values.</p>`
+    ? `<p class="note"><strong>Real smoke safety mode:</strong> only the first selected Observer Bridge candidate is executed, with at most 2 POWHEG events. This intentional limit applies only to real_smoke; dry_run and real_free use the selected candidate list prepared by Observer Bridge.</p>`
     : "";
   const realFreeNotice = value("run_mode") === "real_free"
-    ? `<p class="note"><strong>Real free mode may be computationally expensive.</strong> It will execute pwhg_main for the requested number of interaction candidates and events per interaction.</p>`
+    ? `<p class="note"><strong>Real free mode may be computationally expensive.</strong> It will execute pwhg_main for every selected Observer Bridge candidate and the configured POWHEG events per interaction.</p>`
     : "";
-  const bridgeFound = Boolean(status.input_observer_bridge_found || state.outputs.observer_bridge_ranked_events_exists);
+  const bridgeFound = Boolean(status.input_observer_bridge_found || state.outputs.observer_bridge_selected_candidates_exists);
+  const selectedAvailable = summary ? (summary.powheg_n_selected_candidates_input ?? summary.n_candidates_input ?? 0) : 0;
+  const eventsPerInteraction = summary ? (summary.events_per_candidate_requested || summary.events_per_candidate || value("events_per_candidate") || 0) : (value("events_per_candidate") || 0);
+  const jobsToPrepare = summary ? (summary.powheg_jobs_prepared || summary.n_powheg_jobs || selectedAvailable) : selectedAvailable;
   const inputHtml = `<section><h2>Inputs</h2><div class="summary-grid">
-    <div class="summary-item"><strong>Observer Bridge ranked events</strong><span class="${{bridgeFound ? "ok" : "pending"}}">${{bridgeFound ? "found" : "missing"}}</span></div>
-    <div class="summary-item"><strong>Input file</strong><code>${{outPath("observer_bridge_ranked_events")}}</code></div>
+    <div class="summary-item"><strong>Selected Observer Bridge candidates found</strong><span class="${{bridgeFound ? "ok" : "pending"}}">${{bridgeFound ? "yes" : "no"}}</span></div>
+    <div class="summary-item"><strong>Input file</strong><code>${{outPath("observer_bridge_selected_candidates")}}</code></div>
+    <div class="summary-item"><strong>Selected candidates available</strong>${{selectedAvailable}}</div>
+    <div class="summary-item"><strong>POWHEG jobs to prepare/run</strong>${{jobsToPrepare}}</div>
+    <div class="summary-item"><strong>POWHEG Events per Interaction</strong>${{eventsPerInteraction}}</div>
+    <div class="summary-item"><strong>Nominal requested LHE events</strong>${{Number(jobsToPrepare || 0) * Number(eventsPerInteraction || 0)}}</div>
     <div class="summary-item"><strong>POWHEG backend</strong><code>local_powheg</code></div>
     <div class="summary-item"><strong>POWHEG process</strong><code>nudis</code></div>
     <div class="summary-item"><strong>run_mode</strong><code>${{value("run_mode")}}</code></div>
@@ -1862,25 +1893,24 @@ function renderPowhegPanel() {{
       ${{input("powheg_backend")}}
       ${{input("powheg_process")}}
       ${{input("run_mode")}}
-      ${{input("ranking_policy")}}
-      ${{input("max_powheg_events")}}
       ${{input("events_per_candidate")}}
       ${{input("random_seed")}}
       ${{input("powheg_seed_mode")}}
-      ${{input("min_final_observation_score")}}
       ${{realSmokeNotice}}
       ${{realFreeNotice}}
     </div>
   </section>`;
   const generationSummaryHtml = summary ? `<section><h2>Generation Summary</h2><div class="summary-grid">
-    <div class="summary-item"><strong>Candidates received</strong>${{summary.n_candidates_input || 0}}</div>
+    <div class="summary-item"><strong>Selected candidates received from Observer Bridge</strong>${{summary.powheg_n_selected_candidates_input || summary.n_candidates_input || 0}}</div>
     <div class="summary-item"><strong>POWHEG jobs prepared</strong>${{summary.powheg_jobs_prepared || 0}}</div>
     <div class="summary-item"><strong>Input cards generated</strong>${{summary.powheg_cards_generated || 0}}</div>
     <div class="summary-item"><strong>LHE generated</strong><span class="${{summary.powheg_lhe_generated ? "ok" : "pending"}}">${{summary.powheg_lhe_generated ? "YES" : "NO"}}</span></div>
     <div class="summary-item"><strong>LHE events</strong>${{summary.n_lhe_events || 0}}</div>
     <div class="summary-item"><strong>POWHEG jobs run</strong>${{summary.n_powheg_jobs_run || 0}}</div>
-    <div class="summary-item"><strong>Requested POWHEG jobs</strong>${{summary.n_powheg_jobs_requested || summary.max_powheg_events || 0}}</div>
+    <div class="summary-item"><strong>POWHEG jobs = selected candidates</strong>${{summary.n_powheg_jobs_requested || summary.powheg_n_selected_candidates_input || summary.powheg_jobs_prepared || 0}}</div>
     <div class="summary-item"><strong>Events per interaction requested</strong>${{summary.events_per_candidate_requested || summary.events_per_candidate || 0}}</div>
+    <div class="summary-item"><strong>Selection performed by</strong><code>${{summary.powheg_selection_performed_by || "ObserverBridge"}}</code></div>
+    <div class="summary-item"><strong>Selection policy</strong><code>${{summary.powheg_selection_policy || "pending"}}</code></div>
     <div class="summary-item"><strong>Run mode</strong><span class="ok">${{summary.powheg_run_mode || "dry_run"}}</span></div>
     <div class="summary-item"><strong>pwhg_main</strong><span class="${{summary.pwhg_main_executed ? "ok" : "pending"}}">${{summary.pwhg_main_executed ? "executed" : "NOT executed"}}</span></div>
     <div class="summary-item"><strong>powheg_invoked</strong>${{String(summary.powheg_invoked)}}</div>
@@ -2060,9 +2090,10 @@ function renderContextPanel() {{
       ? `<table class="backend-table">
           <tbody>
             <tr><th>Run mode</th><td><code>${{summary.powheg_run_mode || state.values.powheg.run_mode || "dry_run"}}</code></td></tr>
-            <tr><th>Interaction candidates</th><td>${{summary.n_powheg_jobs_requested || summary.max_powheg_events || state.values.powheg.max_powheg_events || 0}}</td></tr>
+            <tr><th>Selected candidates</th><td>${{summary.powheg_n_selected_candidates_input || summary.n_candidates_input || 0}}</td></tr>
             <tr><th>Jobs prepared</th><td>${{summary.powheg_jobs_prepared || summary.n_powheg_jobs || 0}}</td></tr>
             <tr><th>Events per interaction</th><td>${{summary.events_per_candidate_requested || summary.events_per_candidate || state.values.powheg.events_per_candidate || 0}}</td></tr>
+            <tr><th>Selection policy</th><td><code>${{summary.powheg_selection_policy || "Observer Bridge"}}</code></td></tr>
             <tr><th>pwhg_main</th><td>${{summary.pwhg_main_executed ? "executed" : "not executed"}}</td></tr>
             <tr><th>LHE events</th><td>${{summary.n_lhe_events_total || summary.n_lhe_events || 0}}</td></tr>
           </tbody>
@@ -2176,6 +2207,8 @@ function renderOutputsPanel() {{
   `) + group("ObserverBridge/", `
     ${{link(out.observer_bridge_candidates_exists, "observer_bridge_candidates", "Observer Bridge candidates")}}
     ${{link(out.observer_bridge_ranked_events_exists, "observer_bridge_ranked_events", "Observer Bridge ranked events")}}
+    ${{link(out.observer_bridge_selected_candidates_exists, "observer_bridge_selected_candidates", "Observer Bridge selected candidates")}}
+    ${{link(out.observer_bridge_selection_summary_exists, "observer_bridge_selection_summary", "Observer Bridge selection summary")}}
     ${{link(out.observer_bridge_summary_json_exists, "observer_bridge_summary_json", "Observer Bridge summary JSON")}}
     ${{link(out.observer_bridge_summary_exists, "observer_bridge_summary", "Observer Bridge summary CSV")}}
     ${{link(out.observer_bridge_report_exists, "observer_bridge_report", "Observer Bridge report")}}
@@ -2817,8 +2850,6 @@ def main() -> int:
             output_dir = ROOT / output_dir
         ensure_output_layout(output_dir)
         values["powheg"]["run_mode"] = "real_smoke"
-        values["powheg"]["ranking_policy"] = "top_score"
-        values["powheg"]["max_powheg_events"] = 1
         values["powheg"]["events_per_candidate"] = min(2, int(float(values["powheg"].get("events_per_candidate", 2))))
         powheg_summary = generate_powheg_products(values, run_output_dir=output_dir)
         render_summary = render_hadros_web(values, root=ROOT, output_dir=output_dir, powheg_summary=powheg_summary)

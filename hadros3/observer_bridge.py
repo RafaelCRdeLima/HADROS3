@@ -588,8 +588,10 @@ def _kerr_pixel_match_candidates(
     tolerance = max(0.0, float(bridge.get("kerr_pixel_match_tolerance_rg", 3.5)))
     refine = bool(bridge.get("kerr_pixel_match_refine_enabled", True))
     rank_lookup = _rank_by_candidate(ranked)
+    match_limit = max(top_n, int(float(bridge.get("interactive_max_candidates", 40))))
+    match_candidates = ranked[:match_limit] if ranked else candidates[:match_limit]
     top_ids = {str(row.get("interaction_id") or row.get("event_id")) for row in ranked[:top_n]}
-    targets = _candidate_targets(candidates)
+    targets = _candidate_targets(match_candidates)
     ray_count = _match_targets_on_grid(
         targets,
         values,
@@ -609,7 +611,7 @@ def _kerr_pixel_match_candidates(
             ray_index_offset=ray_count,
         )
     rows: list[dict[str, Any]] = []
-    for target, candidate in zip(targets, candidates):
+    for target, candidate in zip(targets, match_candidates):
         pixel = target["best_pixel"]
         found = pixel is not None and target["best_distance"] <= tolerance
         ray = target.get("best_ray") or {}
@@ -664,6 +666,70 @@ def _kerr_pixel_match_candidates(
 def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
+
+
+def _select_downstream_candidates(
+    ranked: list[dict[str, Any]],
+    values: dict[str, dict[str, Any]],
+    output_dir: Path,
+) -> dict[str, Any]:
+    bridge = values.get("observer_bridge", {})
+    policy = str(bridge.get("downstream_selection_policy", "top_n"))
+    top_n = max(1, int(float(bridge.get("downstream_top_n_candidates", 50))))
+    min_score = float(bridge.get("downstream_min_final_observation_score", 0.0))
+    selected_rows: list[dict[str, Any]] = []
+    for rank, row in enumerate(ranked, start=1):
+        score = _score(row, "final_observation_score")
+        selected = False
+        reason = ""
+        if policy == "all_candidates":
+            selected = True
+            reason = "all_candidates"
+        elif policy == "top_n":
+            selected = rank <= top_n
+            reason = f"rank<={top_n}"
+        elif policy == "score_threshold":
+            selected = score >= min_score
+            reason = f"final_observation_score>={min_score:g}"
+        if not selected:
+            continue
+        payload = dict(row)
+        payload.update(
+            {
+                "selection_policy": policy,
+                "selected_for_downstream": True,
+                "downstream_stage_target": "powheg",
+                "selection_rank": len(selected_rows) + 1,
+                "selection_reason": reason,
+            }
+        )
+        selected_rows.append(payload)
+    selected_path = output_dir / "observer_bridge_selected_candidates.jsonl"
+    selection_summary_path = output_dir / "observer_bridge_selection_summary.json"
+    _write_jsonl(selected_path, selected_rows)
+    selection_summary = {
+        "n_candidates_ranked": len(ranked),
+        "n_candidates_selected": len(selected_rows),
+        "selection_policy": policy,
+        "top_n_candidates": top_n,
+        "min_final_observation_score": min_score,
+        "downstream_stage_target": "powheg",
+        "selected_candidates_path": str(selected_path),
+    }
+    write_json(selection_summary_path, selection_summary)
+    return {
+        "observer_bridge_selected_candidates": str(selected_path),
+        "observer_bridge_selection_summary": str(selection_summary_path),
+        "observer_bridge_selected_candidates_generated": True,
+        "observer_bridge_selection_summary_generated": True,
+        "downstream_candidate_selection_enabled": True,
+        "downstream_selection_policy": policy,
+        "downstream_n_candidates_ranked": len(ranked),
+        "downstream_n_candidates_selected": len(selected_rows),
+        "downstream_stage_target": "powheg",
+        "top_n_candidates": top_n,
+        "downstream_min_final_observation_score": min_score,
+    }
 
 
 def _draw_camera_overlay(
@@ -1149,6 +1215,8 @@ def _augment_summary(summary: dict[str, Any], output_dir: Path) -> dict[str, Any
             "observer_bridge_camera_overlay": str(output_dir / "observer_bridge_camera_overlay.png"),
             "observer_candidate_kerr_pixel_map": str(output_dir / "observer_candidate_kerr_pixel_map.jsonl"),
             "observer_bridge_kerr_interactive_view": str(output_dir / "observer_bridge_kerr_interactive_view.html"),
+            "observer_bridge_selected_candidates": str(output_dir / "observer_bridge_selected_candidates.jsonl"),
+            "observer_bridge_selection_summary": str(output_dir / "observer_bridge_selection_summary.json"),
         }
     )
     summary.update(
@@ -1164,6 +1232,15 @@ def _augment_summary(summary: dict[str, Any], output_dir: Path) -> dict[str, Any
             "observer_bridge_camera_view_generated": summary.get("observer_bridge_camera_view_generated", False),
             "observer_bridge_camera_overlay_generated": summary.get("observer_bridge_camera_overlay_generated", False),
             "observer_bridge_kerr_interactive_view_generated": summary.get("observer_bridge_kerr_interactive_view_generated", False),
+            "observer_bridge_selected_candidates_generated": summary.get("observer_bridge_selected_candidates_generated", False),
+            "observer_bridge_selection_summary_generated": summary.get("observer_bridge_selection_summary_generated", False),
+            "downstream_candidate_selection_enabled": summary.get("downstream_candidate_selection_enabled", False),
+            "downstream_selection_policy": summary.get("downstream_selection_policy"),
+            "downstream_n_candidates_ranked": summary.get("downstream_n_candidates_ranked", 0),
+            "downstream_n_candidates_selected": summary.get("downstream_n_candidates_selected", 0),
+            "downstream_stage_target": summary.get("downstream_stage_target"),
+            "top_n_candidates": summary.get("top_n_candidates"),
+            "downstream_min_final_observation_score": summary.get("downstream_min_final_observation_score"),
             "camera_view_projection_model": summary.get("camera_view_projection_model"),
             "camera_view_projection_physics_risk": summary.get("camera_view_projection_physics_risk"),
             "not_ray_traced": summary.get("not_ray_traced", True),
@@ -1271,6 +1348,8 @@ def generate_observer_bridge_products(values: dict[str, dict[str, Any]], *, run_
         output_dir / "observer_bridge_kerr_interactive_view.html",
     )
     summary.update(interactive_view)
+    selection = _select_downstream_candidates(ranked, values, output_dir)
+    summary.update(selection)
 
     summary = _augment_summary(summary, output_dir)
     write_json(summary_path, summary)

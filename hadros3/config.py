@@ -311,6 +311,29 @@ def schema() -> list[dict[str, Any]]:
                 field("observer_bridge", "min_final_observation_score", "Min final score", 0.0, kind="number"),
                 field(
                     "observer_bridge",
+                    "candidate_overlay_mapping",
+                    "Candidate overlay mapping",
+                    "kerr_pixel_match",
+                    kind="select",
+                    options=["kerr_pixel_match", "geometric_proxy"],
+                ),
+                field("observer_bridge", "kerr_pixel_match_resolution_x", "Kerr match rays X", 32, kind="number"),
+                field("observer_bridge", "kerr_pixel_match_resolution_y", "Kerr match rays Y", 18, kind="number"),
+                field("observer_bridge", "kerr_pixel_match_tolerance_rg", "Kerr match tolerance [rg]", 3.5, kind="number"),
+                field("observer_bridge", "kerr_pixel_match_refine_enabled", "Kerr match refine", True, kind="checkbox"),
+                field("observer_bridge", "interactive_max_candidates", "Interactive max candidates", 40, kind="number"),
+                field("observer_bridge", "interactive_max_rays", "Interactive max rays", 64, kind="number"),
+                field("observer_bridge", "interactive_ray_stride", "Interactive ray stride", 4, kind="number"),
+                field(
+                    "observer_bridge",
+                    "interactive_candidate_color_mode",
+                    "Interactive color by",
+                    "final_observation_score",
+                    kind="select",
+                    options=["final_observation_score", "closest_approach_rg", "inside_outside_fov"],
+                ),
+                field(
+                    "observer_bridge",
                     "status",
                     "Status",
                     "configured_only_no_observer_bridge",
@@ -612,6 +635,22 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
         problems.append("observer_bridge.min_observer_weight must be non-negative")
     if float(bridge.get("min_final_observation_score", 0.0)) < 0.0:
         problems.append("observer_bridge.min_final_observation_score must be non-negative")
+    if str(bridge.get("candidate_overlay_mapping", "kerr_pixel_match")) not in {"kerr_pixel_match", "geometric_proxy"}:
+        problems.append("observer_bridge.candidate_overlay_mapping must be kerr_pixel_match or geometric_proxy")
+    if int(float(bridge.get("kerr_pixel_match_resolution_x", 32))) <= 0:
+        problems.append("observer_bridge.kerr_pixel_match_resolution_x must be positive")
+    if int(float(bridge.get("kerr_pixel_match_resolution_y", 18))) <= 0:
+        problems.append("observer_bridge.kerr_pixel_match_resolution_y must be positive")
+    if float(bridge.get("kerr_pixel_match_tolerance_rg", 3.5)) < 0.0:
+        problems.append("observer_bridge.kerr_pixel_match_tolerance_rg must be non-negative")
+    if int(float(bridge.get("interactive_max_candidates", 40))) <= 0:
+        problems.append("observer_bridge.interactive_max_candidates must be positive")
+    if int(float(bridge.get("interactive_max_rays", 64))) < 0:
+        problems.append("observer_bridge.interactive_max_rays must be non-negative")
+    if int(float(bridge.get("interactive_ray_stride", 4))) <= 0:
+        problems.append("observer_bridge.interactive_ray_stride must be positive")
+    if str(bridge.get("interactive_candidate_color_mode", "final_observation_score")) not in {"final_observation_score", "closest_approach_rg", "inside_outside_fov"}:
+        problems.append("observer_bridge.interactive_candidate_color_mode is unsupported")
     if str(powheg.get("powheg_backend", "local_powheg")) != "local_powheg":
         problems.append("powheg.powheg_backend must be local_powheg in H3-W9a")
     if str(powheg.get("powheg_process", "nudis")) != "nudis":

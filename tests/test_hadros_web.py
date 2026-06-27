@@ -31,6 +31,8 @@ def test_schema_exposes_hadros3_first_stage_controls() -> None:
         ("dis_interaction_sampler", "medium_velocity_model"),
         ("observer_bridge", "observer_bridge_backend"),
         ("observer_bridge", "bridge_mode"),
+        ("observer_bridge", "candidate_overlay_mapping"),
+        ("observer_bridge", "interactive_max_candidates"),
         ("powheg", "powheg_backend"),
         ("powheg", "ranking_policy"),
         ("provenance", "trust_boundary"),
@@ -165,6 +167,8 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert payload["outputs"]["paths"]["observer_bridge_geometry_3d_html"] == "ObserverBridge/observer_bridge_geometry_3d.html"
     assert payload["outputs"]["paths"]["observer_bridge_camera_view"] == "ObserverBridge/observer_bridge_camera_view.png"
     assert payload["outputs"]["paths"]["observer_bridge_camera_overlay"] == "ObserverBridge/observer_bridge_camera_overlay.png"
+    assert payload["outputs"]["paths"]["observer_candidate_kerr_pixel_map"] == "ObserverBridge/observer_candidate_kerr_pixel_map.jsonl"
+    assert payload["outputs"]["paths"]["observer_bridge_kerr_interactive_view"] == "ObserverBridge/observer_bridge_kerr_interactive_view.html"
     assert payload["outputs"]["paths"]["powheg_event_requests"] == "POWHEG/powheg_event_requests.jsonl"
     assert payload["outputs"]["paths"]["powheg_summary_json"] == "POWHEG/powheg_summary.json"
     assert payload["outputs"]["paths"]["powheg_summary"] == "POWHEG/powheg_summary.csv"
@@ -261,6 +265,9 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert "observer_bridge_visibility_map.png" in html
     assert "observer_bridge_ranked_events.png" in html
     assert "observer_bridge_geometry_3d.html" in html
+    assert "observer_candidate_kerr_pixel_map.jsonl" in html
+    assert "observer_bridge_kerr_interactive_view.html" in html
+    assert "Observer Bridge Kerr Interactive View" in html
     assert "observer_bridge_camera_view.png" in html
     assert "observer_bridge_camera_overlay.png" in html
     assert "POWHEG/" in html

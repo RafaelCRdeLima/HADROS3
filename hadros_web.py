@@ -121,6 +121,8 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
     bridge_geometry_3d_html_path = bridge_dir / "observer_bridge_geometry_3d.html"
     bridge_camera_view_path = bridge_dir / "observer_bridge_camera_view.png"
     bridge_camera_overlay_path = bridge_dir / "observer_bridge_camera_overlay.png"
+    bridge_kerr_pixel_map_path = bridge_dir / "observer_candidate_kerr_pixel_map.jsonl"
+    bridge_kerr_interactive_path = bridge_dir / "observer_bridge_kerr_interactive_view.html"
     powheg_requests_path = powheg_output_dir / "powheg_event_requests.jsonl"
     powheg_summary_json_path = powheg_output_dir / "powheg_summary.json"
     powheg_summary_csv_path = powheg_output_dir / "powheg_summary.csv"
@@ -294,6 +296,8 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "observer_bridge_geometry_3d_html": bridge_geometry_3d_html_path.exists(),
                 "observer_bridge_camera_view": bridge_camera_view_path.exists(),
                 "observer_bridge_camera_overlay": bridge_camera_overlay_path.exists(),
+                "observer_candidate_kerr_pixel_map": bridge_kerr_pixel_map_path.exists(),
+                "observer_bridge_kerr_interactive_view": bridge_kerr_interactive_path.exists(),
             },
             "summary": observer_bridge_summary,
             "links": {
@@ -310,6 +314,8 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "observer_bridge_geometry_3d_html": rel(bridge_geometry_3d_html_path, output_dir),
                 "observer_bridge_camera_view": rel(bridge_camera_view_path, output_dir),
                 "observer_bridge_camera_overlay": rel(bridge_camera_overlay_path, output_dir),
+                "observer_candidate_kerr_pixel_map": rel(bridge_kerr_pixel_map_path, output_dir),
+                "observer_bridge_kerr_interactive_view": rel(bridge_kerr_interactive_path, output_dir),
             },
         },
         "powheg": {
@@ -431,6 +437,8 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             "observer_bridge_geometry_3d_html_exists": bridge_geometry_3d_html_path.exists(),
             "observer_bridge_camera_view_exists": bridge_camera_view_path.exists(),
             "observer_bridge_camera_overlay_exists": bridge_camera_overlay_path.exists(),
+            "observer_candidate_kerr_pixel_map_exists": bridge_kerr_pixel_map_path.exists(),
+            "observer_bridge_kerr_interactive_view_exists": bridge_kerr_interactive_path.exists(),
             "powheg_event_requests_exists": powheg_requests_path.exists(),
             "powheg_summary_json_exists": powheg_summary_json_path.exists(),
             "powheg_summary_exists": powheg_summary_csv_path.exists(),
@@ -516,6 +524,8 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "observer_bridge_geometry_3d_html": rel(bridge_geometry_3d_html_path, output_dir),
                 "observer_bridge_camera_view": rel(bridge_camera_view_path, output_dir),
                 "observer_bridge_camera_overlay": rel(bridge_camera_overlay_path, output_dir),
+                "observer_candidate_kerr_pixel_map": rel(bridge_kerr_pixel_map_path, output_dir),
+                "observer_bridge_kerr_interactive_view": rel(bridge_kerr_interactive_path, output_dir),
                 "powheg_event_requests": rel(powheg_requests_path, output_dir),
                 "powheg_summary_json": rel(powheg_summary_json_path, output_dir),
                 "powheg_summary": rel(powheg_summary_csv_path, output_dir),
@@ -664,6 +674,8 @@ function setObserverBridgeOutputs(exists) {{
   state.outputs.observer_bridge_geometry_3d_html_exists = exists;
   state.outputs.observer_bridge_camera_view_exists = exists;
   state.outputs.observer_bridge_camera_overlay_exists = exists;
+  state.outputs.observer_candidate_kerr_pixel_map_exists = exists;
+  state.outputs.observer_bridge_kerr_interactive_view_exists = exists;
 }}
 function setPowhegOutputs(exists) {{
   state.powheg_summary = exists ? state.powheg_summary : null;
@@ -1527,6 +1539,15 @@ function renderObserverBridgePanel() {{
     ${{input("max_ranked_events")}}
     ${{input("min_observer_weight")}}
     ${{input("min_final_observation_score")}}
+    ${{input("candidate_overlay_mapping")}}
+    ${{input("kerr_pixel_match_resolution_x")}}
+    ${{input("kerr_pixel_match_resolution_y")}}
+    ${{input("kerr_pixel_match_tolerance_rg")}}
+    ${{input("kerr_pixel_match_refine_enabled")}}
+    ${{input("interactive_max_candidates")}}
+    ${{input("interactive_max_rays")}}
+    ${{input("interactive_ray_stride")}}
+    ${{input("interactive_candidate_color_mode")}}
   </section>`;
   const inputHtml = `<section><h2>Inputs</h2><div class="summary-grid">
     <div class="summary-item"><strong>DIS accepted interactions</strong><span class="${{disFound ? "ok" : "pending"}}">${{disFound ? "found" : "missing"}}</span></div>
@@ -1553,8 +1574,16 @@ function renderObserverBridgePanel() {{
     <div class="summary-item"><strong>overlay background</strong><code>${{summary.camera_overlay_background_source || "pending"}}</code></div>
     <div class="summary-item"><strong>overlay resolution</strong><code>${{summary.camera_overlay_resolution_px || "pending"}}</code></div>
     <div class="summary-item"><strong>overlay plotted</strong>${{summary.camera_overlay_candidates_plotted || 0}}</div>
+    <div class="summary-item"><strong>matched candidates</strong>${{summary.kerr_pixel_match_n_matched ?? 0}}</div>
+    <div class="summary-item"><strong>unmatched candidates</strong>${{summary.kerr_pixel_match_n_unmatched ?? 0}}</div>
+    <div class="summary-item"><strong>match tolerance</strong><code>${{summary.kerr_pixel_match_tolerance_rg ?? "pending"}} rg</code></div>
+    <div class="summary-item"><strong>mean closest approach</strong><code>${{summary.kerr_pixel_match_mean_closest_approach_rg == null ? "pending" : Number(summary.kerr_pixel_match_mean_closest_approach_rg).toFixed(3) + " rg"}}</code></div>
+    <div class="summary-item"><strong>max closest approach</strong><code>${{summary.kerr_pixel_match_max_closest_approach_rg == null ? "pending" : Number(summary.kerr_pixel_match_max_closest_approach_rg).toFixed(3) + " rg"}}</code></div>
     <div class="summary-item"><strong>overlay projection</strong><code>${{summary.candidate_overlay_projection_model || "geometric_pinhole_proxy"}}</code></div>
     <div class="summary-item"><strong>overlay alignment</strong><code>${{summary.candidate_overlay_alignment || "camera_preview_pixel_plane"}}</code></div>
+    <div class="summary-item"><strong>interactive view</strong><code>${{summary.observer_bridge_kerr_interactive_view_generated ? "generated" : "pending"}}</code></div>
+    <div class="summary-item"><strong>interactive rays</strong>${{summary.interactive_rays_displayed ?? 0}}</div>
+    <div class="summary-item"><strong>interactive diagnostic</strong>${{String(summary.interactive_view_diagnostic_only ?? true)}}</div>
     <div class="summary-item"><strong>proxy_physics_risk</strong>${{String(summary.proxy_physics_risk)}}</div>
   </div></section>` : `<section><h2>Results</h2><p class="note">No Observer Bridge scores yet.</p></section>`;
   const links = `<section><h2>Outputs</h2><div class="output-link-grid">
@@ -1702,6 +1731,7 @@ function renderContextPanel() {{
       ? `<img src="${{outUrl("observer_bridge_map")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge candidate map">`
       : `<div class="context-empty">No Observer Bridge diagnostics generated yet.</div>`;
     const diagnosticCards = [
+      state.outputs.observer_bridge_kerr_interactive_view_exists ? `<figure class="diagnostic-plot-card"><figcaption>Observer Bridge Kerr Interactive View</figcaption><a href="${{outUrl("observer_bridge_kerr_interactive_view")}}" target="_blank">Open interactive Kerr diagnostic</a><iframe src="${{outUrl("observer_bridge_kerr_interactive_view")}}?v=${{observerBridgePreviewVersion}}" title="Observer Bridge Kerr Interactive View" style="width:100%;height:420px;border:1px solid #cbd5e1;border-radius:8px;background:#0b0f17"></iframe></figure>` : "",
       state.outputs.observer_bridge_camera_view_exists ? `<figure class="diagnostic-plot-card"><figcaption>Observer Camera View</figcaption><a href="${{outUrl("observer_bridge_camera_view")}}" target="_blank"><img src="${{outUrl("observer_bridge_camera_view")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge camera view"></a></figure>` : "",
       state.outputs.observer_bridge_map_exists ? `<figure class="diagnostic-plot-card"><figcaption>Candidate map</figcaption><a href="${{outUrl("observer_bridge_map")}}" target="_blank"><img src="${{outUrl("observer_bridge_map")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge map"></a></figure>` : "",
       state.outputs.observer_bridge_score_distribution_exists ? `<figure class="diagnostic-plot-card"><figcaption>Score distribution</figcaption><a href="${{outUrl("observer_bridge_score_distribution")}}" target="_blank"><img src="${{outUrl("observer_bridge_score_distribution")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge score distribution"></a></figure>` : "",
@@ -1826,6 +1856,8 @@ function renderOutputsPanel() {{
     ${{link(out.observer_bridge_geometry_3d_html_exists, "observer_bridge_geometry_3d_html", "Observer Bridge geometry HTML")}}
     ${{link(out.observer_bridge_camera_overlay_exists, "observer_bridge_camera_overlay", "Observer Bridge camera overlay")}}
     ${{out.observer_bridge_camera_overlay_exists ? `<img src="${{outUrl("observer_bridge_camera_overlay")}}" alt="Observer Bridge camera overlay">` : ""}}
+    ${{link(out.observer_bridge_kerr_interactive_view_exists, "observer_bridge_kerr_interactive_view", "Observer Bridge Kerr interactive view")}}
+    ${{link(out.observer_candidate_kerr_pixel_map_exists, "observer_candidate_kerr_pixel_map", "Observer candidate Kerr pixel map")}}
     ${{link(out.observer_bridge_camera_view_exists, "observer_bridge_camera_view", "Observer Bridge camera view")}}
     ${{out.observer_bridge_camera_view_exists ? `<img src="${{outUrl("observer_bridge_camera_view")}}" alt="Observer Bridge camera view">` : ""}}
     ${{link(out.observer_bridge_map_exists, "observer_bridge_map", "Observer Bridge map")}}

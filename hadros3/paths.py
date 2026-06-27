@@ -175,6 +175,8 @@ def ensure_output_layout(run_output: Path) -> None:
             "observer_bridge_geometry_3d.html",
             "observer_bridge_camera_view.png",
             "observer_bridge_camera_overlay.png",
+            "observer_candidate_kerr_pixel_map.jsonl",
+            "observer_bridge_kerr_interactive_view.html",
         ],
         POWHEG_DIR: [
             "powheg_event_requests.jsonl",

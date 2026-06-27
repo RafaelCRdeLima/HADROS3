@@ -8,7 +8,7 @@ import pytest
 
 from hadros3.config import defaults
 from hadros3 import powheg as powheg_module
-from hadros3.powheg import generate_powheg_products
+from hadros3.powheg import generate_powheg_products, parse_lhe_particles
 from hadros3.provenance import build_provenance
 
 
@@ -81,6 +81,9 @@ def test_powheg_dry_run_generates_ranked_cards_without_lhe_or_observer_modificat
     assert summary["powheg_invoked"] is False
     assert summary["pwhg_main_executed"] is False
     assert summary["powheg_lhe_generated"] is False
+    assert summary["lhe_parser_invoked"] is False
+    assert summary["powheg_lhe_products_generated"] is False
+    assert summary["powheg_lhe_message"] == "No LHE available: POWHEG dry run only."
     assert summary["powheg_jobs_prepared"] == 2
     assert summary["powheg_cards_generated"] == 2
     assert summary["backend_language"] == "C++17"
@@ -106,12 +109,14 @@ def test_powheg_dry_run_generates_ranked_cards_without_lhe_or_observer_modificat
     assert "channel_type 3" in card
     assert "vtype 2" in card
     assert not list((tmp_path / "POWHEG").rglob("*.lhe"))
+    assert not (tmp_path / "POWHEG" / "powheg_lhe_particles.jsonl").exists()
     validation = json.loads((tmp_path / "POWHEG" / "powheg_validation_report.json").read_text(encoding="utf-8"))
     assert validation["run_mode"] == "dry_run"
     assert validation["powheg_run_mode"] == "dry_run"
     assert validation["powheg_invoked"] is False
     assert validation["pwhg_main_executed"] is False
     assert validation["powheg_lhe_generated"] is False
+    assert validation["lhe_parser_invoked"] is False
     for filename in [
         "powheg_summary.json",
         "powheg_summary.csv",
@@ -163,11 +168,45 @@ def test_powheg_provenance_marks_dry_run_without_real_powheg_invocation(tmp_path
     assert provenance["powheg"]["powheg_invoked"] is False
     assert provenance["powheg"]["pwhg_main_executed"] is False
     assert provenance["powheg"]["powheg_lhe_generated"] is False
+    assert provenance["powheg"]["lhe_parser_invoked"] is False
+    assert provenance["powheg"]["lhe_particles_are_hard_process"] is True
+    assert provenance["powheg"]["hadronization_invoked"] is False
     assert provenance["powheg"]["powheg_runtime_self_contained"] is True
     assert provenance["powheg"]["backend_language"] == "C++17"
     assert provenance["powheg"]["pythia_invoked"] is False
     assert provenance["powheg"]["geant4_invoked"] is False
     assert provenance["powheg"]["photon_transport_invoked"] is False
+
+
+def test_lhe_parser_extracts_particle_kinematics(tmp_path: Path) -> None:
+    lhe = tmp_path / "pwgevents.lhe"
+    lhe.write_text(
+        """<LesHouchesEvents version="1.0">
+<event>
+4 1 1.0 1.0 1.0 1.0
+12 -1 0 0 0 0 0.0 0.0 100.0 100.0 0.0 0.0 9.0
+1 -1 0 0 501 0 0.0 0.0 -1.0 1.0 0.0 0.0 9.0
+11 1 1 2 0 0 3.0 4.0 30.0 31.0 0.0 0.0 9.0
+2 1 1 2 501 0 -3.0 -4.0 69.0 69.5 0.0 0.0 9.0
+</event>
+</LesHouchesEvents>
+""",
+        encoding="utf-8",
+    )
+
+    particles, events = parse_lhe_particles(lhe, powheg_job_id="H3PWHG-TEST")
+
+    assert len(particles) == 4
+    assert len(events) == 1
+    assert particles[0]["pdg_id"] == 12
+    assert particles[0]["particle_name"] == "nu_e"
+    assert particles[2]["pdg_id"] == 11
+    assert particles[2]["status"] == 1
+    assert particles[2]["pt_gev"] == 5.0
+    assert particles[2]["energy_gev"] == 31.0
+    assert events[0]["n_initial_state"] == 2
+    assert events[0]["n_final_state"] == 2
+    assert events[0]["sum_final_energy_gev"] == 100.5
 
 
 def test_powheg_real_smoke_fails_clearly_without_local_pwhg_main(tmp_path: Path, monkeypatch) -> None:
@@ -194,7 +233,11 @@ cat > pwgevents.lhe <<'LHE'
 <header></header>
 <init></init>
 <event>
-1 1 1.0 1.0 1.0 1.0
+4 1 1.0 1.0 1.0 1.0
+12 -1 0 0 0 0 0.0 0.0 4.0000000000E+09 4.0000000000E+09 0.0 0.0 9.0
+1 -1 0 0 501 0 0.0 0.0 -9.3827200000E-01 9.3827200000E-01 0.0 0.0 9.0
+11 1 1 2 0 0 1.0E+03 2.0E+03 3.0E+03 3.8E+03 5.11E-04 0.0 9.0
+2 1 1 2 501 0 -1.0E+03 -2.0E+03 3.999996E+09 3.999996E+09 0.0 0.0 9.0
 </event>
 </LesHouchesEvents>
 LHE
@@ -216,9 +259,16 @@ LHE
     assert summary["powheg_invoked"] is True
     assert summary["pwhg_main_executed"] is True
     assert summary["powheg_lhe_generated"] is True
+    assert summary["lhe_parser_invoked"] is True
+    assert summary["lhe_particles_are_hard_process"] is True
+    assert summary["hadronization_invoked"] is False
     assert summary["n_powheg_jobs"] == 1
     assert summary["powheg_jobs_prepared"] == 1
     assert summary["n_lhe_events"] == 1
+    assert summary["n_lhe_particles"] == 4
+    assert summary["n_final_state_particles"] == 2
+    assert summary["unique_particle_types"] == 4
+    assert summary["powheg_lhe_products_generated"] is True
     assert summary["pythia_invoked"] is False
     assert summary["geant4_invoked"] is False
     assert summary["photon_transport_invoked"] is False
@@ -240,6 +290,29 @@ LHE
     assert validation["run_mode"] == "real_smoke"
     assert validation["powheg_run_mode"] == "real_smoke"
     assert validation["n_lhe_events"] == 1
+    assert validation["lhe_parser_invoked"] is True
+    assert validation["n_lhe_particles"] == 4
+
+    particles_path = tmp_path / "POWHEG" / "powheg_lhe_particles.jsonl"
+    events_path = tmp_path / "POWHEG" / "powheg_lhe_events_summary.jsonl"
+    particle_summary_csv = tmp_path / "POWHEG" / "powheg_lhe_particle_summary.csv"
+    particle_summary_json = tmp_path / "POWHEG" / "powheg_lhe_particle_summary.json"
+    for path in [
+        particles_path,
+        events_path,
+        particle_summary_csv,
+        particle_summary_json,
+        tmp_path / "POWHEG" / "powheg_lhe_particle_histogram.png",
+        tmp_path / "POWHEG" / "powheg_lhe_energy_spectrum.png",
+        tmp_path / "POWHEG" / "powheg_lhe_momentum_spectrum.png",
+    ]:
+        assert path.exists()
+    particles = [json.loads(line) for line in particles_path.read_text(encoding="utf-8").splitlines()]
+    assert particles[0]["pdg_id"] == 12
+    assert particles[0]["particle_name"] == "nu_e"
+    assert particles[2]["pt_gev"] > 0.0
+    particle_summary = json.loads(particle_summary_json.read_text(encoding="utf-8"))
+    assert any(row["particle_name"] == "e-" and row["final_state_count"] == 1 for row in particle_summary)
 
     provenance = build_provenance(
         root=Path.cwd(),
@@ -255,6 +328,10 @@ LHE
     assert provenance["powheg"]["pwhg_main_executed"] is True
     assert provenance["powheg"]["powheg_lhe_generated"] is True
     assert provenance["powheg"]["n_lhe_events"] == 1
+    assert provenance["powheg"]["lhe_parser_invoked"] is True
+    assert provenance["powheg"]["lhe_particles_are_hard_process"] is True
+    assert provenance["powheg"]["hadronization_invoked"] is False
+    assert provenance["powheg"]["n_lhe_particles"] == 4
     assert provenance["powheg"]["pythia_invoked"] is False
     assert provenance["powheg"]["geant4_invoked"] is False
     assert provenance["powheg"]["photon_transport_invoked"] is False

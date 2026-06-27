@@ -185,6 +185,13 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert payload["outputs"]["paths"]["powheg_card_preview"] == "POWHEG/powheg_card_preview.png"
     assert payload["outputs"]["paths"]["powheg_energy_distribution"] == "POWHEG/powheg_energy_distribution.png"
     assert payload["outputs"]["paths"]["powheg_job_summary"] == "POWHEG/powheg_job_summary.png"
+    assert payload["outputs"]["paths"]["powheg_lhe_particles"] == "POWHEG/powheg_lhe_particles.jsonl"
+    assert payload["outputs"]["paths"]["powheg_lhe_events_summary"] == "POWHEG/powheg_lhe_events_summary.jsonl"
+    assert payload["outputs"]["paths"]["powheg_lhe_particle_summary_csv"] == "POWHEG/powheg_lhe_particle_summary.csv"
+    assert payload["outputs"]["paths"]["powheg_lhe_particle_summary_json"] == "POWHEG/powheg_lhe_particle_summary.json"
+    assert payload["outputs"]["paths"]["powheg_lhe_particle_histogram"] == "POWHEG/powheg_lhe_particle_histogram.png"
+    assert payload["outputs"]["paths"]["powheg_lhe_energy_spectrum"] == "POWHEG/powheg_lhe_energy_spectrum.png"
+    assert payload["outputs"]["paths"]["powheg_lhe_momentum_spectrum"] == "POWHEG/powheg_lhe_momentum_spectrum.png"
     assert payload["outputs"]["paths"]["dis_summary_json"] == "DIS/dis_summary.json"
     assert payload["outputs"]["paths"]["uhe_source_sampling_uniformity"] == "UHEsource/uhe_source_sampling_uniformity.png"
     assert payload["outputs"]["paths"]["uhe_source_sampling_uniformity_report"] == "UHEsource/uhe_source_sampling_uniformity_report.json"
@@ -287,6 +294,17 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert "powheg_card_preview.png" in html
     assert "powheg_energy_distribution.png" in html
     assert "powheg_job_summary.png" in html
+    assert "POWHEG LHE Products" in html
+    assert "Particle Summary Table" in html
+    assert "These are POWHEG hard-process/LHE particles." in html
+    assert "PYTHIA has not been invoked." in html
+    assert "powheg_lhe_particles.jsonl" in html
+    assert "powheg_lhe_events_summary.jsonl" in html
+    assert "powheg_lhe_particle_summary.csv" in html
+    assert "powheg_lhe_particle_summary.json" in html
+    assert "powheg_lhe_particle_histogram.png" in html
+    assert "powheg_lhe_energy_spectrum.png" in html
+    assert "powheg_lhe_momentum_spectrum.png" in html
     assert "Observer Camera Overlay" in html
     assert "overlay resolution" in html
     assert "camera_preview_pixel_plane" in html

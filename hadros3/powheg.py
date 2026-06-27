@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import csv
+import math
 import os
 import shutil
 import subprocess
@@ -23,6 +25,45 @@ ROOT = Path(__file__).resolve().parents[1]
 POWHEG_CPP_EXECUTABLE = ROOT / "bin" / "hadros3_powheg_driver"
 POWHEG_BINARY = ROOT / "external" / "powheg" / "build" / "DIS" / "pwhg_main"
 
+PDG_NAMES = {
+    -16: "anti_nu_tau",
+    -15: "tau+",
+    -14: "anti_nu_mu",
+    -13: "mu+",
+    -12: "anti_nu_e",
+    -11: "e+",
+    -6: "tbar",
+    -5: "bbar",
+    -4: "cbar",
+    -3: "sbar",
+    -2: "ubar",
+    -1: "dbar",
+    1: "d",
+    2: "u",
+    3: "s",
+    4: "c",
+    5: "b",
+    6: "t",
+    11: "e-",
+    12: "nu_e",
+    13: "mu-",
+    14: "nu_mu",
+    15: "tau-",
+    16: "nu_tau",
+    21: "g",
+    22: "gamma",
+    23: "Z0",
+    24: "W+",
+    -24: "W-",
+    90: "system",
+    91: "cluster",
+    92: "string",
+    2212: "p",
+    -2212: "pbar",
+    2112: "n",
+    -2112: "nbar",
+}
+
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
@@ -36,6 +77,121 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
 
 def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     path.write_text("\n".join(json.dumps(row, sort_keys=True) for row in rows) + ("\n" if rows else ""), encoding="utf-8")
+
+
+def _particle_name(pdg_id: int) -> str:
+    if pdg_id in PDG_NAMES:
+        return PDG_NAMES[pdg_id]
+    sign = "anti_" if pdg_id < 0 else ""
+    return f"{sign}pdg_{abs(pdg_id)}"
+
+
+def _parse_lhe_float(value: str) -> float:
+    return float(value.replace("D", "E").replace("d", "e"))
+
+
+def _eta(px: float, py: float, pz: float) -> float | None:
+    pt = math.hypot(px, py)
+    if pt <= 0.0:
+        if pz > 0.0:
+            return None
+        if pz < 0.0:
+            return None
+        return 0.0
+    return math.asinh(pz / pt)
+
+
+def parse_lhe_particles(lhe_path: Path, *, powheg_job_id: str | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Parse a compact subset of LHE event records into particle/event rows."""
+    text = lhe_path.read_text(encoding="utf-8", errors="replace")
+    job_id = powheg_job_id or lhe_path.parent.name
+    particles: list[dict[str, Any]] = []
+    events: list[dict[str, Any]] = []
+    event_index = 0
+    cursor = 0
+    while True:
+        start = text.find("<event>", cursor)
+        if start < 0:
+            break
+        end = text.find("</event>", start)
+        if end < 0:
+            break
+        event_index += 1
+        block = text[start + len("<event>") : end]
+        lines = [line.strip() for line in block.splitlines() if line.strip() and not line.strip().startswith("#")]
+        cursor = end + len("</event>")
+        if not lines:
+            continue
+        try:
+            n_particles = int(float(lines[0].split()[0]))
+        except (IndexError, ValueError):
+            n_particles = max(0, len(lines) - 1)
+        event_particles: list[dict[str, Any]] = []
+        for particle_index, line in enumerate(lines[1 : 1 + n_particles], start=1):
+            parts = line.split()
+            if len(parts) < 13:
+                continue
+            try:
+                pdg_id = int(parts[0])
+                status = int(parts[1])
+                mother1 = int(parts[2])
+                mother2 = int(parts[3])
+                color1 = int(parts[4])
+                color2 = int(parts[5])
+                px = _parse_lhe_float(parts[6])
+                py = _parse_lhe_float(parts[7])
+                pz = _parse_lhe_float(parts[8])
+                energy = _parse_lhe_float(parts[9])
+                mass = _parse_lhe_float(parts[10])
+                lifetime = _parse_lhe_float(parts[11])
+                spin = _parse_lhe_float(parts[12])
+            except ValueError:
+                continue
+            pt = math.hypot(px, py)
+            p_abs = math.sqrt(px * px + py * py + pz * pz)
+            row = {
+                "powheg_job_id": job_id,
+                "lhe_event_index": event_index,
+                "particle_index": particle_index,
+                "pdg_id": pdg_id,
+                "particle_name": _particle_name(pdg_id),
+                "status": status,
+                "mother1": mother1,
+                "mother2": mother2,
+                "color1": color1,
+                "color2": color2,
+                "px_gev": px,
+                "py_gev": py,
+                "pz_gev": pz,
+                "energy_gev": energy,
+                "mass_gev": mass,
+                "lifetime": lifetime,
+                "spin": spin,
+                "pt_gev": pt,
+                "p_abs_gev": p_abs,
+                "eta": _eta(px, py, pz),
+                "phi": math.atan2(py, px),
+            }
+            event_particles.append(row)
+            particles.append(row)
+        final_particles = [row for row in event_particles if int(row["status"]) == 1]
+        initial_particles = [row for row in event_particles if int(row["status"]) == -1]
+        events.append(
+            {
+                "powheg_job_id": job_id,
+                "lhe_event_index": event_index,
+                "n_particles": len(event_particles),
+                "n_initial_state": len(initial_particles),
+                "n_final_state": len(final_particles),
+                "sum_final_energy_gev": sum(float(row["energy_gev"]) for row in final_particles),
+                "sum_final_px_gev": sum(float(row["px_gev"]) for row in final_particles),
+                "sum_final_py_gev": sum(float(row["py_gev"]) for row in final_particles),
+                "sum_final_pz_gev": sum(float(row["pz_gev"]) for row in final_particles),
+                "pdg_ids": [int(row["pdg_id"]) for row in event_particles],
+                "particle_names": [str(row["particle_name"]) for row in event_particles],
+            }
+        )
+    return particles, events
 
 
 def _runtime_config_path(values: dict[str, dict[str, Any]], run_output_dir: Path) -> Path:
@@ -113,6 +269,163 @@ def _draw_job_summary(summary: dict[str, Any], path: Path) -> None:
     fig.tight_layout()
     fig.savefig(path)
     plt.close(fig)
+
+
+def _aggregate_particle_summary(particles: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[int, list[dict[str, Any]]] = {}
+    for row in particles:
+        grouped.setdefault(int(row["pdg_id"]), []).append(row)
+    summary_rows: list[dict[str, Any]] = []
+    for pdg_id in sorted(grouped, key=lambda item: (-len(grouped[item]), item)):
+        rows = grouped[pdg_id]
+        final_rows = [row for row in rows if int(row["status"]) == 1]
+        initial_rows = [row for row in rows if int(row["status"]) == -1]
+        energies = [float(row["energy_gev"]) for row in rows]
+        pts = [float(row["pt_gev"]) for row in rows]
+        summary_rows.append(
+            {
+                "pdg_id": pdg_id,
+                "particle_name": _particle_name(pdg_id),
+                "count": len(rows),
+                "final_state_count": len(final_rows),
+                "initial_state_count": len(initial_rows),
+                "mean_energy_gev": sum(energies) / len(energies) if energies else 0.0,
+                "max_energy_gev": max(energies) if energies else 0.0,
+                "mean_pt_gev": sum(pts) / len(pts) if pts else 0.0,
+                "max_pt_gev": max(pts) if pts else 0.0,
+            }
+        )
+    return summary_rows
+
+
+def _write_particle_summary_csv(path: Path, rows: list[dict[str, Any]]) -> None:
+    fieldnames = [
+        "pdg_id",
+        "particle_name",
+        "count",
+        "final_state_count",
+        "initial_state_count",
+        "mean_energy_gev",
+        "max_energy_gev",
+        "mean_pt_gev",
+        "max_pt_gev",
+    ]
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({key: row.get(key, "") for key in fieldnames})
+
+
+def _draw_lhe_particle_histogram(summary_rows: list[dict[str, Any]], path: Path) -> None:
+    fig, ax = plt.subplots(figsize=(7.5, 4.8), dpi=150)
+    if summary_rows:
+        labels = [f"{row['particle_name']}\n({row['pdg_id']})" for row in summary_rows]
+        counts = [int(row["count"]) for row in summary_rows]
+        ax.bar(labels, counts, color="#7c3aed", alpha=0.82)
+        ax.tick_params(axis="x", labelrotation=35)
+    else:
+        ax.text(0.5, 0.5, "No LHE particles parsed", transform=ax.transAxes, ha="center", va="center")
+    ax.set_ylabel("particle count")
+    ax.set_title("POWHEG LHE hard-process particle content")
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+
+
+def _draw_lhe_energy_spectrum(particles: list[dict[str, Any]], path: Path) -> None:
+    fig, ax = plt.subplots(figsize=(7.0, 4.6), dpi=150)
+    initial = [float(row["energy_gev"]) for row in particles if int(row["status"]) == -1 and float(row["energy_gev"]) > 0.0]
+    final = [float(row["energy_gev"]) for row in particles if int(row["status"]) == 1 and float(row["energy_gev"]) > 0.0]
+    data = []
+    labels = []
+    if initial:
+        data.append(initial)
+        labels.append("initial state")
+    if final:
+        data.append(final)
+        labels.append("final state")
+    if data:
+        ax.hist(data, bins=min(20, max(3, len(initial) + len(final))), label=labels, alpha=0.72)
+        ax.set_xscale("log")
+        ax.legend()
+    else:
+        ax.text(0.5, 0.5, "No positive LHE particle energies", transform=ax.transAxes, ha="center", va="center")
+    ax.set_xlabel("energy [GeV]")
+    ax.set_ylabel("particles")
+    ax.set_title("POWHEG LHE particle energy spectrum")
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+
+
+def _draw_lhe_momentum_spectrum(particles: list[dict[str, Any]], path: Path) -> None:
+    fig, ax = plt.subplots(figsize=(7.0, 4.6), dpi=150)
+    p_abs = [float(row["p_abs_gev"]) for row in particles if float(row["p_abs_gev"]) > 0.0]
+    pt = [float(row["pt_gev"]) for row in particles if float(row["pt_gev"]) > 0.0]
+    data = []
+    labels = []
+    if p_abs:
+        data.append(p_abs)
+        labels.append("|p|")
+    if pt:
+        data.append(pt)
+        labels.append("pT")
+    if data:
+        ax.hist(data, bins=min(20, max(3, len(p_abs))), label=labels, alpha=0.72)
+        ax.set_xscale("log")
+        ax.legend()
+    else:
+        ax.text(0.5, 0.5, "No positive LHE particle momenta", transform=ax.transAxes, ha="center", va="center")
+    ax.set_xlabel("momentum [GeV]")
+    ax.set_ylabel("particles")
+    ax.set_title("POWHEG LHE particle momentum spectrum")
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+
+
+def generate_lhe_diagnostics(lhe_path: Path, output_dir: Path, *, powheg_job_id: str | None = None) -> dict[str, Any]:
+    particles, events = parse_lhe_particles(lhe_path, powheg_job_id=powheg_job_id)
+    particle_summary = _aggregate_particle_summary(particles)
+    particles_path = output_dir / "powheg_lhe_particles.jsonl"
+    events_path = output_dir / "powheg_lhe_events_summary.jsonl"
+    summary_json_path = output_dir / "powheg_lhe_particle_summary.json"
+    summary_csv_path = output_dir / "powheg_lhe_particle_summary.csv"
+    histogram_path = output_dir / "powheg_lhe_particle_histogram.png"
+    energy_path = output_dir / "powheg_lhe_energy_spectrum.png"
+    momentum_path = output_dir / "powheg_lhe_momentum_spectrum.png"
+    _write_jsonl(particles_path, particles)
+    _write_jsonl(events_path, events)
+    write_json(summary_json_path, particle_summary)
+    _write_particle_summary_csv(summary_csv_path, particle_summary)
+    _draw_lhe_particle_histogram(particle_summary, histogram_path)
+    _draw_lhe_energy_spectrum(particles, energy_path)
+    _draw_lhe_momentum_spectrum(particles, momentum_path)
+    unique_types = sorted({int(row["pdg_id"]) for row in particles})
+    return {
+        "lhe_parser_invoked": True,
+        "lhe_particles_are_hard_process": True,
+        "hadronization_invoked": False,
+        "pythia_invoked": False,
+        "geant4_invoked": False,
+        "photon_transport_invoked": False,
+        "n_lhe_events_parsed": len(events),
+        "n_lhe_particles": len(particles),
+        "n_final_state_particles": sum(1 for row in particles if int(row["status"]) == 1),
+        "unique_particle_types": len(unique_types),
+        "unique_pdg_ids": unique_types,
+        "particle_summary": particle_summary,
+        "products": {
+            "powheg_lhe_particles": str(particles_path),
+            "powheg_lhe_events_summary": str(events_path),
+            "powheg_lhe_particle_summary_csv": str(summary_csv_path),
+            "powheg_lhe_particle_summary_json": str(summary_json_path),
+            "powheg_lhe_particle_histogram": str(histogram_path),
+            "powheg_lhe_energy_spectrum": str(energy_path),
+            "powheg_lhe_momentum_spectrum": str(momentum_path),
+        },
+    }
 
 
 def _count_lhe_events(text: str) -> int:
@@ -232,6 +545,13 @@ def _augment_summary(summary: dict[str, Any], output_dir: Path, requests: list[d
             "powheg_energy_distribution": str(output_dir / "powheg_energy_distribution.png"),
             "powheg_job_summary": str(output_dir / "powheg_job_summary.png"),
             "powheg_validation_report": str(output_dir / "powheg_validation_report.json"),
+            "powheg_lhe_particles": str(output_dir / "powheg_lhe_particles.jsonl"),
+            "powheg_lhe_events_summary": str(output_dir / "powheg_lhe_events_summary.jsonl"),
+            "powheg_lhe_particle_summary_csv": str(output_dir / "powheg_lhe_particle_summary.csv"),
+            "powheg_lhe_particle_summary_json": str(output_dir / "powheg_lhe_particle_summary.json"),
+            "powheg_lhe_particle_histogram": str(output_dir / "powheg_lhe_particle_histogram.png"),
+            "powheg_lhe_energy_spectrum": str(output_dir / "powheg_lhe_energy_spectrum.png"),
+            "powheg_lhe_momentum_spectrum": str(output_dir / "powheg_lhe_momentum_spectrum.png"),
         }
     )
     run_mode = str(summary.get("powheg_run_mode", "dry_run"))
@@ -250,6 +570,14 @@ def _augment_summary(summary: dict[str, Any], output_dir: Path, requests: list[d
             "powheg_job_summary_generated": True,
             "powheg_event_requests_generated": True,
             "powheg_input_cards_generated": int(summary.get("powheg_cards_generated", len(requests))),
+            "lhe_parser_invoked": False,
+            "lhe_particles_are_hard_process": True,
+            "hadronization_invoked": False,
+            "n_lhe_particles": 0,
+            "n_final_state_particles": 0,
+            "unique_particle_types": 0,
+            "powheg_lhe_products_generated": False,
+            "powheg_lhe_message": "No LHE available: POWHEG dry run only.",
             "pythia_invoked": False,
             "geant4_invoked": False,
             "photon_transport_invoked": False,
@@ -307,9 +635,13 @@ def generate_powheg_products(values: dict[str, dict[str, Any]], *, run_output_di
         "geant4_invoked": False,
         "photon_transport_invoked": False,
         "spectra_invoked": False,
+        "lhe_parser_invoked": False,
+        "lhe_particles_are_hard_process": True,
+        "hadronization_invoked": False,
     }
     if run_mode == "real_smoke":
         validation_report = _run_real_smoke(output_dir, requests)
+        lhe_diagnostics = generate_lhe_diagnostics(Path(validation_report["powheg_lhe_path"]), output_dir, powheg_job_id=str(validation_report["powheg_request_id"]))
         summary.update(
             {
                 "stage_name": "H3-W9b POWHEG Real Run Smoke Mode",
@@ -328,11 +660,34 @@ def generate_powheg_products(values: dict[str, dict[str, Any]], *, run_output_di
                 "powheg_validation_report": str(validation_report_path),
                 "powheg_lhe_path": validation_report["powheg_lhe_path"],
                 "powheg_log_path": validation_report["powheg_log_path"],
+                "lhe_parser_invoked": True,
+                "lhe_particles_are_hard_process": True,
+                "hadronization_invoked": False,
+                "n_lhe_events_parsed": int(lhe_diagnostics["n_lhe_events_parsed"]),
+                "n_lhe_particles": int(lhe_diagnostics["n_lhe_particles"]),
+                "n_final_state_particles": int(lhe_diagnostics["n_final_state_particles"]),
+                "unique_particle_types": int(lhe_diagnostics["unique_particle_types"]),
+                "unique_pdg_ids": lhe_diagnostics["unique_pdg_ids"],
+                "powheg_lhe_products_generated": True,
+                "powheg_lhe_particle_summary": lhe_diagnostics["particle_summary"],
+                "powheg_lhe_message": "These are POWHEG hard-process/LHE particles. They are not hadronized final-state particles. PYTHIA has not been invoked.",
                 "pythia_invoked": False,
                 "geant4_invoked": False,
                 "photon_transport_invoked": False,
                 "spectra_invoked": False,
                 "expensive_event_generation_invoked": False,
+            }
+        )
+        summary["products"].update(lhe_diagnostics["products"])
+        validation_report.update(
+            {
+                "lhe_parser_invoked": True,
+                "lhe_particles_are_hard_process": True,
+                "hadronization_invoked": False,
+                "n_lhe_events_parsed": int(lhe_diagnostics["n_lhe_events_parsed"]),
+                "n_lhe_particles": int(lhe_diagnostics["n_lhe_particles"]),
+                "n_final_state_particles": int(lhe_diagnostics["n_final_state_particles"]),
+                "unique_particle_types": int(lhe_diagnostics["unique_particle_types"]),
             }
         )
         _write_jsonl(requests_path, requests)

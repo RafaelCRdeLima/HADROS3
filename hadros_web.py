@@ -215,6 +215,13 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
     powheg_card_preview_path = powheg_output_dir / "powheg_card_preview.png"
     powheg_energy_distribution_path = powheg_output_dir / "powheg_energy_distribution.png"
     powheg_job_summary_path = powheg_output_dir / "powheg_job_summary.png"
+    powheg_lhe_particles_path = powheg_output_dir / "powheg_lhe_particles.jsonl"
+    powheg_lhe_events_summary_path = powheg_output_dir / "powheg_lhe_events_summary.jsonl"
+    powheg_lhe_particle_summary_csv_path = powheg_output_dir / "powheg_lhe_particle_summary.csv"
+    powheg_lhe_particle_summary_json_path = powheg_output_dir / "powheg_lhe_particle_summary.json"
+    powheg_lhe_particle_histogram_path = powheg_output_dir / "powheg_lhe_particle_histogram.png"
+    powheg_lhe_energy_spectrum_path = powheg_output_dir / "powheg_lhe_energy_spectrum.png"
+    powheg_lhe_momentum_spectrum_path = powheg_output_dir / "powheg_lhe_momentum_spectrum.png"
     html_path = web_dir / "index.html"
 
     camera_summary: dict[str, Any] | None = None
@@ -421,6 +428,13 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "powheg_card_preview": powheg_card_preview_path.exists(),
                 "powheg_energy_distribution": powheg_energy_distribution_path.exists(),
                 "powheg_job_summary": powheg_job_summary_path.exists(),
+                "powheg_lhe_particles": powheg_lhe_particles_path.exists(),
+                "powheg_lhe_events_summary": powheg_lhe_events_summary_path.exists(),
+                "powheg_lhe_particle_summary_csv": powheg_lhe_particle_summary_csv_path.exists(),
+                "powheg_lhe_particle_summary_json": powheg_lhe_particle_summary_json_path.exists(),
+                "powheg_lhe_particle_histogram": powheg_lhe_particle_histogram_path.exists(),
+                "powheg_lhe_energy_spectrum": powheg_lhe_energy_spectrum_path.exists(),
+                "powheg_lhe_momentum_spectrum": powheg_lhe_momentum_spectrum_path.exists(),
             },
             "summary": powheg_summary,
             "links": {
@@ -434,6 +448,13 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "powheg_card_preview": rel(powheg_card_preview_path, output_dir),
                 "powheg_energy_distribution": rel(powheg_energy_distribution_path, output_dir),
                 "powheg_job_summary": rel(powheg_job_summary_path, output_dir),
+                "powheg_lhe_particles": rel(powheg_lhe_particles_path, output_dir),
+                "powheg_lhe_events_summary": rel(powheg_lhe_events_summary_path, output_dir),
+                "powheg_lhe_particle_summary_csv": rel(powheg_lhe_particle_summary_csv_path, output_dir),
+                "powheg_lhe_particle_summary_json": rel(powheg_lhe_particle_summary_json_path, output_dir),
+                "powheg_lhe_particle_histogram": rel(powheg_lhe_particle_histogram_path, output_dir),
+                "powheg_lhe_energy_spectrum": rel(powheg_lhe_energy_spectrum_path, output_dir),
+                "powheg_lhe_momentum_spectrum": rel(powheg_lhe_momentum_spectrum_path, output_dir),
             },
         },
         "pipeline_status": [
@@ -532,6 +553,13 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             "powheg_card_preview_exists": powheg_card_preview_path.exists(),
             "powheg_energy_distribution_exists": powheg_energy_distribution_path.exists(),
             "powheg_job_summary_exists": powheg_job_summary_path.exists(),
+            "powheg_lhe_particles_exists": powheg_lhe_particles_path.exists(),
+            "powheg_lhe_events_summary_exists": powheg_lhe_events_summary_path.exists(),
+            "powheg_lhe_particle_summary_csv_exists": powheg_lhe_particle_summary_csv_path.exists(),
+            "powheg_lhe_particle_summary_json_exists": powheg_lhe_particle_summary_json_path.exists(),
+            "powheg_lhe_particle_histogram_exists": powheg_lhe_particle_histogram_path.exists(),
+            "powheg_lhe_energy_spectrum_exists": powheg_lhe_energy_spectrum_path.exists(),
+            "powheg_lhe_momentum_spectrum_exists": powheg_lhe_momentum_spectrum_path.exists(),
             "provenance_exists": provenance_path.exists(),
             "config_exists": config_output_path.exists(),
             "render_summary_exists": render_summary_path.exists(),
@@ -619,6 +647,13 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "powheg_card_preview": rel(powheg_card_preview_path, output_dir),
                 "powheg_energy_distribution": rel(powheg_energy_distribution_path, output_dir),
                 "powheg_job_summary": rel(powheg_job_summary_path, output_dir),
+                "powheg_lhe_particles": rel(powheg_lhe_particles_path, output_dir),
+                "powheg_lhe_events_summary": rel(powheg_lhe_events_summary_path, output_dir),
+                "powheg_lhe_particle_summary_csv": rel(powheg_lhe_particle_summary_csv_path, output_dir),
+                "powheg_lhe_particle_summary_json": rel(powheg_lhe_particle_summary_json_path, output_dir),
+                "powheg_lhe_particle_histogram": rel(powheg_lhe_particle_histogram_path, output_dir),
+                "powheg_lhe_energy_spectrum": rel(powheg_lhe_energy_spectrum_path, output_dir),
+                "powheg_lhe_momentum_spectrum": rel(powheg_lhe_momentum_spectrum_path, output_dir),
                 "provenance": rel(provenance_path, output_dir),
                 "render_summary": rel(render_summary_path, output_dir),
                 "html_summary": rel(html_path, output_dir),
@@ -780,6 +815,13 @@ function setPowhegOutputs(exists) {{
   state.outputs.powheg_card_preview_exists = exists;
   state.outputs.powheg_energy_distribution_exists = exists;
   state.outputs.powheg_job_summary_exists = exists;
+  state.outputs.powheg_lhe_particles_exists = exists;
+  state.outputs.powheg_lhe_events_summary_exists = exists;
+  state.outputs.powheg_lhe_particle_summary_csv_exists = exists;
+  state.outputs.powheg_lhe_particle_summary_json_exists = exists;
+  state.outputs.powheg_lhe_particle_histogram_exists = exists;
+  state.outputs.powheg_lhe_energy_spectrum_exists = exists;
+  state.outputs.powheg_lhe_momentum_spectrum_exists = exists;
 }}
 function inputFor(field, value) {{
   if (field.kind === "select") {{
@@ -1191,6 +1233,13 @@ async function preparePowheg() {{
       state.outputs.powheg_validation_report_exists = Boolean(result.data.powheg.powheg_validation_report_generated);
       state.outputs.powheg_lhe_exists = Boolean(result.data.powheg.powheg_lhe_generated);
       state.outputs.powheg_log_exists = Boolean(result.data.powheg.powheg_lhe_generated);
+      state.outputs.powheg_lhe_particles_exists = Boolean(result.data.powheg.powheg_lhe_products_generated);
+      state.outputs.powheg_lhe_events_summary_exists = Boolean(result.data.powheg.powheg_lhe_products_generated);
+      state.outputs.powheg_lhe_particle_summary_csv_exists = Boolean(result.data.powheg.powheg_lhe_products_generated);
+      state.outputs.powheg_lhe_particle_summary_json_exists = Boolean(result.data.powheg.powheg_lhe_products_generated);
+      state.outputs.powheg_lhe_particle_histogram_exists = Boolean(result.data.powheg.powheg_lhe_products_generated);
+      state.outputs.powheg_lhe_energy_spectrum_exists = Boolean(result.data.powheg.powheg_lhe_products_generated);
+      state.outputs.powheg_lhe_momentum_spectrum_exists = Boolean(result.data.powheg.powheg_lhe_products_generated);
       state.powheg = Object.assign({{}}, state.powheg || {{}}, {{
         input_observer_bridge_found: true,
         n_candidates_input: result.data.powheg.n_candidates_input,
@@ -1772,6 +1821,22 @@ function renderPowhegPanel() {{
     <div class="summary-item"><strong>Backend executable</strong><code>${{summary.backend_executable || "bin/hadros3_powheg_driver"}}</code></div>
     <div class="summary-item"><strong>Runtime self-contained</strong>${{String(summary.powheg_runtime_self_contained)}}</div>
   </div></section>` : `<section><h2>Results</h2><p class="note">No POWHEG jobs prepared yet.</p></section>`;
+  const particleRows = summary && Array.isArray(summary.powheg_lhe_particle_summary)
+    ? summary.powheg_lhe_particle_summary.slice(0, 12).map(row => `<tr><td>${{row.particle_name}}</td><td>${{row.pdg_id}}</td><td>${{row.count}}</td><td>${{row.final_state_count}}</td><td>${{Number(row.mean_energy_gev || 0).toExponential(4)}}</td><td>${{Number(row.max_energy_gev || 0).toExponential(4)}}</td></tr>`).join("")
+    : "";
+  const lheHtml = summary ? `<section><h2>POWHEG LHE Products</h2>
+    <p class="note">${{summary.powheg_lhe_message || "No LHE available: POWHEG dry run only."}}</p>
+    <p class="note">These are POWHEG hard-process/LHE particles. They are not hadronized final-state particles. PYTHIA has not been invoked.</p>
+    <div class="summary-grid">
+      <div class="summary-item"><strong>n_lhe_events</strong>${{summary.n_lhe_events || 0}}</div>
+      <div class="summary-item"><strong>n_lhe_particles</strong>${{summary.n_lhe_particles || 0}}</div>
+      <div class="summary-item"><strong>n_final_state_particles</strong>${{summary.n_final_state_particles || 0}}</div>
+      <div class="summary-item"><strong>unique_particle_types</strong>${{summary.unique_particle_types || 0}}</div>
+      <div class="summary-item"><strong>lhe_parser_invoked</strong>${{String(summary.lhe_parser_invoked || false)}}</div>
+      <div class="summary-item"><strong>hadronization_invoked</strong>${{String(summary.hadronization_invoked || false)}}</div>
+    </div>
+    ${{particleRows ? `<h2>Particle Summary Table</h2><table class="backend-table"><thead><tr><th>particle_name</th><th>pdg_id</th><th>count</th><th>final_state_count</th><th>mean_energy_gev</th><th>max_energy_gev</th></tr></thead><tbody>${{particleRows}}</tbody></table>` : ""}}
+  </section>` : "";
   const links = `<section><h2>Outputs</h2><div class="output-link-grid">
     ${{state.outputs.powheg_event_requests_exists ? `<a href="${{outUrl("powheg_event_requests")}}" target="_blank">Event requests JSONL<br><code>${{outPath("powheg_event_requests")}}</code></a>` : ""}}
     ${{state.outputs.powheg_summary_json_exists ? `<a href="${{outUrl("powheg_summary_json")}}" target="_blank">Summary JSON<br><code>${{outPath("powheg_summary_json")}}</code></a>` : ""}}
@@ -1780,6 +1845,10 @@ function renderPowhegPanel() {{
     ${{state.outputs.powheg_validation_report_exists ? `<a href="${{outUrl("powheg_validation_report")}}" target="_blank">Validation report<br><code>${{outPath("powheg_validation_report")}}</code></a>` : ""}}
     ${{state.outputs.powheg_lhe_exists ? `<a href="${{outUrl("powheg_lhe")}}" target="_blank">Smoke LHE<br><code>${{outPath("powheg_lhe")}}</code></a>` : ""}}
     ${{state.outputs.powheg_log_exists ? `<a href="${{outUrl("powheg_log")}}" target="_blank">POWHEG log<br><code>${{outPath("powheg_log")}}</code></a>` : ""}}
+    ${{state.outputs.powheg_lhe_particles_exists ? `<a href="${{outUrl("powheg_lhe_particles")}}" target="_blank">LHE particles JSONL<br><code>${{outPath("powheg_lhe_particles")}}</code></a>` : ""}}
+    ${{state.outputs.powheg_lhe_events_summary_exists ? `<a href="${{outUrl("powheg_lhe_events_summary")}}" target="_blank">LHE events summary JSONL<br><code>${{outPath("powheg_lhe_events_summary")}}</code></a>` : ""}}
+    ${{state.outputs.powheg_lhe_particle_summary_csv_exists ? `<a href="${{outUrl("powheg_lhe_particle_summary_csv")}}" target="_blank">LHE particle summary CSV<br><code>${{outPath("powheg_lhe_particle_summary_csv")}}</code></a>` : ""}}
+    ${{state.outputs.powheg_lhe_particle_summary_json_exists ? `<a href="${{outUrl("powheg_lhe_particle_summary_json")}}" target="_blank">LHE particle summary JSON<br><code>${{outPath("powheg_lhe_particle_summary_json")}}</code></a>` : ""}}
   </div></section>`;
   return `<div class="source-panel">
     ${{inputHtml}}
@@ -1788,6 +1857,7 @@ function renderPowhegPanel() {{
     <p class="note">Dry run prepares requests, deterministic seeds and real POWHEG input cards without executing pwhg_main. Real smoke executes the local pwhg_main for one top candidate and validates a minimal LHE.</p>
     <p class="note">PYTHIA, GEANT4, photon transport and spectra remain disabled.</p></section>
     ${{resultsHtml}}
+    ${{lheHtml}}
     ${{links}}
   </div>`;
 }}
@@ -1878,6 +1948,9 @@ function renderContextPanel() {{
     const diagnosticCards = [
       state.outputs.powheg_energy_distribution_exists ? `<figure class="diagnostic-plot-card"><figcaption>Energy distribution</figcaption><a href="${{outUrl("powheg_energy_distribution")}}" target="_blank"><img src="${{outUrl("powheg_energy_distribution")}}?v=${{powhegPreviewVersion}}" alt="POWHEG energy distribution"></a></figure>` : "",
       state.outputs.powheg_job_summary_exists ? `<figure class="diagnostic-plot-card"><figcaption>Job summary</figcaption><a href="${{outUrl("powheg_job_summary")}}" target="_blank"><img src="${{outUrl("powheg_job_summary")}}?v=${{powhegPreviewVersion}}" alt="POWHEG job summary"></a></figure>` : "",
+      state.outputs.powheg_lhe_particle_histogram_exists ? `<figure class="diagnostic-plot-card"><figcaption>LHE particle histogram</figcaption><a href="${{outUrl("powheg_lhe_particle_histogram")}}" target="_blank"><img src="${{outUrl("powheg_lhe_particle_histogram")}}?v=${{powhegPreviewVersion}}" alt="POWHEG LHE particle histogram"></a></figure>` : "",
+      state.outputs.powheg_lhe_energy_spectrum_exists ? `<figure class="diagnostic-plot-card"><figcaption>LHE energy spectrum</figcaption><a href="${{outUrl("powheg_lhe_energy_spectrum")}}" target="_blank"><img src="${{outUrl("powheg_lhe_energy_spectrum")}}?v=${{powhegPreviewVersion}}" alt="POWHEG LHE energy spectrum"></a></figure>` : "",
+      state.outputs.powheg_lhe_momentum_spectrum_exists ? `<figure class="diagnostic-plot-card"><figcaption>LHE momentum spectrum</figcaption><a href="${{outUrl("powheg_lhe_momentum_spectrum")}}" target="_blank"><img src="${{outUrl("powheg_lhe_momentum_spectrum")}}?v=${{powhegPreviewVersion}}" alt="POWHEG LHE momentum spectrum"></a></figure>` : "",
     ].filter(Boolean).join("");
     const diagnostics = diagnosticCards ? `<section><h2>Diagnostics</h2><div class="diagnostic-card-grid">${{diagnosticCards}}</div></section>` : "";
     return `<aside class="panel"><h2>POWHEG Card Preview</h2><div class="context-figure">${{figure}}</div>${{diagnostics}}</aside>`;
@@ -2013,6 +2086,16 @@ function renderOutputsPanel() {{
     ${{out.powheg_energy_distribution_exists ? `<img src="${{outUrl("powheg_energy_distribution")}}" alt="POWHEG energy distribution">` : ""}}
     ${{link(out.powheg_job_summary_exists, "powheg_job_summary", "POWHEG job summary")}}
     ${{out.powheg_job_summary_exists ? `<img src="${{outUrl("powheg_job_summary")}}" alt="POWHEG job summary">` : ""}}
+    ${{link(out.powheg_lhe_particles_exists, "powheg_lhe_particles", "POWHEG LHE particles")}}
+    ${{link(out.powheg_lhe_events_summary_exists, "powheg_lhe_events_summary", "POWHEG LHE events summary")}}
+    ${{link(out.powheg_lhe_particle_summary_csv_exists, "powheg_lhe_particle_summary_csv", "POWHEG LHE particle summary CSV")}}
+    ${{link(out.powheg_lhe_particle_summary_json_exists, "powheg_lhe_particle_summary_json", "POWHEG LHE particle summary JSON")}}
+    ${{link(out.powheg_lhe_particle_histogram_exists, "powheg_lhe_particle_histogram", "POWHEG LHE particle histogram")}}
+    ${{out.powheg_lhe_particle_histogram_exists ? `<img src="${{outUrl("powheg_lhe_particle_histogram")}}" alt="POWHEG LHE particle histogram">` : ""}}
+    ${{link(out.powheg_lhe_energy_spectrum_exists, "powheg_lhe_energy_spectrum", "POWHEG LHE energy spectrum")}}
+    ${{out.powheg_lhe_energy_spectrum_exists ? `<img src="${{outUrl("powheg_lhe_energy_spectrum")}}" alt="POWHEG LHE energy spectrum">` : ""}}
+    ${{link(out.powheg_lhe_momentum_spectrum_exists, "powheg_lhe_momentum_spectrum", "POWHEG LHE momentum spectrum")}}
+    ${{out.powheg_lhe_momentum_spectrum_exists ? `<img src="${{outUrl("powheg_lhe_momentum_spectrum")}}" alt="POWHEG LHE momentum spectrum">` : ""}}
   `) + group("Dashboard/", `
     ${{link(out.html_summary_exists, "html_summary", "Dashboard HTML")}}
   `);

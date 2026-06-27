@@ -232,6 +232,13 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert payload["outputs"]["paths"]["powheg_lhe_particle_histogram"] == "POWHEG/powheg_lhe_particle_histogram.png"
     assert payload["outputs"]["paths"]["powheg_lhe_energy_spectrum"] == "POWHEG/powheg_lhe_energy_spectrum.png"
     assert payload["outputs"]["paths"]["powheg_lhe_momentum_spectrum"] == "POWHEG/powheg_lhe_momentum_spectrum.png"
+    assert payload["outputs"]["paths"]["powheg_hard_process_event_display"] == "POWHEG/powheg_hard_process_event_display.png"
+    assert payload["outputs"]["paths"]["powheg_hard_process_event_display_view"] == "POWHEG/powheg_hard_process_event_display_view.html"
+    assert payload["outputs"]["paths"]["powheg_event_summary_table"] == "POWHEG/powheg_event_summary_table.csv"
+    assert payload["outputs"]["paths"]["powheg_particle_table"] == "POWHEG/powheg_particle_table.csv"
+    assert payload["outputs"]["paths"]["powheg_particle_table_html"] == "POWHEG/powheg_particle_table.html"
+    assert payload["outputs"]["paths"]["powheg_particle_content_report"] == "POWHEG/powheg_particle_content_report.json"
+    assert payload["outputs"]["paths"]["powheg_lhe_event_view"] == "POWHEG/powheg_lhe_event_view.html"
     assert payload["outputs"]["paths"]["dis_summary_json"] == "DIS/dis_summary.json"
     assert payload["outputs"]["paths"]["uhe_source_sampling_uniformity"] == "UHEsource/uhe_source_sampling_uniformity.png"
     assert payload["outputs"]["paths"]["uhe_source_sampling_uniformity_report"] == "UHEsource/uhe_source_sampling_uniformity_report.json"
@@ -332,10 +339,29 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert "pwgevents.lhe" in html
     assert "powheg.log" in html
     assert "powheg_card_preview.png" in html
+    assert "POWHEG Job Overview" in html
+    assert "Open raw card preview PNG" in html
+    assert "Raw POWHEG input cards are still written" in html
     assert "powheg_energy_distribution.png" in html
     assert "powheg_job_summary.png" in html
     assert "POWHEG LHE Products" in html
+    assert "Generation Summary" in html
+    assert "Physics Summary" in html
+    assert "n_lhe_events" in html
+    assert "n_lhe_particles" in html
+    assert "n_final_state_particles" in html
+    assert "unique_particle_types" in html
+    assert "Hard Process Event Display" in html
     assert "Particle Summary Table" in html
+    assert "Particle Table" in html
+    assert "particle_display || (\"PDG \" + row.pdg_id)" in html
+    assert "initial_state_count" in html
+    assert "final_state_count" in html
+    assert "mean_pt_gev" in html
+    assert "max_pt_gev" in html
+    assert "POWHEG particle table with momenta and energies" in html
+    assert "row.particle_name" not in html
+    assert "LHE Viewer" in html
     assert "These are POWHEG hard-process/LHE particles." in html
     assert "PYTHIA has not been invoked." in html
     assert "powheg_lhe_particles.jsonl" in html
@@ -343,8 +369,20 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert "powheg_lhe_particle_summary.csv" in html
     assert "powheg_lhe_particle_summary.json" in html
     assert "powheg_lhe_particle_histogram.png" in html
+    assert "POWHEG LHE particle histogram" in html
     assert "powheg_lhe_energy_spectrum.png" in html
+    assert "POWHEG LHE energy spectrum" in html
     assert "powheg_lhe_momentum_spectrum.png" in html
+    assert "POWHEG LHE momentum spectrum" in html
+    assert "powheg_hard_process_event_display.png" in html
+    assert "powheg_hard_process_event_display_view.html" in html
+    assert "POWHEG hard process event selector" in html
+    assert "powheg_event_summary_table.csv" in html
+    assert "powheg_particle_table.csv" in html
+    assert "powheg_particle_table.html" in html
+    assert "powheg_particle_table_html" in html
+    assert "powheg_particle_content_report.json" in html
+    assert "powheg_lhe_event_view.html" in html
     assert "Observer Camera Overlay" in html
     assert "overlay resolution" in html
     assert "camera_preview_pixel_plane" in html

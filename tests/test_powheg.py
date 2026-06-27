@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import csv
 import json
 from pathlib import Path
 
@@ -19,6 +20,17 @@ def test_cpp_powheg_driver_fallbacks_match_dashboard_defaults() -> None:
     assert "int events_per_candidate = 1;" in source
     assert "int max_powheg_events = 5;" not in source
     assert "int events_per_candidate = 2;" not in source
+
+
+def test_powheg_particle_plot_labels_use_latex_names() -> None:
+    assert powheg_module._particle_latex_name(11) == r"e^{-}"
+    assert powheg_module._particle_latex_name(12) == r"\nu_{e}"
+    assert powheg_module._particle_latex_name(-2) == r"\bar{u}"
+    assert powheg_module._particle_latex_name(-1) == r"\bar{d}"
+    assert powheg_module._particle_display_name(12) == "νₑ"
+    assert powheg_module._particle_display_name(11) == "e⁻"
+    assert powheg_module._particle_display_name(-2) == "ū"
+    assert powheg_module._particle_display_name(-1) == "d̄"
 
 
 def _write_ranked_events(run_dir: Path) -> Path:
@@ -209,13 +221,17 @@ def test_lhe_parser_extracts_particle_kinematics(tmp_path: Path) -> None:
     assert len(events) == 1
     assert particles[0]["pdg_id"] == 12
     assert particles[0]["particle_name"] == "nu_e"
+    assert particles[0]["particle_display"] == "νₑ"
     assert particles[2]["pdg_id"] == 11
+    assert particles[2]["particle_display"] == "e⁻"
     assert particles[2]["status"] == 1
     assert particles[2]["pt_gev"] == 5.0
     assert particles[2]["energy_gev"] == 31.0
     assert events[0]["n_initial_state"] == 2
     assert events[0]["n_final_state"] == 2
     assert events[0]["sum_final_energy_gev"] == 100.5
+    assert events[0]["incoming_particles_display"] == ["νₑ", "d"]
+    assert events[0]["outgoing_particles_display"] == ["e⁻", "u"]
 
 
 def test_powheg_real_smoke_fails_clearly_without_local_pwhg_main(tmp_path: Path, monkeypatch) -> None:
@@ -319,14 +335,66 @@ LHE
         tmp_path / "POWHEG" / "powheg_lhe_particle_histogram.png",
         tmp_path / "POWHEG" / "powheg_lhe_energy_spectrum.png",
         tmp_path / "POWHEG" / "powheg_lhe_momentum_spectrum.png",
+        tmp_path / "POWHEG" / "powheg_hard_process_event_display.png",
+        tmp_path / "POWHEG" / "powheg_hard_process_event_display_view.html",
+        tmp_path / "POWHEG" / "powheg_event_summary_table.csv",
+        tmp_path / "POWHEG" / "powheg_particle_table.csv",
+        tmp_path / "POWHEG" / "powheg_particle_table.html",
+        tmp_path / "POWHEG" / "powheg_particle_content_report.json",
+        tmp_path / "POWHEG" / "powheg_lhe_event_view.html",
     ]:
         assert path.exists()
     particles = [json.loads(line) for line in particles_path.read_text(encoding="utf-8").splitlines()]
     assert particles[0]["pdg_id"] == 12
     assert particles[0]["particle_name"] == "nu_e"
+    assert particles[0]["particle_display"] == "νₑ"
     assert particles[2]["pt_gev"] > 0.0
     particle_summary = json.loads(particle_summary_json.read_text(encoding="utf-8"))
     assert any(row["particle_name"] == "e-" and row["final_state_count"] == 1 for row in particle_summary)
+    assert any(row["particle_display"] == "e⁻" and row["final_state_count"] == 1 for row in particle_summary)
+    with particle_summary_csv.open(encoding="utf-8", newline="") as handle:
+        summary_header = next(csv.reader(handle))
+    assert "particle_display" in summary_header
+    assert "particle_latex" in summary_header
+    assert "initial_state_count" in summary_header
+    assert "final_state_count" in summary_header
+    assert "mean_pt_gev" in summary_header
+    assert "max_pt_gev" in summary_header
+    with (tmp_path / "POWHEG" / "powheg_particle_table.csv").open(encoding="utf-8", newline="") as handle:
+        particle_header = next(csv.reader(handle))
+    for column in [
+        "particle_display",
+        "particle_name",
+        "pdg_id",
+        "status",
+        "mother1",
+        "mother2",
+        "px_gev",
+        "py_gev",
+        "pz_gev",
+        "energy_gev",
+        "mass_gev",
+        "pt_gev",
+        "eta",
+        "phi",
+    ]:
+        assert column in particle_header
+    particle_table_html = (tmp_path / "POWHEG" / "powheg_particle_table.html").read_text(encoding="utf-8")
+    assert "POWHEG Particle Table" in particle_table_html
+    assert "powheg_particle_table.csv" in particle_table_html
+    assert "νₑ" in particle_table_html
+    content_report = json.loads((tmp_path / "POWHEG" / "powheg_particle_content_report.json").read_text(encoding="utf-8"))
+    assert "why_u_d_c_s_can_appear" in content_report
+    assert content_report["pythia_invoked"] is False
+    assert summary["powheg_particle_content_report_generated"] is True
+    assert summary["powheg_hard_process_event_display_generated"] is True
+    assert summary["powheg_hard_process_event_display_view_generated"] is True
+    assert summary["powheg_lhe_event_view_generated"] is True
+    event_selector_html = (tmp_path / "POWHEG" / "powheg_hard_process_event_display_view.html").read_text(encoding="utf-8")
+    assert "Hard process event" in event_selector_html
+    assert '<select id="event-select">' in event_selector_html
+    assert "νₑ" in event_selector_html
+    assert "average_multiplicity" in summary["powheg_physics_summary"]
 
     provenance = build_provenance(
         root=Path.cwd(),
@@ -420,6 +488,12 @@ LHE_TAIL
     particles_path = tmp_path / "POWHEG" / "powheg_lhe_particles.jsonl"
     assert len(events_path.read_text(encoding="utf-8").splitlines()) == 4
     assert len(particles_path.read_text(encoding="utf-8").splitlines()) == 16
+    assert (tmp_path / "POWHEG" / "powheg_event_summary_table.csv").exists()
+    assert (tmp_path / "POWHEG" / "powheg_particle_table.csv").exists()
+    assert (tmp_path / "POWHEG" / "powheg_particle_table.html").exists()
+    assert (tmp_path / "POWHEG" / "powheg_lhe_event_view.html").exists()
+    assert (tmp_path / "POWHEG" / "powheg_hard_process_event_display.png").exists()
+    assert (tmp_path / "POWHEG" / "powheg_hard_process_event_display_view.html").exists()
     validation = json.loads((tmp_path / "POWHEG" / "powheg_validation_report.json").read_text(encoding="utf-8"))
     assert validation["powheg_run_mode"] == "real_free"
     assert validation["n_powheg_jobs_run"] == 2

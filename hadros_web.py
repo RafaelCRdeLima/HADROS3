@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import subprocess
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -30,6 +31,87 @@ from hadros3.uhe_source import generate_uhe_source_products
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_CONFIG = ROOT / "presets" / "hadros_web" / "default_config.json"
+COMMAND_TIMEOUT_SECONDS = 15 * 60
+
+
+def load_release_metadata(root: Path = ROOT) -> dict[str, Any]:
+    path = root / "VERSION.json"
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+
+
+def run_dashboard_command(args: list[str], *, root: Path = ROOT, timeout: int = COMMAND_TIMEOUT_SECONDS) -> dict[str, Any]:
+    completed = subprocess.run(
+        args,
+        cwd=root,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+    return {
+        "command": args,
+        "returncode": completed.returncode,
+        "stdout": completed.stdout,
+        "stderr": completed.stderr,
+        "ok": completed.returncode == 0,
+    }
+
+
+def register_current_run(
+    values: dict[str, dict[str, Any]],
+    *,
+    case_name: str = "",
+    stage: str = "",
+    description: str = "",
+    root: Path = ROOT,
+) -> dict[str, Any]:
+    run_name = safe_run_name(values.get("run", {}).get("run_name", "HADROS3_run"))
+    release = load_release_metadata(root)
+    stage_value = (stage or release.get("pipeline_version") or "unclassified").strip()
+    case_value = (case_name or run_name).strip()
+    run_dir = root / run_output_dir(values)
+    csv_path = root / "results" / "catalog" / "HADROS3_RESULTS_CATALOG.csv"
+    json_path = root / "results" / "catalog" / "HADROS3_RESULTS_CATALOG.json"
+    command = [
+        sys.executable,
+        "scripts/results/register_result.py",
+        "--run-dir",
+        str(run_dir),
+        "--case-name",
+        case_value,
+        "--stage",
+        stage_value,
+        "--description",
+        str(description or ""),
+    ]
+    result = run_dashboard_command(command, root=root)
+    row: dict[str, Any] = {}
+    if result["stdout"].strip():
+        try:
+            row = json.loads(result["stdout"])
+        except json.JSONDecodeError:
+            row = {}
+    ok = result["ok"]
+    summary = {
+        "registered": ok,
+        "catalog_csv_updated": csv_path.exists(),
+        "catalog_json_updated": json_path.exists(),
+        "run_id": row.get("run_id", run_name),
+        "message": "Run registered in results catalog." if ok else "Run registration failed.",
+        "case_name": case_value,
+        "stage": stage_value,
+    }
+    return {
+        "ok": ok,
+        "returncode": result["returncode"],
+        "stdout": result["stdout"],
+        "stderr": result["stderr"],
+        "summary": summary,
+    }
 
 
 def write_values(path: Path, values: dict[str, dict[str, Any]]) -> None:
@@ -175,6 +257,7 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
         "schema": schema(),
         "values": values,
         "config": str(config_path) if config_path is not None else None,
+        "release": load_release_metadata(ROOT),
         "camera_backends": available_backends(),
         "camera_summary": camera_summary,
         "source_summary": source_summary,
@@ -568,7 +651,15 @@ def render_html(values: dict[str, dict[str, Any]], config_path: Path) -> str:
     button:disabled {{ opacity: 0.75; cursor: progress; }}
     pre {{ white-space: pre-wrap; background: #101318; color: #f0f4f8; padding: 12px; min-height: 120px; border-radius: 6px; overflow: auto; }}
     .panel {{ background: white; border: 1px solid #d6dce5; border-radius: 6px; padding: 16px; }}
-    .run-strip {{ grid-column: 1 / -1; background: white; border: 1px solid #d6dce5; border-radius: 6px; padding: 12px 16px; display: grid; grid-template-columns: 140px minmax(240px, 420px) 110px 1fr; gap: 10px; align-items: center; }}
+    .run-strip {{ grid-column: 1 / -1; background: white; border: 1px solid #d6dce5; border-radius: 6px; padding: 12px 16px; display: grid; gap: 12px; }}
+    .run-main-row {{ display: grid; grid-template-columns: 140px minmax(240px, 420px) 110px 1fr; gap: 10px; align-items: center; }}
+    .workflow-actions {{ display: grid; grid-template-columns: repeat(3, minmax(140px, 1fr)); gap: 10px; align-items: end; }}
+    .workflow-actions label {{ display: grid; grid-template-columns: 1fr; gap: 5px; margin: 0; }}
+    .workflow-buttons {{ grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }}
+    .workflow-buttons button {{ margin-right: 0; }}
+    .workflow-actions-log {{ grid-column: 1 / -1; border: 1px solid #d6dce5; border-radius: 6px; background: #f8fafc; padding: 10px; }}
+    .workflow-actions-log summary {{ cursor: pointer; font-weight: 700; }}
+    .workflow-actions-log pre {{ min-height: 72px; margin-bottom: 0; }}
     .run-strip label {{ display: contents; }}
     .run-strip input {{ width: 100%; box-sizing: border-box; }}
     .output-folder {{ font-family: ui-monospace, monospace; font-size: 13px; color: #4d5b6b; overflow-wrap: anywhere; }}
@@ -737,6 +828,44 @@ async function post(path, body) {{
   let data = null;
   try {{ data = JSON.parse(text); }} catch (err) {{ data = null; }}
   return {{ok: res.ok, text, data}};
+}}
+function workflowPayload() {{
+  return {{
+    values: collect(),
+    case_name: document.querySelector("#caseNameInput")?.value || "",
+    stage: document.querySelector("#stageInput")?.value || "",
+    description: document.querySelector("#descriptionInput")?.value || "",
+  }};
+}}
+function formatWorkflowResult(data) {{
+  if (!data) return "No response.";
+  const summary = data.summary || {{}};
+  const lines = [
+    `ok: ${{Boolean(data.ok)}}`,
+    `returncode: ${{data.returncode ?? ""}}`,
+    "summary:",
+    JSON.stringify(summary, null, 2),
+  ];
+  if (data.stdout) lines.push("\\nstdout:\\n" + data.stdout);
+  if (data.stderr) lines.push("\\nstderr:\\n" + data.stderr);
+  return lines.join("\\n");
+}}
+async function workflowPost(path, button) {{
+  if (button) button.disabled = true;
+  const log = document.querySelector("#workflowActionsOutput");
+  try {{
+    const res = await fetch(path, {{method: "POST", headers: {{"Content-Type": "application/json"}}, body: JSON.stringify(workflowPayload())}});
+    const text = await res.text();
+    let data = null;
+    try {{ data = JSON.parse(text); }} catch (err) {{ data = {{ok: res.ok, returncode: res.status, stdout: text, stderr: "", summary: {{message: "Non-JSON response"}}}}; }}
+    if (log) log.textContent = formatWorkflowResult(data);
+    return {{ok: res.ok, data, text}};
+  }} finally {{
+    if (button) button.disabled = false;
+  }}
+}}
+async function registerRun() {{
+  await workflowPost("/api/register-run", document.querySelector("#registerRunButton"));
 }}
 async function renderProducts() {{
   const button = document.querySelector("#render-button");
@@ -1988,7 +2117,19 @@ function render() {{
   const active = tabs.find(t => tabLabel(t) === activeTab) || tabs[0];
   activeTab = tabLabel(active);
   const runName = state.values.run.run_name || "HADROS3_run";
-  const runStrip = `<div class="run-strip"><label><span>Run name</span><input id="runNameInput" type="text" value="${{runName}}"></label><span>Output</span><div class="output-folder">output/${{safeRunName(runName)}}</div></div>`;
+  const defaultStage = state.release && state.release.pipeline_version ? state.release.pipeline_version : "unclassified";
+  const runStrip = `<div class="run-strip">
+    <div class="run-main-row"><label><span>Run name</span><input id="runNameInput" type="text" value="${{runName}}"></label><span>Output</span><div class="output-folder">output/${{safeRunName(runName)}}</div></div>
+    <div class="workflow-actions">
+      <label><span>Case name</span><input id="caseNameInput" type="text" value="${{safeRunName(runName)}}"></label>
+      <label><span>Stage</span><input id="stageInput" type="text" value="${{defaultStage}}"></label>
+      <label><span>Description</span><input id="descriptionInput" type="text" value=""></label>
+      <div class="workflow-buttons">
+        <button type="button" id="registerRunButton">Register Run</button>
+      </div>
+      <details class="workflow-actions-log" open><summary>Workflow Actions Log</summary><pre id="workflowActionsOutput">No workflow action run yet.</pre></details>
+    </div>
+  </div>`;
   const nav = `<nav>${{tabs.map(tab => `<button class="tab-button ${{tabLabel(tab) === activeTab ? "active" : ""}}" data-tab="${{tabLabel(tab)}}">${{tabLabel(tab)}}</button>`).join("")}}</nav>`;
   const customTabs = new Set(["DIS Interaction Sampler", "Observer Bridge", "POWHEG"]);
   const genericFields = customTabs.has(activeTab) ? "" : renderFields(active);
@@ -2008,12 +2149,18 @@ function render() {{
   if (observerBridgeButton) observerBridgeButton.onclick = computeObserverBridge;
   const powhegButton = document.querySelector("#powheg-button");
   if (powhegButton) powhegButton.onclick = preparePowheg;
+  const registerRunButton = document.querySelector("#registerRunButton");
+  if (registerRunButton) registerRunButton.onclick = registerRun;
   bindNumberInputs();
   drawGeometrySvg();
   document.querySelector("#runNameInput").addEventListener("input", event => {{
     state.values = collect();
     document.querySelector(".output-folder").textContent = "output/" + safeRunName(event.target.value);
+    const caseInput = document.querySelector("#caseNameInput");
+    if (caseInput && !caseInput.dataset.edited) caseInput.value = safeRunName(event.target.value);
   }});
+  const caseInput = document.querySelector("#caseNameInput");
+  if (caseInput) caseInput.addEventListener("input", event => event.target.dataset.edited = "1");
   const syncValuesAndGeometry = () => {{
     state.values = collect();
     drawGeometrySvg();
@@ -2063,8 +2210,9 @@ class Handler(BaseHTTPRequestHandler):
             return {
                 "values": deep_update(defaults(), raw.get("values", {})),
                 "previewOptions": raw.get("previewOptions", {}),
+                "raw": raw,
             }
-        return {"values": deep_update(defaults(), raw), "previewOptions": {}}
+        return {"values": deep_update(defaults(), raw), "previewOptions": {}, "raw": raw}
 
     def _output_file(self, values: dict[str, dict[str, Any]]) -> Path | None:
         request_path = urlparse(self.path).path
@@ -2178,9 +2326,20 @@ class Handler(BaseHTTPRequestHandler):
         payload = self._read_payload()
         values = payload["values"]
         preview_options = payload["previewOptions"]
+        raw = payload.get("raw", {})
         if self.path == "/api/save":
             write_values(self.config_path, values)
             self._send(200, f"wrote {self.config_path}\n")
+            return
+        if self.path == "/api/register-run":
+            summary = register_current_run(
+                values,
+                case_name=str(raw.get("case_name", "")),
+                stage=str(raw.get("stage", "")),
+                description=str(raw.get("description", "")),
+                root=ROOT,
+            )
+            self._send(200 if summary["ok"] else 500, json.dumps(summary, indent=2, sort_keys=True) + "\n", "application/json")
             return
         if self.path == "/api/render":
             write_values(self.config_path, values)

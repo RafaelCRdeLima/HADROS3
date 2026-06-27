@@ -2,10 +2,16 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 from hadros3.config import defaults, parse_latex_number, schema, validate_values
 from hadros3.pipeline import render_hadros_web
-from hadros_web import dashboard_payload, render_html
+from hadros_web import (
+    dashboard_payload,
+    register_current_run,
+    render_html,
+    run_dashboard_command,
+)
 
 
 def test_schema_exposes_hadros3_first_stage_controls() -> None:
@@ -285,3 +291,65 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert "overlay resolution" in html
     assert "camera_preview_pixel_plane" in html
     assert "Observer Camera View" in html
+
+
+def test_global_workflow_buttons_are_rendered() -> None:
+    html = render_html(defaults(), Path("presets/hadros_web/default_config.json"))
+
+    assert "Register Run" in html
+    assert "Case name" in html
+    assert "Stage" in html
+    assert "Description" in html
+    assert "Workflow Actions Log" in html
+    assert "/api/register-run" in html
+    removed_labels = ["Pre-" + "Commit Check", "Commit " + "Changes", "Commit " + "message"]
+    removed_paths = ["/api/" + "pre" + "commit-check", "/api/" + "commit"]
+    for label in removed_labels:
+        assert label not in html
+    for path in removed_paths:
+        assert path not in html
+
+
+def test_run_dashboard_command_uses_subprocess_without_shell(monkeypatch, tmp_path: Path) -> None:
+    calls = []
+
+    def fake_run(args, **kwargs):
+        calls.append((args, kwargs))
+        return SimpleNamespace(returncode=0, stdout="ok\n", stderr="")
+
+    monkeypatch.setattr("hadros_web.subprocess.run", fake_run)
+
+    result = run_dashboard_command(["git", "status", "--short"], root=tmp_path)
+
+    assert result["ok"] is True
+    assert calls[0][0] == ["git", "status", "--short"]
+    assert calls[0][1]["cwd"] == tmp_path
+    assert calls[0][1]["capture_output"] is True
+    assert calls[0][1]["text"] is True
+    assert "shell" not in calls[0][1]
+
+
+def test_register_current_run_updates_catalog_summary(monkeypatch, tmp_path: Path) -> None:
+    (tmp_path / "VERSION.json").write_text(json.dumps({"pipeline_version": "H3-W9b"}) + "\n", encoding="utf-8")
+    catalog_dir = tmp_path / "results" / "catalog"
+
+    def fake_command(args, *, root, timeout=0):
+        assert args[:2][1] == "scripts/results/register_result.py"
+        assert "--run-dir" in args
+        catalog_dir.mkdir(parents=True, exist_ok=True)
+        (catalog_dir / "HADROS3_RESULTS_CATALOG.csv").write_text("run_id\nTestRun\n", encoding="utf-8")
+        (catalog_dir / "HADROS3_RESULTS_CATALOG.json").write_text('[{"run_id": "TestRun"}]\n', encoding="utf-8")
+        return {"ok": True, "returncode": 0, "stdout": json.dumps({"run_id": "TestRun"}), "stderr": ""}
+
+    monkeypatch.setattr("hadros_web.run_dashboard_command", fake_command)
+    values = defaults()
+    values["run"]["run_name"] = "TestRun"
+
+    result = register_current_run(values, case_name="", stage="", description="demo", root=tmp_path)
+
+    assert result["ok"] is True
+    assert result["summary"]["registered"] is True
+    assert result["summary"]["catalog_csv_updated"] is True
+    assert result["summary"]["catalog_json_updated"] is True
+    assert result["summary"]["run_id"] == "TestRun"
+    assert result["summary"]["stage"] == "H3-W9b"

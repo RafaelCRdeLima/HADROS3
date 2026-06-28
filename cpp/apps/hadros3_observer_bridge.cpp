@@ -110,9 +110,22 @@ static std::string json_string(const std::string& text, const std::string& key, 
   if (pos == std::string::npos) return fallback;
   pos = text.find('"', pos);
   if (pos == std::string::npos) return fallback;
-  auto end = text.find('"', pos + 1);
-  if (end == std::string::npos) return fallback;
-  return text.substr(pos + 1, end - pos - 1);
+  std::string out;
+  bool escape = false;
+  for (std::size_t i = pos + 1; i < text.size(); ++i) {
+    const char c = text[i];
+    if (escape) {
+      out.push_back(c);
+      escape = false;
+    } else if (c == '\\') {
+      escape = true;
+    } else if (c == '"') {
+      return out;
+    } else {
+      out.push_back(c);
+    }
+  }
+  return fallback;
 }
 
 static double json_number(const std::string& text, const std::string& key, double fallback) {

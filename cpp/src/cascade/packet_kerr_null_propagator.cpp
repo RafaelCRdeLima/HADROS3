@@ -41,11 +41,12 @@ bool normalize(Vec3& v)
     return true;
 }
 
-Vec3 spherical_position(double r, double theta, double phi)
+Vec3 spherical_position(double r, double theta, double phi, double spin_a = 0.0)
 {
+    const double rho = std::sqrt(std::max(r * r + spin_a * spin_a, 0.0));
     return {
-        r * std::sin(theta) * std::cos(phi),
-        r * std::sin(theta) * std::sin(phi),
+        rho * std::sin(theta) * std::cos(phi),
+        rho * std::sin(theta) * std::sin(phi),
         r * std::cos(theta)
     };
 }
@@ -196,7 +197,7 @@ PacketKerrNullPropagationResult PacketKerrNullPropagator::propagate(
     result.final_r = y.r;
     result.final_theta = y.theta;
     result.final_phi = y.phi;
-    const Vec3 final_pos = spherical_position(y.r, y.theta, y.phi);
+    const Vec3 final_pos = spherical_position(y.r, y.theta, y.phi, metric.a);
     result.final_x = final_pos.x;
     result.final_y = final_pos.y;
     result.final_z = final_pos.z;

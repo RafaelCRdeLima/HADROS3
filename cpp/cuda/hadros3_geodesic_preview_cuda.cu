@@ -1034,7 +1034,7 @@ __device__ bool pk_rkf45_step_preview(
             return true;
         }
 
-        const double factor = 0.8 * pow(tolerance / fmax(err, 1.0e-30), 0.25);
+        const double factor = 0.8 * pow(tolerance / fmax(err, 1.0e-30), 0.20);
         h *= clampd(factor, 0.18, 2.0);
         h = fmax(h, h_min);
     }
@@ -1217,7 +1217,7 @@ __host__ __device__ int trace_preview_pixel(
         }
 
         const double inv_r3 = 1.0 / fmax(r * r * r, 1.0e-9);
-        const double3 gravity = mul3(pos, -3.0 * inv_r3);
+        const double3 gravity = mul3(pos, -2.0 * inv_r3);
         const double3 z_axis = make_double3(0.0, 0.0, 1.0);
         const double3 drag = mul3(cross3(z_axis, dir), 0.10 * p.spin * inv_r3);
 
@@ -1227,7 +1227,7 @@ __host__ __device__ int trace_preview_pixel(
         const double mid_r = norm3(mid_pos);
         const double mid_inv_r3 = 1.0 / fmax(mid_r * mid_r * mid_r, 1.0e-9);
         const double3 acc2 = add3(
-            mul3(mid_pos, -3.0 * mid_inv_r3),
+            mul3(mid_pos, -2.0 * mid_inv_r3),
             mul3(cross3(z_axis, mid_dir), 0.10 * p.spin * mid_inv_r3)
         );
 
@@ -1262,13 +1262,14 @@ __host__ __device__ int trace_preview_pixel(
     return klass;
 }
 
-__device__ double3 pk_bl_to_cart(const KerrPreviewState& y)
+__device__ double3 pk_bl_to_cart(const KerrPreviewState& y, double spin)
 {
     const double theta = clampd(y.theta, 1.0e-6, PI - 1.0e-6);
     const double st = sin(theta);
+    const double rho = sqrt(fmax(y.r * y.r + spin * spin, 0.0));
     return make_double3(
-        y.r * st * cos(y.phi),
-        y.r * st * sin(y.phi),
+        rho * st * cos(y.phi),
+        rho * st * sin(y.phi),
         y.r * cos(theta)
     );
 }
@@ -1339,7 +1340,7 @@ __device__ int trace_preview_pixel_full_kerr(
     }
 
     const double r_h = pk_kerr_horizon(p.spin);
-    double3 pos = pk_bl_to_cart(y);
+    double3 pos = pk_bl_to_cart(y, p.spin);
     double3 prev_pos = pos;
     double path_length = 0.0;
     double accum_r = 0.0;
@@ -1371,7 +1372,7 @@ __device__ int trace_preview_pixel_full_kerr(
         pk_normalize_polar_coordinate(&y);
 
         const KerrPreviewState y_prev = y;
-        pos = pk_bl_to_cart(y);
+        pos = pk_bl_to_cart(y, p.spin);
 
         if (y.r <= r_h + p.horizon_eps) {
             klass = 0;
@@ -1442,7 +1443,7 @@ __device__ int trace_preview_pixel_full_kerr(
         double accepted_h = h;
         pk_rkf45_step_preview(p, y, h, 2.0e-3, &accepted_h);
         pk_normalize_polar_coordinate(&y);
-        const double3 new_pos = pk_bl_to_cart(y);
+        const double3 new_pos = pk_bl_to_cart(y, p.spin);
         const double ds = pk_zamo_spatial_interval_rg(p, y, y_prev);
         if (use_volume && path_length > p.near_clip_rg && ds > 0.0) {
             const double3 delta = make_double3(new_pos.x - pos.x, new_pos.y - pos.y, new_pos.z - pos.z);

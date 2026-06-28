@@ -310,7 +310,7 @@ void KerrGeodesic::step_adaptive(GeodesicState& y) const
 
         const double safety = 0.8;
         const double factor =
-            safety * std::pow(tolerance_ / std::max(err, 1.0e-30), 0.25);
+            safety * std::pow(tolerance_ / std::max(err, 1.0e-30), 0.20);
 
         h *= std::clamp(factor, 0.1, 5.0);
 

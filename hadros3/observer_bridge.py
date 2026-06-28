@@ -573,8 +573,18 @@ def _closest_distance_to_polyline(point: Vec3, polyline: list[Vec3]) -> float:
         return float("inf")
     best = float("inf")
     px, py, pz = point
-    for x, y, z in polyline:
-        dist = math.sqrt((px - x) ** 2 + (py - y) ** 2 + (pz - z) ** 2)
+    if len(polyline) == 1:
+        x, y, z = polyline[0]
+        return math.sqrt((px - x) ** 2 + (py - y) ** 2 + (pz - z) ** 2)
+    for start, end in zip(polyline, polyline[1:]):
+        sx, sy, sz = start
+        ex, ey, ez = end
+        vx, vy, vz = ex - sx, ey - sy, ez - sz
+        wx, wy, wz = px - sx, py - sy, pz - sz
+        denom = vx * vx + vy * vy + vz * vz
+        t = 0.0 if denom <= 0.0 else max(0.0, min(1.0, (wx * vx + wy * vy + wz * vz) / denom))
+        cx, cy, cz = sx + t * vx, sy + t * vy, sz + t * vz
+        dist = math.sqrt((px - cx) ** 2 + (py - cy) ** 2 + (pz - cz) ** 2)
         if dist < best:
             best = dist
     return best

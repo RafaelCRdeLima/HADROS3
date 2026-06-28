@@ -358,6 +358,26 @@ def schema() -> list[dict[str, Any]]:
                 field("observer_bridge", "kerr_pixel_match_resolution_y", "Kerr match rays Y", 18, kind="number"),
                 field("observer_bridge", "kerr_pixel_match_tolerance_rg", "Kerr match tolerance [rg]", 3.5, kind="number"),
                 field("observer_bridge", "kerr_pixel_match_refine_enabled", "Kerr match refine", True, kind="checkbox"),
+                field("observer_bridge", "candidate_matching_radius_rg", "Candidate matching radius [rg]", 3.5, kind="number", visibility="INTERNAL"),
+                field("observer_bridge", "multi_image_audit_resolution_x", "Multi-image audit rays X", 9, kind="number", visibility="INTERNAL"),
+                field("observer_bridge", "multi_image_audit_resolution_y", "Multi-image audit rays Y", 5, kind="number", visibility="INTERNAL"),
+                field(
+                    "observer_bridge",
+                    "kerr_pixel_match_basis_transform",
+                    "Kerr match ray basis",
+                    "cuda_preview_local_tetrad",
+                    kind="select",
+                    options=["cuda_preview_local_tetrad", "up_flipped", "right_flipped", "up_right_flipped"],
+                    visibility="INTERNAL",
+                ),
+                field(
+                    "observer_bridge",
+                    "observer_bridge_orientation_diagnostics_enabled",
+                    "Orientation diagnostics",
+                    False,
+                    kind="checkbox",
+                    help_text="Generate expensive TOP/BOTTOM/LEFT/RIGHT overlay orientation diagnostics. The main overlay is generated regardless.",
+                ),
                 field("observer_bridge", "interactive_max_candidates", "Interactive max candidates", 40, kind="number"),
                 field("observer_bridge", "interactive_max_rays", "Interactive max rays", 64, kind="number"),
                 field("observer_bridge", "interactive_ray_stride", "Interactive ray stride", 4, kind="number"),
@@ -408,6 +428,39 @@ def schema() -> list[dict[str, Any]]:
                         "real_smoke: safety mode; runs only the top candidate with at most 2 events. "
                         "real_free: production mode; runs pwhg_main for the selected number of interaction candidates and events per interaction."
                     ),
+                ),
+            ],
+        },
+        {
+            "tab": "Observer Image Branches",
+            "fields": [
+                field(
+                    "observer_image_branches",
+                    "branch_scoring_model",
+                    "Branch scoring model",
+                    "ray_count_closeness_compactness_proxy",
+                    kind="select",
+                    options=["ray_count_closeness_compactness_proxy"],
+                    help_text="Scores each observed image branch with ray-count, closest-approach, and compactness proxies.",
+                ),
+                field(
+                    "observer_image_branches",
+                    "primary_branch_selection_model",
+                    "Primary branch selection",
+                    "argmax_branch_score",
+                    kind="select",
+                    options=["argmax_branch_score"],
+                    help_text="Selects the dominant observed image branch by maximum proxy branch score.",
+                ),
+                field("observer_image_branches", "minimum_branch_rays", "Minimum rays per branch", 1, kind="number", minimum=1, step=1),
+                field(
+                    "observer_image_branches",
+                    "status",
+                    "Status",
+                    "configured_only_no_branch_analysis",
+                    kind="select",
+                    options=["configured_only_no_branch_analysis", "observer_image_branches_analyzed"],
+                    visibility="INTERNAL",
                 ),
             ],
         },
@@ -566,6 +619,7 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
     forward = values["forward_geodesics"]
     dis = values.get("dis_interaction_sampler", {})
     bridge = values.get("observer_bridge", {})
+    branches = values.get("observer_image_branches", {})
     powheg = values.get("powheg", {})
 
     spin = float(bh["spin_a"])
@@ -704,6 +758,14 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
         problems.append("observer_bridge.kerr_pixel_match_resolution_y must be positive")
     if float(bridge.get("kerr_pixel_match_tolerance_rg", 3.5)) < 0.0:
         problems.append("observer_bridge.kerr_pixel_match_tolerance_rg must be non-negative")
+    if float(bridge.get("candidate_matching_radius_rg", 3.5)) < 0.0:
+        problems.append("observer_bridge.candidate_matching_radius_rg must be non-negative")
+    if int(float(bridge.get("multi_image_audit_resolution_x", 48))) <= 0:
+        problems.append("observer_bridge.multi_image_audit_resolution_x must be positive")
+    if int(float(bridge.get("multi_image_audit_resolution_y", 27))) <= 0:
+        problems.append("observer_bridge.multi_image_audit_resolution_y must be positive")
+    if str(bridge.get("kerr_pixel_match_basis_transform", "cuda_preview_local_tetrad")) not in {"cuda_preview_local_tetrad", "up_flipped", "right_flipped", "up_right_flipped"}:
+        problems.append("observer_bridge.kerr_pixel_match_basis_transform is unsupported")
     if int(float(bridge.get("interactive_max_candidates", 40))) <= 0:
         problems.append("observer_bridge.interactive_max_candidates must be positive")
     if int(float(bridge.get("interactive_max_rays", 64))) < 0:
@@ -712,6 +774,12 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
         problems.append("observer_bridge.interactive_ray_stride must be positive")
     if str(bridge.get("interactive_candidate_color_mode", "final_observation_score")) not in {"final_observation_score", "closest_approach_rg", "inside_outside_fov"}:
         problems.append("observer_bridge.interactive_candidate_color_mode is unsupported")
+    if str(branches.get("branch_scoring_model", "ray_count_closeness_compactness_proxy")) != "ray_count_closeness_compactness_proxy":
+        problems.append("observer_image_branches.branch_scoring_model must be ray_count_closeness_compactness_proxy in H3-W8b")
+    if str(branches.get("primary_branch_selection_model", "argmax_branch_score")) != "argmax_branch_score":
+        problems.append("observer_image_branches.primary_branch_selection_model must be argmax_branch_score in H3-W8b")
+    if int(float(branches.get("minimum_branch_rays", 1))) <= 0:
+        problems.append("observer_image_branches.minimum_branch_rays must be positive")
     if str(powheg.get("powheg_backend", "local_powheg")) != "local_powheg":
         problems.append("powheg.powheg_backend must be local_powheg in H3-W9a")
     if str(powheg.get("powheg_process", "nudis")) != "nudis":

@@ -38,9 +38,13 @@ def test_schema_exposes_hadros3_first_stage_controls() -> None:
         ("observer_bridge", "observer_bridge_backend"),
         ("observer_bridge", "bridge_mode"),
         ("observer_bridge", "candidate_overlay_mapping"),
+        ("observer_bridge", "kerr_pixel_match_basis_transform"),
+        ("observer_bridge", "observer_bridge_orientation_diagnostics_enabled"),
         ("observer_bridge", "downstream_selection_policy"),
         ("observer_bridge", "downstream_top_n_candidates"),
         ("observer_bridge", "interactive_max_candidates"),
+        ("observer_image_branches", "branch_scoring_model"),
+        ("observer_image_branches", "primary_branch_selection_model"),
         ("powheg", "powheg_backend"),
         ("powheg", "events_per_candidate"),
         ("provenance", "trust_boundary"),
@@ -92,11 +96,14 @@ def test_downstream_selection_lives_in_observer_bridge_and_powheg_consumes_it() 
     assert "field-help" in powheg_panel
     assert "Downstream Candidate Selection" in observer_panel
     assert "Observer Bridge selects the ranked candidates that downstream stages consume." in html
+    assert "Observer Image Branches" in html
+    assert "Analyze Observer Image Branches" in html
+    assert "primary observed branch consumed by POWHEG" in html
     assert "Number of highest-scoring Observer Bridge candidates selected for downstream stages when policy is top_n." in html
     assert "Number of independent POWHEG Monte Carlo hard-scattering realizations generated for each selected interaction site." in html
     assert 'value("run_mode") === "real_smoke"' in powheg_panel
     assert "Real smoke safety mode:" in html
-    assert "only the first selected Observer Bridge candidate is executed" in html
+    assert "only the first primary image branch is executed" in html
     assert "Real free mode may be computationally expensive." in html
     assert "Run POWHEG Real Free" in html
     assert "Max POWHEG jobs" not in html
@@ -230,6 +237,12 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert payload["outputs"]["paths"]["observer_bridge_geometry_3d_html"] == "ObserverBridge/observer_bridge_geometry_3d.html"
     assert payload["outputs"]["paths"]["observer_bridge_camera_view"] == "ObserverBridge/observer_bridge_camera_view.png"
     assert payload["outputs"]["paths"]["observer_bridge_camera_overlay"] == "ObserverBridge/observer_bridge_camera_overlay.png"
+    assert payload["outputs"]["paths"]["observer_bridge_overlay_background_audit"] == "ObserverBridge/observer_bridge_overlay_background_audit.json"
+    assert payload["outputs"]["paths"]["observer_bridge_background_comparison"] == "ObserverBridge/observer_bridge_background_comparison.png"
+    assert payload["outputs"]["paths"]["observer_bridge_overlay_hemisphere_diagnostic"] == "ObserverBridge/observer_bridge_overlay_hemisphere_diagnostic.png"
+    assert payload["outputs"]["paths"]["observer_overlay_orientation_markers"] == "ObserverBridge/observer_overlay_orientation_markers.png"
+    assert payload["outputs"]["paths"]["observer_overlay_orientation_markers_json"] == "ObserverBridge/observer_overlay_orientation_markers.json"
+    assert payload["outputs"]["paths"]["observer_overlay_orientation_full_diagnostic"] == "ObserverBridge/observer_overlay_orientation_full_diagnostic.png"
     assert payload["outputs"]["paths"]["observer_candidate_kerr_pixel_map"] == "ObserverBridge/observer_candidate_kerr_pixel_map.jsonl"
     assert payload["outputs"]["paths"]["observer_bridge_kerr_interactive_view"] == "ObserverBridge/observer_bridge_kerr_interactive_view.html"
     assert payload["outputs"]["paths"]["powheg_event_requests"] == "POWHEG/powheg_event_requests.jsonl"
@@ -349,6 +362,13 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert "Observer Bridge Kerr Interactive View" in html
     assert "observer_bridge_camera_view.png" in html
     assert "observer_bridge_camera_overlay.png" in html
+    assert "observer_bridge_overlay_background_audit.json" in html
+    assert "observer_bridge_background_comparison.png" in html
+    assert "Overlay background comparison" in html
+    assert "observer_bridge_overlay_hemisphere_diagnostic.png" in html
+    assert "Overlay hemisphere diagnostic" in html
+    assert "observer_overlay_orientation_markers.png" in html
+    assert "observer_overlay_orientation_full_diagnostic.png" in html
     assert "POWHEG/" in html
     assert "powheg_event_requests.jsonl" in html
     assert "powheg_summary.json" in html
@@ -408,6 +428,37 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert "overlay resolution" in html
     assert "camera_preview_pixel_plane" in html
     assert "Observer Camera View" in html
+
+
+def test_dashboard_detects_partial_observer_bridge_state(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("hadros_web.ROOT", tmp_path)
+    values = defaults()
+    values["run"]["run_name"] = "partial_bridge"
+    bridge_dir = tmp_path / "output" / "partial_bridge" / "ObserverBridge"
+    bridge_dir.mkdir(parents=True)
+    (bridge_dir / "observer_bridge_candidates.jsonl").write_text("{}\n", encoding="utf-8")
+    (bridge_dir / "observer_bridge_ranked_events.jsonl").write_text("{}\n", encoding="utf-8")
+    (bridge_dir / "observer_bridge_summary.json").write_text(
+        json.dumps({"status": "ok", "observer_bridge_invoked": True, "n_candidates_scored": 1}) + "\n",
+        encoding="utf-8",
+    )
+    (bridge_dir / "observer_bridge_report.json").write_text("{}\n", encoding="utf-8")
+
+    payload = dashboard_payload(values, Path("presets/hadros_web/default_config.json"))
+    html = render_html(values, Path("presets/hadros_web/default_config.json"))
+
+    bridge = payload["observer_bridge"]
+    assert bridge["observer_bridge_stage_complete"] is False
+    assert bridge["required_observer_bridge_products_complete"] is False
+    assert bridge["observer_bridge_partial_state_detected"] is True
+    assert "observer_bridge_camera_overlay.png" in bridge["required_observer_bridge_products_missing"]
+    assert "observer_candidate_kerr_pixel_map.jsonl" in bridge["required_observer_bridge_products_missing"]
+    assert "observer_bridge_kerr_interactive_view.html" in bridge["required_observer_bridge_products_missing"]
+    observer_status = next(row for row in payload["pipeline_status"] if row["stage"] == "Observer Bridge")
+    assert observer_status["status"] == "pending"
+    assert payload["observer_bridge_summary"]["status"] == "incomplete"
+    assert "Observer Bridge output is incomplete" in html
+    assert "Missing required products" in html
 
 
 def test_global_workflow_buttons_are_rendered() -> None:

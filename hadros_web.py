@@ -22,7 +22,8 @@ from hadros3.config import deep_update, defaults, load_values, run_output_dir, s
 from hadros3.dis_sampler import generate_dis_interaction_products, generate_gbw_iim_comparison
 from hadros3.forward_geodesics import generate_forward_geodesic_products
 from hadros3.observer_bridge import generate_observer_bridge_products
-from hadros3.paths import camera_preview_dir, clear_dis_outputs, clear_forward_geodesics_outputs, clear_observer_bridge_outputs, clear_powheg_outputs, dashboard_dir, dis_dir, ensure_output_layout, forward_geodesics_dir, geometry_dir, observer_bridge_dir, powheg_dir, rel, run_metadata_dir, uhe_source_dir
+from hadros3.observer_image_branches import generate_observer_image_branch_products
+from hadros3.paths import camera_preview_dir, clear_dis_outputs, clear_forward_geodesics_outputs, clear_observer_bridge_outputs, clear_observer_image_branches_outputs, clear_powheg_outputs, dashboard_dir, dis_dir, ensure_output_layout, forward_geodesics_dir, geometry_dir, observer_bridge_dir, observer_image_branches_dir, powheg_dir, rel, run_metadata_dir, uhe_source_dir
 from hadros3.pipeline import render_hadros_web
 from hadros3.powheg import generate_powheg_products
 from hadros3.reuse import discover_original_hadros
@@ -128,6 +129,7 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
     forward_dir = forward_geodesics_dir(output_dir)
     dis_output_dir = dis_dir(output_dir)
     bridge_dir = observer_bridge_dir(output_dir)
+    branch_dir = observer_image_branches_dir(output_dir)
     powheg_output_dir = powheg_dir(output_dir)
     web_dir = dashboard_dir(output_dir)
 
@@ -205,8 +207,30 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
     bridge_geometry_3d_html_path = bridge_dir / "observer_bridge_geometry_3d.html"
     bridge_camera_view_path = bridge_dir / "observer_bridge_camera_view.png"
     bridge_camera_overlay_path = bridge_dir / "observer_bridge_camera_overlay.png"
+    bridge_overlay_background_audit_path = bridge_dir / "observer_bridge_overlay_background_audit.json"
+    bridge_background_comparison_path = bridge_dir / "observer_bridge_background_comparison.png"
+    bridge_hemisphere_diagnostic_path = bridge_dir / "observer_bridge_overlay_hemisphere_diagnostic.png"
+    bridge_candidate_multi_image_audit_path = bridge_dir / "candidate_multi_image_audit.jsonl"
+    bridge_candidate_multiple_images_path = bridge_dir / "observer_candidate_multiple_images.png"
+    bridge_candidate_multi_image_view_path = bridge_dir / "observer_candidate_multi_image_view.html"
+    bridge_multiple_image_statistics_path = bridge_dir / "multiple_image_statistics.json"
+    bridge_orientation_markers_path = bridge_dir / "observer_overlay_orientation_markers.png"
+    bridge_orientation_markers_json_path = bridge_dir / "observer_overlay_orientation_markers.json"
+    bridge_orientation_full_diagnostic_path = bridge_dir / "observer_overlay_orientation_full_diagnostic.png"
     bridge_kerr_pixel_map_path = bridge_dir / "observer_candidate_kerr_pixel_map.jsonl"
     bridge_kerr_interactive_path = bridge_dir / "observer_bridge_kerr_interactive_view.html"
+    branch_jsonl_path = branch_dir / "observer_image_branches.jsonl"
+    branch_primary_path = branch_dir / "observer_image_primary_branches.jsonl"
+    branch_summary_path = branch_dir / "observer_image_branch_summary.json"
+    branch_report_path = branch_dir / "observer_image_branch_report.json"
+    branch_statistics_json_path = branch_dir / "observer_image_statistics.json"
+    branch_score_distribution_path = branch_dir / "observer_branch_score_distribution.png"
+    branch_cluster_map_path = branch_dir / "observer_branch_cluster_map.png"
+    branch_primary_vs_secondary_path = branch_dir / "observer_branch_primary_vs_secondary.png"
+    branch_statistics_csv_path = branch_dir / "observer_branch_statistics.csv"
+    branch_view_path = branch_dir / "observer_branch_view.html"
+    branch_viewpoint_audit_path = branch_dir / "observer_viewpoint_convention_audit.json"
+    branch_viewpoint_diagnostic_path = branch_dir / "observer_viewpoint_convention_diagnostic.png"
     powheg_requests_path = powheg_output_dir / "powheg_event_requests.jsonl"
     powheg_summary_json_path = powheg_output_dir / "powheg_summary.json"
     powheg_summary_csv_path = powheg_output_dir / "powheg_summary.csv"
@@ -238,6 +262,7 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
     forward_summary: dict[str, Any] | None = None
     dis_summary: dict[str, Any] | None = None
     observer_bridge_summary: dict[str, Any] | None = None
+    observer_image_branch_summary: dict[str, Any] | None = None
     powheg_summary: dict[str, Any] | None = None
     if camera_summary_path.exists():
         try:
@@ -264,11 +289,46 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             observer_bridge_summary = json.loads(bridge_summary_json_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             observer_bridge_summary = {"status": "invalid_summary", "message": "Could not parse Observer Bridge summary."}
+    if branch_summary_path.exists():
+        try:
+            observer_image_branch_summary = json.loads(branch_summary_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            observer_image_branch_summary = {"status": "invalid_summary", "message": "Could not parse Observer Image Branch summary."}
     if powheg_summary_json_path.exists():
         try:
             powheg_summary = json.loads(powheg_summary_json_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             powheg_summary = {"status": "invalid_summary", "message": "Could not parse POWHEG summary."}
+    bridge_required_products = {
+        "observer_bridge_candidates.jsonl": bridge_candidates_path.exists(),
+        "observer_bridge_ranked_events.jsonl": bridge_ranked_path.exists(),
+        "observer_bridge_summary.json": bridge_summary_json_path.exists(),
+        "observer_bridge_report.json": bridge_report_path.exists(),
+        "observer_candidate_kerr_pixel_map.jsonl": bridge_kerr_pixel_map_path.exists(),
+        "observer_bridge_camera_overlay.png": bridge_camera_overlay_path.exists(),
+        "observer_bridge_kerr_interactive_view.html": bridge_kerr_interactive_path.exists(),
+    }
+    bridge_required_missing = [name for name, exists in bridge_required_products.items() if not exists]
+    bridge_required_complete = not bridge_required_missing
+    bridge_summary_complete = bool(
+        observer_bridge_summary
+        and observer_bridge_summary.get("status") == "ok"
+        and observer_bridge_summary.get("observer_bridge_stage_complete", bridge_required_complete) is True
+        and observer_bridge_summary.get("observer_bridge_required_products_complete", bridge_required_complete) is True
+        and bridge_required_complete
+    )
+    bridge_partial_state = bool(bridge_summary_json_path.exists() and not bridge_summary_complete)
+    if observer_bridge_summary and bridge_partial_state:
+        observer_bridge_summary = dict(observer_bridge_summary)
+        observer_bridge_summary.update(
+            {
+                "status": "incomplete",
+                "observer_bridge_stage_complete": False,
+                "observer_bridge_required_products_complete": False,
+                "observer_bridge_partial_state_detected": True,
+                "required_observer_bridge_products_missing": bridge_required_missing,
+            }
+        )
     return {
         "schema": schema(),
         "values": values,
@@ -381,6 +441,10 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             "output_dir": rel(bridge_dir, output_dir),
             "n_interactions_input": observer_bridge_summary.get("n_interactions_input", 0) if observer_bridge_summary else 0,
             "n_candidates_scored": observer_bridge_summary.get("n_candidates_scored", 0) if observer_bridge_summary else 0,
+            "required_observer_bridge_products_complete": bridge_required_complete,
+            "required_observer_bridge_products_missing": bridge_required_missing,
+            "observer_bridge_stage_complete": bridge_summary_complete,
+            "observer_bridge_partial_state_detected": bridge_partial_state,
             "products": {
                 "observer_bridge_candidates": bridge_candidates_path.exists(),
                 "observer_bridge_ranked_events": bridge_ranked_path.exists(),
@@ -397,6 +461,16 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "observer_bridge_geometry_3d_html": bridge_geometry_3d_html_path.exists(),
                 "observer_bridge_camera_view": bridge_camera_view_path.exists(),
                 "observer_bridge_camera_overlay": bridge_camera_overlay_path.exists(),
+                "observer_bridge_overlay_background_audit": bridge_overlay_background_audit_path.exists(),
+                "observer_bridge_background_comparison": bridge_background_comparison_path.exists(),
+                "observer_bridge_overlay_hemisphere_diagnostic": bridge_hemisphere_diagnostic_path.exists(),
+                "candidate_multi_image_audit": bridge_candidate_multi_image_audit_path.exists(),
+                "observer_candidate_multiple_images": bridge_candidate_multiple_images_path.exists(),
+                "observer_candidate_multi_image_view": bridge_candidate_multi_image_view_path.exists(),
+                "multiple_image_statistics": bridge_multiple_image_statistics_path.exists(),
+                "observer_overlay_orientation_markers": bridge_orientation_markers_path.exists(),
+                "observer_overlay_orientation_markers_json": bridge_orientation_markers_json_path.exists(),
+                "observer_overlay_orientation_full_diagnostic": bridge_orientation_full_diagnostic_path.exists(),
                 "observer_candidate_kerr_pixel_map": bridge_kerr_pixel_map_path.exists(),
                 "observer_bridge_kerr_interactive_view": bridge_kerr_interactive_path.exists(),
             },
@@ -417,13 +491,62 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "observer_bridge_geometry_3d_html": rel(bridge_geometry_3d_html_path, output_dir),
                 "observer_bridge_camera_view": rel(bridge_camera_view_path, output_dir),
                 "observer_bridge_camera_overlay": rel(bridge_camera_overlay_path, output_dir),
+                "observer_bridge_overlay_background_audit": rel(bridge_overlay_background_audit_path, output_dir),
+                "observer_bridge_background_comparison": rel(bridge_background_comparison_path, output_dir),
+                "observer_bridge_overlay_hemisphere_diagnostic": rel(bridge_hemisphere_diagnostic_path, output_dir),
+                "candidate_multi_image_audit": rel(bridge_candidate_multi_image_audit_path, output_dir),
+                "observer_candidate_multiple_images": rel(bridge_candidate_multiple_images_path, output_dir),
+                "observer_candidate_multi_image_view": rel(bridge_candidate_multi_image_view_path, output_dir),
+                "multiple_image_statistics": rel(bridge_multiple_image_statistics_path, output_dir),
+                "observer_overlay_orientation_markers": rel(bridge_orientation_markers_path, output_dir),
+                "observer_overlay_orientation_markers_json": rel(bridge_orientation_markers_json_path, output_dir),
+                "observer_overlay_orientation_full_diagnostic": rel(bridge_orientation_full_diagnostic_path, output_dir),
                 "observer_candidate_kerr_pixel_map": rel(bridge_kerr_pixel_map_path, output_dir),
                 "observer_bridge_kerr_interactive_view": rel(bridge_kerr_interactive_path, output_dir),
             },
         },
+        "observer_image_branches": {
+            "configured_status": values.get("observer_image_branches", {}).get("status"),
+            "input_selected_candidates_found": bridge_selected_path.exists(),
+            "input_kerr_pixel_map_found": bridge_kerr_pixel_map_path.exists(),
+            "output_dir": rel(branch_dir, output_dir),
+            "n_candidates": observer_image_branch_summary.get("n_candidates", 0) if observer_image_branch_summary else 0,
+            "n_branches": observer_image_branch_summary.get("n_branches", 0) if observer_image_branch_summary else 0,
+            "mean_branches_per_candidate": observer_image_branch_summary.get("mean_branches_per_candidate", 0) if observer_image_branch_summary else 0,
+            "fraction_multiple_images": observer_image_branch_summary.get("fraction_multiple_images", 0) if observer_image_branch_summary else 0,
+            "products": {
+                "observer_image_branches": branch_jsonl_path.exists(),
+                "observer_image_primary_branches": branch_primary_path.exists(),
+                "observer_image_branch_summary": branch_summary_path.exists(),
+                "observer_image_branch_report": branch_report_path.exists(),
+                "observer_image_statistics": branch_statistics_json_path.exists(),
+                "observer_branch_score_distribution": branch_score_distribution_path.exists(),
+                "observer_branch_cluster_map": branch_cluster_map_path.exists(),
+                "observer_branch_primary_vs_secondary": branch_primary_vs_secondary_path.exists(),
+                "observer_branch_statistics": branch_statistics_csv_path.exists(),
+                "observer_branch_view": branch_view_path.exists(),
+                "observer_viewpoint_convention_audit": branch_viewpoint_audit_path.exists(),
+                "observer_viewpoint_convention_diagnostic": branch_viewpoint_diagnostic_path.exists(),
+            },
+            "summary": observer_image_branch_summary,
+            "links": {
+                "observer_image_branches": rel(branch_jsonl_path, output_dir),
+                "observer_image_primary_branches": rel(branch_primary_path, output_dir),
+                "observer_image_branch_summary": rel(branch_summary_path, output_dir),
+                "observer_image_branch_report": rel(branch_report_path, output_dir),
+                "observer_image_statistics": rel(branch_statistics_json_path, output_dir),
+                "observer_branch_score_distribution": rel(branch_score_distribution_path, output_dir),
+                "observer_branch_cluster_map": rel(branch_cluster_map_path, output_dir),
+                "observer_branch_primary_vs_secondary": rel(branch_primary_vs_secondary_path, output_dir),
+                "observer_branch_statistics": rel(branch_statistics_csv_path, output_dir),
+                "observer_branch_view": rel(branch_view_path, output_dir),
+                "observer_viewpoint_convention_audit": rel(branch_viewpoint_audit_path, output_dir),
+                "observer_viewpoint_convention_diagnostic": rel(branch_viewpoint_diagnostic_path, output_dir),
+            },
+        },
         "powheg": {
             "configured_status": values.get("powheg", {}).get("status"),
-            "input_observer_bridge_found": bridge_selected_path.exists(),
+            "input_observer_image_branches_found": branch_primary_path.exists(),
             "output_dir": rel(powheg_output_dir, output_dir),
             "n_candidates_input": powheg_summary.get("n_candidates_input", 0) if powheg_summary else 0,
             "powheg_jobs_prepared": powheg_summary.get("powheg_jobs_prepared", 0) if powheg_summary else 0,
@@ -490,7 +613,8 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             {"stage": "UHE Source", "status": "done" if source_samples_path.exists() else "pending", "tab": "UHE Source"},
             {"stage": "Forward Geodesics", "status": "done" if forward_paths_path.exists() and forward_segments_path.exists() else "pending", "tab": "Forward Geodesics"},
             {"stage": "DIS Interaction Sampler", "status": "done" if dis_summary_path.exists() else "pending", "tab": "DIS Interaction Sampler"},
-            {"stage": "Observer Bridge", "status": "done" if bridge_summary_json_path.exists() else "pending", "tab": "Observer Bridge"},
+            {"stage": "Observer Bridge", "status": "done" if bridge_summary_complete else "pending", "tab": "Observer Bridge"},
+            {"stage": "Observer Image Branches", "status": "done" if branch_summary_path.exists() else "pending", "tab": "Observer Image Branches"},
             {"stage": "POWHEG", "status": "done" if powheg_summary_json_path.exists() else "pending", "tab": "POWHEG"},
             {"stage": "Event Generation", "status": "pending", "tab": "Event Generation"},
             {"stage": "GEANT4", "status": "pending", "tab": "GEANT4"},
@@ -570,8 +694,30 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             "observer_bridge_geometry_3d_html_exists": bridge_geometry_3d_html_path.exists(),
             "observer_bridge_camera_view_exists": bridge_camera_view_path.exists(),
             "observer_bridge_camera_overlay_exists": bridge_camera_overlay_path.exists(),
+            "observer_bridge_overlay_background_audit_exists": bridge_overlay_background_audit_path.exists(),
+            "observer_bridge_background_comparison_exists": bridge_background_comparison_path.exists(),
+            "observer_bridge_overlay_hemisphere_diagnostic_exists": bridge_hemisphere_diagnostic_path.exists(),
+            "candidate_multi_image_audit_exists": bridge_candidate_multi_image_audit_path.exists(),
+            "observer_candidate_multiple_images_exists": bridge_candidate_multiple_images_path.exists(),
+            "observer_candidate_multi_image_view_exists": bridge_candidate_multi_image_view_path.exists(),
+            "multiple_image_statistics_exists": bridge_multiple_image_statistics_path.exists(),
+            "observer_overlay_orientation_markers_exists": bridge_orientation_markers_path.exists(),
+            "observer_overlay_orientation_markers_json_exists": bridge_orientation_markers_json_path.exists(),
+            "observer_overlay_orientation_full_diagnostic_exists": bridge_orientation_full_diagnostic_path.exists(),
             "observer_candidate_kerr_pixel_map_exists": bridge_kerr_pixel_map_path.exists(),
             "observer_bridge_kerr_interactive_view_exists": bridge_kerr_interactive_path.exists(),
+            "observer_image_branches_exists": branch_jsonl_path.exists(),
+            "observer_image_primary_branches_exists": branch_primary_path.exists(),
+            "observer_image_branch_summary_exists": branch_summary_path.exists(),
+            "observer_image_branch_report_exists": branch_report_path.exists(),
+            "observer_image_statistics_exists": branch_statistics_json_path.exists(),
+            "observer_branch_score_distribution_exists": branch_score_distribution_path.exists(),
+            "observer_branch_cluster_map_exists": branch_cluster_map_path.exists(),
+            "observer_branch_primary_vs_secondary_exists": branch_primary_vs_secondary_path.exists(),
+            "observer_branch_statistics_exists": branch_statistics_csv_path.exists(),
+            "observer_branch_view_exists": branch_view_path.exists(),
+            "observer_viewpoint_convention_audit_exists": branch_viewpoint_audit_path.exists(),
+            "observer_viewpoint_convention_diagnostic_exists": branch_viewpoint_diagnostic_path.exists(),
             "powheg_event_requests_exists": powheg_requests_path.exists(),
             "powheg_summary_json_exists": powheg_summary_json_path.exists(),
             "powheg_summary_exists": powheg_summary_csv_path.exists(),
@@ -673,8 +819,30 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "observer_bridge_geometry_3d_html": rel(bridge_geometry_3d_html_path, output_dir),
                 "observer_bridge_camera_view": rel(bridge_camera_view_path, output_dir),
                 "observer_bridge_camera_overlay": rel(bridge_camera_overlay_path, output_dir),
+                "observer_bridge_overlay_background_audit": rel(bridge_overlay_background_audit_path, output_dir),
+                "observer_bridge_background_comparison": rel(bridge_background_comparison_path, output_dir),
+                "observer_bridge_overlay_hemisphere_diagnostic": rel(bridge_hemisphere_diagnostic_path, output_dir),
+                "candidate_multi_image_audit": rel(bridge_candidate_multi_image_audit_path, output_dir),
+                "observer_candidate_multiple_images": rel(bridge_candidate_multiple_images_path, output_dir),
+                "observer_candidate_multi_image_view": rel(bridge_candidate_multi_image_view_path, output_dir),
+                "multiple_image_statistics": rel(bridge_multiple_image_statistics_path, output_dir),
+                "observer_overlay_orientation_markers": rel(bridge_orientation_markers_path, output_dir),
+                "observer_overlay_orientation_markers_json": rel(bridge_orientation_markers_json_path, output_dir),
+                "observer_overlay_orientation_full_diagnostic": rel(bridge_orientation_full_diagnostic_path, output_dir),
                 "observer_candidate_kerr_pixel_map": rel(bridge_kerr_pixel_map_path, output_dir),
                 "observer_bridge_kerr_interactive_view": rel(bridge_kerr_interactive_path, output_dir),
+                "observer_image_branches": rel(branch_jsonl_path, output_dir),
+                "observer_image_primary_branches": rel(branch_primary_path, output_dir),
+                "observer_image_branch_summary": rel(branch_summary_path, output_dir),
+                "observer_image_branch_report": rel(branch_report_path, output_dir),
+                "observer_image_statistics": rel(branch_statistics_json_path, output_dir),
+                "observer_branch_score_distribution": rel(branch_score_distribution_path, output_dir),
+                "observer_branch_cluster_map": rel(branch_cluster_map_path, output_dir),
+                "observer_branch_primary_vs_secondary": rel(branch_primary_vs_secondary_path, output_dir),
+                "observer_branch_statistics": rel(branch_statistics_csv_path, output_dir),
+                "observer_branch_view": rel(branch_view_path, output_dir),
+                "observer_viewpoint_convention_audit": rel(branch_viewpoint_audit_path, output_dir),
+                "observer_viewpoint_convention_diagnostic": rel(branch_viewpoint_diagnostic_path, output_dir),
                 "powheg_event_requests": rel(powheg_requests_path, output_dir),
                 "powheg_summary_json": rel(powheg_summary_json_path, output_dir),
                 "powheg_summary": rel(powheg_summary_csv_path, output_dir),
@@ -739,6 +907,7 @@ def render_html(values: dict[str, dict[str, Any]], config_path: Path) -> str:
     .workflow-buttons button {{ margin-right: 0; }}
     .workflow-actions-log {{ grid-column: 1 / -1; border: 1px solid #d6dce5; border-radius: 6px; background: #f8fafc; padding: 10px; }}
     .workflow-actions-log summary {{ cursor: pointer; font-weight: 700; }}
+    .warning-card {{ border: 1px solid #f59e0b; background: #fffbeb; color: #7c2d12; border-radius: 6px; padding: 12px; }}
     .workflow-actions-log pre {{ min-height: 72px; margin-bottom: 0; }}
     .run-strip label {{ display: contents; }}
     .run-strip input {{ width: 100%; box-sizing: border-box; }}
@@ -848,8 +1017,30 @@ function setObserverBridgeOutputs(exists) {{
   state.outputs.observer_bridge_geometry_3d_html_exists = exists;
   state.outputs.observer_bridge_camera_view_exists = exists;
   state.outputs.observer_bridge_camera_overlay_exists = exists;
+  state.outputs.observer_bridge_overlay_background_audit_exists = exists;
+  state.outputs.observer_bridge_background_comparison_exists = exists;
+  state.outputs.observer_bridge_overlay_hemisphere_diagnostic_exists = exists;
+  state.outputs.candidate_multi_image_audit_exists = exists;
+  state.outputs.observer_candidate_multiple_images_exists = exists;
+  state.outputs.observer_candidate_multi_image_view_exists = exists;
+  state.outputs.multiple_image_statistics_exists = exists;
   state.outputs.observer_candidate_kerr_pixel_map_exists = exists;
   state.outputs.observer_bridge_kerr_interactive_view_exists = exists;
+}}
+function setObserverImageBranchOutputs(exists) {{
+  if (!exists) state.observer_image_branches.summary = null;
+  state.outputs.observer_image_branches_exists = exists;
+  state.outputs.observer_image_primary_branches_exists = exists;
+  state.outputs.observer_image_branch_summary_exists = exists;
+  state.outputs.observer_image_branch_report_exists = exists;
+  state.outputs.observer_image_statistics_exists = exists;
+  state.outputs.observer_branch_score_distribution_exists = exists;
+  state.outputs.observer_branch_cluster_map_exists = exists;
+  state.outputs.observer_branch_primary_vs_secondary_exists = exists;
+  state.outputs.observer_branch_statistics_exists = exists;
+  state.outputs.observer_branch_view_exists = exists;
+  state.outputs.observer_viewpoint_convention_audit_exists = exists;
+  state.outputs.observer_viewpoint_convention_diagnostic_exists = exists;
 }}
 function setPowhegOutputs(exists) {{
   state.powheg_summary = exists ? state.powheg_summary : null;
@@ -1048,6 +1239,7 @@ async function sampleUheSource() {{
       state.outputs.gbw_vs_iim_interaction_locations_exists = false;
       state.outputs.gbw_vs_iim_summary_exists = false;
       setObserverBridgeOutputs(false);
+      setObserverImageBranchOutputs(false);
       setPowhegOutputs(false);
       state.forward_geodesics_status = Object.assign({{}}, state.forward_geodesics_status || {{}}, {{
         input_uhe_source_found: true,
@@ -1133,6 +1325,7 @@ async function propagateForwardGeodesics() {{
       state.outputs.gbw_vs_iim_interaction_locations_exists = false;
       state.outputs.gbw_vs_iim_summary_exists = false;
       setObserverBridgeOutputs(false);
+      setObserverImageBranchOutputs(false);
       setPowhegOutputs(false);
       state.forward_geodesics_status = Object.assign({{}}, state.forward_geodesics_status || {{}}, {{
         configured_status: state.values.forward_geodesics.status,
@@ -1205,6 +1398,7 @@ async function sampleDisInteractions() {{
       state.outputs.gbw_vs_iim_interaction_locations_exists = true;
       state.outputs.gbw_vs_iim_summary_exists = true;
       setObserverBridgeOutputs(false);
+      setObserverImageBranchOutputs(false);
       setPowhegOutputs(false);
       state.dis_interaction_sampler = Object.assign({{}}, state.dis_interaction_sampler || {{}}, {{
         configured_status: state.values.dis_interaction_sampler.status,
@@ -1261,6 +1455,7 @@ async function computeObserverBridge() {{
       state.values.observer_bridge.status = "observer_bridge_scored_no_event_generation";
       state.observer_bridge_summary = result.data.observer_bridge;
       setObserverBridgeOutputs(true);
+      setObserverImageBranchOutputs(false);
       setPowhegOutputs(false);
       state.observer_bridge = Object.assign({{}}, state.observer_bridge || {{}}, {{
         configured_status: state.values.observer_bridge.status,
@@ -1272,6 +1467,30 @@ async function computeObserverBridge() {{
       state.outputs.provenance_exists = true;
       state.outputs.config_exists = true;
       activeTab = "Observer Bridge";
+      observerBridgePreviewVersion = Date.now();
+      const logText = result.text;
+      render();
+      const log = document.querySelector("#log");
+      if (log) log.textContent = logText;
+    }}
+  }}
+  finally {{ button.disabled = false; }}
+}}
+async function analyzeObserverImageBranches() {{
+  const button = document.querySelector("#observer-image-branches-button");
+  button.disabled = true;
+  try {{
+    const values = collect();
+    const result = await post("/api/observer-image-branches", values);
+    if (result.ok && result.data && result.data.observer_image_branches) {{
+      state.values = values;
+      state.values.observer_image_branches.status = "observer_image_branches_analyzed";
+      state.observer_image_branches.summary = result.data.observer_image_branches;
+      setObserverImageBranchOutputs(true);
+      setPowhegOutputs(false);
+      state.outputs.provenance_exists = true;
+      state.outputs.config_exists = true;
+      activeTab = "Observer Image Branches";
       observerBridgePreviewVersion = Date.now();
       const logText = result.text;
       render();
@@ -1309,7 +1528,7 @@ async function preparePowheg() {{
       state.outputs.powheg_particle_content_report_exists = Boolean(result.data.powheg.powheg_particle_content_report_generated);
       state.outputs.powheg_lhe_event_view_exists = Boolean(result.data.powheg.powheg_lhe_event_view_generated);
       state.powheg = Object.assign({{}}, state.powheg || {{}}, {{
-        input_observer_bridge_found: true,
+        input_observer_image_branches_found: true,
         n_candidates_input: result.data.powheg.n_candidates_input,
         powheg_jobs_prepared: result.data.powheg.powheg_jobs_prepared,
         powheg_cards_generated: result.data.powheg.powheg_cards_generated,
@@ -1527,7 +1746,7 @@ function tabLabel(tab) {{
   return aliases[tab.tab] || tab.tab;
 }}
 function orderedTabs() {{
-  const order = ["Camera", "Black Hole", "Torus / Medium", "Funnel / Cone", "UHE Source", "Forward Geodesics", "DIS Interaction Sampler", "Observer Bridge", "POWHEG", "Event Generation", "GEANT4", "Photon Transport", "Spectra", "Outputs", "Provenance"];
+  const order = ["Camera", "Black Hole", "Torus / Medium", "Funnel / Cone", "UHE Source", "Forward Geodesics", "DIS Interaction Sampler", "Observer Bridge", "Observer Image Branches", "POWHEG", "Event Generation", "GEANT4", "Photon Transport", "Spectra", "Outputs", "Provenance"];
   return [...state.schema].sort((a, b) => {{
     const ai = order.indexOf(tabLabel(a));
     const bi = order.indexOf(tabLabel(b));
@@ -1772,6 +1991,9 @@ function renderObserverBridgePanel() {{
   const value = key => state.values.observer_bridge[key];
   const input = key => `<label><span class="field-label"><span>${{fields[key].label}}</span>${{fields[key].help ? `<span class="field-help">${{fields[key].help}}</span>` : ""}}</span>${{inputFor(fields[key], value(key))}}</label>`;
   const disFound = Boolean(status.input_dis_found || state.outputs.dis_accepted_interactions_exists);
+  const incompleteBridge = Boolean(status.observer_bridge_partial_state_detected || (summary && summary.observer_bridge_stage_complete === false));
+  const missingBridgeProducts = status.required_observer_bridge_products_missing || (summary && summary.required_observer_bridge_products_missing) || [];
+  const incompleteHtml = incompleteBridge ? `<section class="warning-card"><h2>Observer Bridge output is incomplete</h2><p>Re-run Observer Bridge. The dashboard will not treat this stage as complete until the mandatory overlay products exist.</p><p><strong>Missing required products:</strong> <code>${{missingBridgeProducts.length ? missingBridgeProducts.join(", ") : "unknown"}}</code></p></section>` : "";
   const configHtml = `<section><h2>Configuration</h2>
     ${{input("observer_bridge_backend")}}
     ${{input("bridge_mode")}}
@@ -1853,12 +2075,57 @@ function renderObserverBridgePanel() {{
   </div></section>`;
   return `<div class="source-panel">
     ${{inputHtml}}
+    ${{incompleteHtml}}
     ${{configHtml}}
     <section><h2>Run</h2><button type="button" id="observer-bridge-button" class="source-action" ${{disFound ? "" : "disabled"}}>Compute Observer Bridge Scores</button>
     <p class="note">H3-W8 is scoring-only. Every accepted DIS interaction becomes a candidate; camera/FOV visibility changes observer weights and ranking but does not delete candidates.</p>
     <p class="note">POWHEG, PYTHIA, GEANT4, photon transport and event generation remain disabled.</p></section>
     ${{resultsHtml}}
     ${{links}}
+  </div>`;
+}}
+function renderObserverImageBranchesPanel() {{
+  const summary = state.observer_image_branches.summary;
+  const status = state.observer_image_branches || {{}};
+  const fields = Object.fromEntries(state.schema.flatMap(tab => tab.fields).filter(f => f.section === "observer_image_branches").map(f => [f.key, f]));
+  const value = key => state.values.observer_image_branches[key];
+  const input = key => `<label><span class="field-label"><span>${{fields[key].label}}</span>${{fields[key].help ? `<span class="field-help">${{fields[key].help}}</span>` : ""}}</span>${{inputFor(fields[key], value(key))}}</label>`;
+  const canRun = Boolean(status.input_selected_candidates_found && status.input_kerr_pixel_map_found);
+  const resultsHtml = summary ? `<section><h2>Results</h2><div class="summary-grid">
+    <div class="summary-item"><strong>Candidate count</strong>${{summary.n_candidates || 0}}</div>
+    <div class="summary-item"><strong>Total image branches</strong>${{summary.n_branches || 0}}</div>
+    <div class="summary-item"><strong>Mean branches/candidate</strong>${{Number(summary.mean_branches_per_candidate || 0).toFixed(3)}}</div>
+    <div class="summary-item"><strong>Fraction with multiple images</strong>${{Number(summary.fraction_multiple_images || 0).toFixed(3)}}</div>
+    <div class="summary-item"><strong>Single image candidates</strong>${{summary.n_single_image || 0}}</div>
+    <div class="summary-item"><strong>Double image candidates</strong>${{summary.n_double_image || 0}}</div>
+    <div class="summary-item"><strong>Maximum branches/candidate</strong>${{summary.maximum_branches_per_candidate || 0}}</div>
+    <div class="summary-item"><strong>Branch scoring</strong><code>${{summary.branch_scoring_model || "pending"}}</code></div>
+    <div class="summary-item"><strong>Primary branch selection</strong><code>${{summary.primary_branch_selection_model || "pending"}}</code></div>
+    <div class="summary-item"><strong>Proxy selection</strong>${{String(summary.primary_branch_selection_proxy ?? true)}}</div>
+  </div></section>` : `<section><h2>Results</h2><p class="note">No Observer Image Branch Analysis products yet.</p></section>`;
+  const diagnostics = `<section><h2>Diagnostics</h2><div class="diagnostic-grid">
+    ${{state.outputs.observer_branch_cluster_map_exists ? `<figure class="diagnostic-plot-card"><figcaption>Branch cluster map</figcaption><a href="${{outUrl("observer_branch_cluster_map")}}" target="_blank"><img src="${{outUrl("observer_branch_cluster_map")}}?v=${{observerBridgePreviewVersion}}" alt="Observer image branch cluster map"></a></figure>` : ""}}
+    ${{state.outputs.observer_branch_score_distribution_exists ? `<figure class="diagnostic-plot-card"><figcaption>Branch score distribution</figcaption><a href="${{outUrl("observer_branch_score_distribution")}}" target="_blank"><img src="${{outUrl("observer_branch_score_distribution")}}?v=${{observerBridgePreviewVersion}}" alt="Observer branch score distribution"></a></figure>` : ""}}
+    ${{state.outputs.observer_branch_primary_vs_secondary_exists ? `<figure class="diagnostic-plot-card"><figcaption>Branches per candidate</figcaption><a href="${{outUrl("observer_branch_primary_vs_secondary")}}" target="_blank"><img src="${{outUrl("observer_branch_primary_vs_secondary")}}?v=${{observerBridgePreviewVersion}}" alt="Observer primary versus secondary branches"></a></figure>` : ""}}
+    ${{state.outputs.observer_viewpoint_convention_diagnostic_exists ? `<figure class="diagnostic-plot-card"><figcaption>Viewpoint convention audit</figcaption><a href="${{outUrl("observer_viewpoint_convention_diagnostic")}}" target="_blank"><img src="${{outUrl("observer_viewpoint_convention_diagnostic")}}?v=${{observerBridgePreviewVersion}}" alt="Observer viewpoint convention diagnostic"></a></figure>` : ""}}
+    ${{state.outputs.observer_branch_view_exists ? `<figure class="diagnostic-plot-card"><figcaption>Observer Branch View</figcaption><a href="${{outUrl("observer_branch_view")}}" target="_blank">Open interactive branch viewer</a><iframe class="context-interactive" src="${{outUrl("observer_branch_view")}}?v=${{observerBridgePreviewVersion}}" title="Observer branch viewer"></iframe></figure>` : ""}}
+  </div></section>`;
+  return `<div class="source-panel">
+    <section><h2>Inputs</h2><div class="summary-grid">
+      <div class="summary-item"><strong>Selected candidates</strong><span class="${{status.input_selected_candidates_found ? "ok" : "pending"}}">${{status.input_selected_candidates_found ? "found" : "missing"}}</span></div>
+      <div class="summary-item"><strong>Kerr pixel map</strong><span class="${{status.input_kerr_pixel_map_found ? "ok" : "pending"}}">${{status.input_kerr_pixel_map_found ? "found" : "missing"}}</span></div>
+      <div class="summary-item"><strong>Output directory</strong><code>${{status.output_dir || "ObserverImageBranches/"}}</code></div>
+    </div></section>
+    <section><h2>Configuration</h2>
+      ${{input("branch_scoring_model")}}
+      ${{input("primary_branch_selection_model")}}
+      ${{input("minimum_branch_rays")}}
+    </section>
+    <section><h2>Run</h2><button type="button" id="observer-image-branches-button" class="source-action" ${{canRun ? "" : "disabled"}}>Analyze Observer Image Branches</button>
+      <p class="note">H3-W8b groups Kerr ray matches into observed image branches, scores each branch with an auditable proxy, and writes the primary observed branch consumed by POWHEG.</p>
+    </section>
+    ${{resultsHtml}}
+    ${{diagnostics}}
   </div>`;
 }}
 function renderPowhegPanel() {{
@@ -1868,18 +2135,18 @@ function renderPowhegPanel() {{
   const value = key => state.values.powheg[key];
   const input = key => `<label><span class="field-label"><span>${{fields[key].label}}</span>${{fields[key].help ? `<span class="field-help">${{fields[key].help}}</span>` : ""}}</span>${{inputFor(fields[key], value(key))}}</label>`;
   const realSmokeNotice = value("run_mode") === "real_smoke"
-    ? `<p class="note"><strong>Real smoke safety mode:</strong> only the first selected Observer Bridge candidate is executed, with at most 2 POWHEG events. This intentional limit applies only to real_smoke; dry_run and real_free use the selected candidate list prepared by Observer Bridge.</p>`
+    ? `<p class="note"><strong>Real smoke safety mode:</strong> only the first primary image branch is executed, with at most 2 POWHEG events. This intentional limit applies only to real_smoke; dry_run and real_free use the primary branch list prepared by Observer Image Branch Analysis.</p>`
     : "";
   const realFreeNotice = value("run_mode") === "real_free"
-    ? `<p class="note"><strong>Real free mode may be computationally expensive.</strong> It will execute pwhg_main for every selected Observer Bridge candidate and the configured POWHEG events per interaction.</p>`
+    ? `<p class="note"><strong>Real free mode may be computationally expensive.</strong> It will execute pwhg_main for every primary Observer Image Branch and the configured POWHEG events per interaction.</p>`
     : "";
-  const bridgeFound = Boolean(status.input_observer_bridge_found || state.outputs.observer_bridge_selected_candidates_exists);
+  const bridgeFound = Boolean(status.input_observer_image_branches_found || state.outputs.observer_image_primary_branches_exists);
   const selectedAvailable = summary ? (summary.powheg_n_selected_candidates_input ?? summary.n_candidates_input ?? 0) : 0;
   const eventsPerInteraction = summary ? (summary.events_per_candidate_requested || summary.events_per_candidate || value("events_per_candidate") || 0) : (value("events_per_candidate") || 0);
   const jobsToPrepare = summary ? (summary.powheg_jobs_prepared || summary.n_powheg_jobs || selectedAvailable) : selectedAvailable;
   const inputHtml = `<section><h2>Inputs</h2><div class="summary-grid">
-    <div class="summary-item"><strong>Selected Observer Bridge candidates found</strong><span class="${{bridgeFound ? "ok" : "pending"}}">${{bridgeFound ? "yes" : "no"}}</span></div>
-    <div class="summary-item"><strong>Input file</strong><code>${{outPath("observer_bridge_selected_candidates")}}</code></div>
+    <div class="summary-item"><strong>Primary Observer Image Branches found</strong><span class="${{bridgeFound ? "ok" : "pending"}}">${{bridgeFound ? "yes" : "no"}}</span></div>
+    <div class="summary-item"><strong>Input file</strong><code>${{outPath("observer_image_primary_branches")}}</code></div>
     <div class="summary-item"><strong>Selected candidates available</strong>${{selectedAvailable}}</div>
     <div class="summary-item"><strong>POWHEG jobs to prepare/run</strong>${{jobsToPrepare}}</div>
     <div class="summary-item"><strong>POWHEG Events per Interaction</strong>${{eventsPerInteraction}}</div>
@@ -1901,7 +2168,7 @@ function renderPowhegPanel() {{
     </div>
   </section>`;
   const generationSummaryHtml = summary ? `<section><h2>Generation Summary</h2><div class="summary-grid">
-    <div class="summary-item"><strong>Selected candidates received from Observer Bridge</strong>${{summary.powheg_n_selected_candidates_input || summary.n_candidates_input || 0}}</div>
+    <div class="summary-item"><strong>Primary image branches received</strong>${{summary.powheg_n_selected_candidates_input || summary.n_candidates_input || 0}}</div>
     <div class="summary-item"><strong>POWHEG jobs prepared</strong>${{summary.powheg_jobs_prepared || 0}}</div>
     <div class="summary-item"><strong>Input cards generated</strong>${{summary.powheg_cards_generated || 0}}</div>
     <div class="summary-item"><strong>LHE generated</strong><span class="${{summary.powheg_lhe_generated ? "ok" : "pending"}}">${{summary.powheg_lhe_generated ? "YES" : "NO"}}</span></div>
@@ -1991,7 +2258,7 @@ function renderPowhegPanel() {{
     ${{inputHtml}}
     ${{configHtml}}
     <section><h2>Run</h2><button type="button" id="powheg-button" class="source-action" ${{bridgeFound ? "" : "disabled"}}>${{value("run_mode") === "real_smoke" ? "Run POWHEG Real Smoke" : (value("run_mode") === "real_free" ? "Run POWHEG Real Free" : "Prepare POWHEG Jobs")}}</button>
-    <p class="note">Dry run prepares requests, deterministic seeds and real POWHEG input cards without executing pwhg_main. Real smoke executes the local pwhg_main for one top candidate and validates a minimal LHE. Real free executes pwhg_main for the configured candidate and event counts.</p>
+    <p class="note">Dry run prepares requests, deterministic seeds and real POWHEG input cards without executing pwhg_main. Real smoke executes the local pwhg_main for one primary branch and validates a minimal LHE. Real free executes pwhg_main for the configured primary branch and event counts.</p>
     <p class="note">PYTHIA, GEANT4, photon transport and spectra remain disabled.</p></section>
     ${{generationSummaryHtml}}
     ${{physicsSummaryHtml}}
@@ -2074,6 +2341,9 @@ function renderContextPanel() {{
       : `<div class="context-empty">No Observer Bridge diagnostics generated yet.</div>`;
     const diagnosticCards = [
       state.outputs.observer_bridge_camera_overlay_exists ? `<figure class="diagnostic-plot-card"><figcaption>Observer Camera Overlay</figcaption><a href="${{outUrl("observer_bridge_camera_overlay")}}" target="_blank"><img src="${{outUrl("observer_bridge_camera_overlay")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge camera overlay"></a><p class="note">Diagnostic overlay. Candidate image branches may be multiple; use the interactive Kerr view and Observer Image Branches for physical inspection.</p></figure>` : "",
+      state.outputs.observer_candidate_multiple_images_exists ? `<figure class="diagnostic-plot-card"><figcaption>Candidate Multi-Image Audit</figcaption><a href="${{outUrl("observer_candidate_multiple_images")}}" target="_blank"><img src="${{outUrl("observer_candidate_multiple_images")}}?v=${{observerBridgePreviewVersion}}" alt="Observer candidate multiple images"></a><p><a href="${{outUrl("observer_candidate_multi_image_view")}}" target="_blank">Open candidate multi-image viewer</a></p></figure>` : "",
+      state.outputs.observer_bridge_background_comparison_exists ? `<figure class="diagnostic-plot-card"><figcaption>Overlay background comparison</figcaption><a href="${{outUrl("observer_bridge_background_comparison")}}" target="_blank"><img src="${{outUrl("observer_bridge_background_comparison")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge overlay background comparison"></a></figure>` : "",
+      state.outputs.observer_bridge_overlay_hemisphere_diagnostic_exists ? `<figure class="diagnostic-plot-card"><figcaption>Overlay hemisphere diagnostic</figcaption><a href="${{outUrl("observer_bridge_overlay_hemisphere_diagnostic")}}" target="_blank"><img src="${{outUrl("observer_bridge_overlay_hemisphere_diagnostic")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge overlay hemisphere diagnostic"></a></figure>` : "",
       state.outputs.observer_bridge_camera_view_exists ? `<figure class="diagnostic-plot-card"><figcaption>Observer Camera View</figcaption><a href="${{outUrl("observer_bridge_camera_view")}}" target="_blank"><img src="${{outUrl("observer_bridge_camera_view")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge camera view"></a></figure>` : "",
       state.outputs.observer_bridge_map_exists ? `<figure class="diagnostic-plot-card"><figcaption>Candidate map</figcaption><a href="${{outUrl("observer_bridge_map")}}" target="_blank"><img src="${{outUrl("observer_bridge_map")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge map"></a></figure>` : "",
       state.outputs.observer_bridge_score_distribution_exists ? `<figure class="diagnostic-plot-card"><figcaption>Score distribution</figcaption><a href="${{outUrl("observer_bridge_score_distribution")}}" target="_blank"><img src="${{outUrl("observer_bridge_score_distribution")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge score distribution"></a></figure>` : "",
@@ -2215,6 +2485,13 @@ function renderOutputsPanel() {{
     ${{link(out.observer_bridge_geometry_3d_html_exists, "observer_bridge_geometry_3d_html", "Observer Bridge geometry HTML")}}
     ${{link(out.observer_bridge_camera_overlay_exists, "observer_bridge_camera_overlay", "Observer Bridge camera overlay")}}
     ${{out.observer_bridge_camera_overlay_exists ? `<img src="${{outUrl("observer_bridge_camera_overlay")}}" alt="Observer Bridge camera overlay">` : ""}}
+    ${{link(out.observer_bridge_overlay_background_audit_exists, "observer_bridge_overlay_background_audit", "Observer Bridge overlay background audit")}}
+    ${{link(out.observer_bridge_background_comparison_exists, "observer_bridge_background_comparison", "Observer Bridge background comparison")}}
+    ${{link(out.observer_bridge_overlay_hemisphere_diagnostic_exists, "observer_bridge_overlay_hemisphere_diagnostic", "Observer Bridge overlay hemisphere diagnostic")}}
+    ${{link(out.candidate_multi_image_audit_exists, "candidate_multi_image_audit", "Candidate multi-image audit")}}
+    ${{link(out.multiple_image_statistics_exists, "multiple_image_statistics", "Multiple image statistics")}}
+    ${{link(out.observer_candidate_multiple_images_exists, "observer_candidate_multiple_images", "Observer candidate multiple images")}}
+    ${{link(out.observer_candidate_multi_image_view_exists, "observer_candidate_multi_image_view", "Observer candidate multi-image view")}}
     ${{link(out.observer_bridge_kerr_interactive_view_exists, "observer_bridge_kerr_interactive_view", "Observer Bridge Kerr interactive view")}}
     ${{link(out.observer_candidate_kerr_pixel_map_exists, "observer_candidate_kerr_pixel_map", "Observer candidate Kerr pixel map")}}
     ${{link(out.observer_bridge_camera_view_exists, "observer_bridge_camera_view", "Observer Bridge camera view")}}
@@ -2229,6 +2506,22 @@ function renderOutputsPanel() {{
     ${{out.observer_bridge_visibility_map_exists ? `<img src="${{outUrl("observer_bridge_visibility_map")}}" alt="Observer Bridge visibility map">` : ""}}
     ${{link(out.observer_bridge_ranked_events_png_exists, "observer_bridge_ranked_events_png", "Observer Bridge ranked events PNG")}}
     ${{out.observer_bridge_ranked_events_png_exists ? `<img src="${{outUrl("observer_bridge_ranked_events_png")}}" alt="Observer Bridge ranked events">` : ""}}
+  `) + group("ObserverImageBranches/", `
+    ${{link(out.observer_image_branches_exists, "observer_image_branches", "Observer image branches")}}
+    ${{link(out.observer_image_primary_branches_exists, "observer_image_primary_branches", "Observer image primary branches")}}
+    ${{link(out.observer_image_branch_summary_exists, "observer_image_branch_summary", "Observer image branch summary")}}
+    ${{link(out.observer_image_branch_report_exists, "observer_image_branch_report", "Observer image branch report")}}
+    ${{link(out.observer_image_statistics_exists, "observer_image_statistics", "Observer image statistics")}}
+    ${{link(out.observer_branch_statistics_exists, "observer_branch_statistics", "Observer branch statistics CSV")}}
+    ${{link(out.observer_branch_view_exists, "observer_branch_view", "Observer branch view")}}
+    ${{link(out.observer_viewpoint_convention_audit_exists, "observer_viewpoint_convention_audit", "Observer viewpoint convention audit")}}
+    ${{link(out.observer_viewpoint_convention_diagnostic_exists, "observer_viewpoint_convention_diagnostic", "Observer viewpoint convention diagnostic")}}
+    ${{link(out.observer_branch_cluster_map_exists, "observer_branch_cluster_map", "Observer branch cluster map")}}
+    ${{out.observer_branch_cluster_map_exists ? `<img src="${{outUrl("observer_branch_cluster_map")}}" alt="Observer branch cluster map">` : ""}}
+    ${{link(out.observer_branch_score_distribution_exists, "observer_branch_score_distribution", "Observer branch score distribution")}}
+    ${{out.observer_branch_score_distribution_exists ? `<img src="${{outUrl("observer_branch_score_distribution")}}" alt="Observer branch score distribution">` : ""}}
+    ${{link(out.observer_branch_primary_vs_secondary_exists, "observer_branch_primary_vs_secondary", "Observer branches per candidate")}}
+    ${{out.observer_branch_primary_vs_secondary_exists ? `<img src="${{outUrl("observer_branch_primary_vs_secondary")}}" alt="Observer branches per candidate">` : ""}}
   `) + group("POWHEG/", `
     ${{link(out.powheg_event_requests_exists, "powheg_event_requests", "POWHEG event requests")}}
     ${{link(out.powheg_summary_json_exists, "powheg_summary_json", "POWHEG summary JSON")}}
@@ -2378,9 +2671,9 @@ function render() {{
     </div>
   </div>`;
   const nav = `<nav>${{tabs.map(tab => `<button class="tab-button ${{tabLabel(tab) === activeTab ? "active" : ""}}" data-tab="${{tabLabel(tab)}}">${{tabLabel(tab)}}</button>`).join("")}}</nav>`;
-  const customTabs = new Set(["DIS Interaction Sampler", "Observer Bridge", "POWHEG"]);
+  const customTabs = new Set(["DIS Interaction Sampler", "Observer Bridge", "Observer Image Branches", "POWHEG"]);
   const genericFields = customTabs.has(activeTab) ? "" : renderFields(active);
-  root.innerHTML = runStrip + nav + `<div class="panel"><p class="note">Geometry/configuration shell only. Expensive event stages are disabled.</p>${{genericFields}}${{activeTab === "Camera" ? renderHadrosCameraPanel() + renderBackendTable() : ""}}${{activeTab === "UHE Source" ? renderSourcePanel() : ""}}${{activeTab === "Forward Geodesics" ? renderForwardPanel() : ""}}${{activeTab === "DIS Interaction Sampler" ? renderDisPanel() : ""}}${{activeTab === "Observer Bridge" ? renderObserverBridgePanel() : ""}}${{activeTab === "POWHEG" ? renderPowhegPanel() : ""}}${{activeTab === "Outputs" ? renderOutputsPanel() : ""}}` +
+  root.innerHTML = runStrip + nav + `<div class="panel"><p class="note">Geometry/configuration shell only. Expensive event stages are disabled.</p>${{genericFields}}${{activeTab === "Camera" ? renderHadrosCameraPanel() + renderBackendTable() : ""}}${{activeTab === "UHE Source" ? renderSourcePanel() : ""}}${{activeTab === "Forward Geodesics" ? renderForwardPanel() : ""}}${{activeTab === "DIS Interaction Sampler" ? renderDisPanel() : ""}}${{activeTab === "Observer Bridge" ? renderObserverBridgePanel() : ""}}${{activeTab === "Observer Image Branches" ? renderObserverImageBranchesPanel() : ""}}${{activeTab === "POWHEG" ? renderPowhegPanel() : ""}}${{activeTab === "Outputs" ? renderOutputsPanel() : ""}}` +
     `<pre id="log"></pre></div>` +
     renderContextPanel();
   bindHadrosCameraPanel();
@@ -2394,6 +2687,8 @@ function render() {{
   if (disCompareButton) disCompareButton.onclick = compareDisModels;
   const observerBridgeButton = document.querySelector("#observer-bridge-button");
   if (observerBridgeButton) observerBridgeButton.onclick = computeObserverBridge;
+  const observerImageBranchesButton = document.querySelector("#observer-image-branches-button");
+  if (observerImageBranchesButton) observerImageBranchesButton.onclick = analyzeObserverImageBranches;
   const powhegButton = document.querySelector("#powheg-button");
   if (powhegButton) powhegButton.onclick = preparePowheg;
   const registerRunButton = document.querySelector("#registerRunButton");
@@ -2619,6 +2914,7 @@ class Handler(BaseHTTPRequestHandler):
             clear_forward_geodesics_outputs(output_dir)
             clear_dis_outputs(output_dir)
             clear_observer_bridge_outputs(output_dir)
+            clear_observer_image_branches_outputs(output_dir)
             clear_powheg_outputs(output_dir)
             render_summary = render_hadros_web(values, root=ROOT, source_summary=source_summary)
             summary = {"status": "ok", "source": source_summary, "render": render_summary}
@@ -2640,6 +2936,7 @@ class Handler(BaseHTTPRequestHandler):
             forward_summary = generate_forward_geodesic_products(values, run_output_dir=output_dir)
             clear_dis_outputs(output_dir)
             clear_observer_bridge_outputs(output_dir)
+            clear_observer_image_branches_outputs(output_dir)
             clear_powheg_outputs(output_dir)
             render_summary = render_hadros_web(values, root=ROOT, forward_geodesic_summary=forward_summary)
             summary = {"status": "ok", "forward": forward_summary, "render": render_summary}
@@ -2660,6 +2957,7 @@ class Handler(BaseHTTPRequestHandler):
             values["dis_interaction_sampler"]["status"] = "dis_optical_depth_sampled_no_observer_bridge"
             dis_summary = generate_dis_interaction_products(values, run_output_dir=output_dir)
             clear_observer_bridge_outputs(output_dir)
+            clear_observer_image_branches_outputs(output_dir)
             clear_powheg_outputs(output_dir)
             render_summary = render_hadros_web(values, root=ROOT, dis_summary=dis_summary)
             summary = {"status": "ok", "dis": dis_summary, "render": render_summary}
@@ -2679,9 +2977,29 @@ class Handler(BaseHTTPRequestHandler):
             ensure_output_layout(output_dir)
             values["observer_bridge"]["status"] = "observer_bridge_scored_no_event_generation"
             observer_bridge_summary = generate_observer_bridge_products(values, run_output_dir=output_dir)
+            clear_observer_image_branches_outputs(output_dir)
             clear_powheg_outputs(output_dir)
             render_summary = render_hadros_web(values, root=ROOT, observer_bridge_summary=observer_bridge_summary)
             summary = {"status": "ok", "observer_bridge": observer_bridge_summary, "render": render_summary}
+            self._send(200, json.dumps(summary, indent=2, sort_keys=True) + "\n", "application/json")
+            return
+        if self.path == "/api/observer-image-branches":
+            problems = validate_values(values)
+            if problems:
+                self._send(
+                    400,
+                    json.dumps({"status": "error", "validation_errors": problems}, indent=2, sort_keys=True) + "\n",
+                    "application/json",
+                )
+                return
+            output_dir = ROOT / run_output_dir(values)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            ensure_output_layout(output_dir)
+            values["observer_image_branches"]["status"] = "observer_image_branches_analyzed"
+            branch_summary = generate_observer_image_branch_products(values, run_output_dir=output_dir)
+            clear_powheg_outputs(output_dir)
+            render_summary = render_hadros_web(values, root=ROOT, observer_image_branch_summary=branch_summary)
+            summary = {"status": "ok", "observer_image_branches": branch_summary, "render": render_summary}
             self._send(200, json.dumps(summary, indent=2, sort_keys=True) + "\n", "application/json")
             return
         if self.path == "/api/powheg":
@@ -2742,6 +3060,7 @@ def main() -> int:
     parser.add_argument("--propagate-forward-geodesics", action="store_true", help="Generate H3-W6 forward neutrino geodesics through hadros-web orchestration and exit.")
     parser.add_argument("--sample-dis-interactions", action="store_true", help="Generate H3-W7 DIS optical-depth interaction samples through hadros-web orchestration and exit.")
     parser.add_argument("--observer-bridge", action="store_true", help="Generate H3-W8 Observer Bridge scoring products through hadros-web orchestration and exit.")
+    parser.add_argument("--observer-image-branches", action="store_true", help="Generate H3-W8b Observer Image Branch Analysis products through hadros-web orchestration and exit.")
     parser.add_argument("--powheg", action="store_true", help="Prepare H3-W9a POWHEG dry-run jobs through hadros-web orchestration and exit.")
     parser.add_argument("--powheg-real-smoke", action="store_true", help="Run H3-W9b one-candidate local POWHEG real-smoke mode and exit.")
     parser.add_argument("--powheg-real-free", action="store_true", help="Run local POWHEG for the configured candidate and event counts.")
@@ -2795,6 +3114,7 @@ def main() -> int:
         clear_forward_geodesics_outputs(output_dir)
         clear_dis_outputs(output_dir)
         clear_observer_bridge_outputs(output_dir)
+        clear_observer_image_branches_outputs(output_dir)
         clear_powheg_outputs(output_dir)
         render_summary = render_hadros_web(values, root=ROOT, output_dir=output_dir, source_summary=source_summary)
         print(json.dumps({"status": "ok", "source": source_summary, "render": render_summary}, indent=2, sort_keys=True))
@@ -2808,6 +3128,7 @@ def main() -> int:
         forward_summary = generate_forward_geodesic_products(values, run_output_dir=output_dir)
         clear_dis_outputs(output_dir)
         clear_observer_bridge_outputs(output_dir)
+        clear_observer_image_branches_outputs(output_dir)
         clear_powheg_outputs(output_dir)
         render_summary = render_hadros_web(values, root=ROOT, output_dir=output_dir, forward_geodesic_summary=forward_summary)
         print(json.dumps({"status": "ok", "forward": forward_summary, "render": render_summary}, indent=2, sort_keys=True))
@@ -2820,6 +3141,7 @@ def main() -> int:
         values["dis_interaction_sampler"]["status"] = "dis_optical_depth_sampled_no_observer_bridge"
         dis_summary = generate_dis_interaction_products(values, run_output_dir=output_dir)
         clear_observer_bridge_outputs(output_dir)
+        clear_observer_image_branches_outputs(output_dir)
         clear_powheg_outputs(output_dir)
         render_summary = render_hadros_web(values, root=ROOT, output_dir=output_dir, dis_summary=dis_summary)
         print(json.dumps({"status": "ok", "dis": dis_summary, "render": render_summary}, indent=2, sort_keys=True))
@@ -2831,9 +3153,21 @@ def main() -> int:
         ensure_output_layout(output_dir)
         values["observer_bridge"]["status"] = "observer_bridge_scored_no_event_generation"
         observer_bridge_summary = generate_observer_bridge_products(values, run_output_dir=output_dir)
+        clear_observer_image_branches_outputs(output_dir)
         clear_powheg_outputs(output_dir)
         render_summary = render_hadros_web(values, root=ROOT, output_dir=output_dir, observer_bridge_summary=observer_bridge_summary)
         print(json.dumps({"status": "ok", "observer_bridge": observer_bridge_summary, "render": render_summary}, indent=2, sort_keys=True))
+        return 0
+    if args.observer_image_branches:
+        output_dir = args.output_dir if args.output_dir is not None else ROOT / run_output_dir(values)
+        if not output_dir.is_absolute():
+            output_dir = ROOT / output_dir
+        ensure_output_layout(output_dir)
+        values["observer_image_branches"]["status"] = "observer_image_branches_analyzed"
+        branch_summary = generate_observer_image_branch_products(values, run_output_dir=output_dir)
+        clear_powheg_outputs(output_dir)
+        render_summary = render_hadros_web(values, root=ROOT, output_dir=output_dir, observer_image_branch_summary=branch_summary)
+        print(json.dumps({"status": "ok", "observer_image_branches": branch_summary, "render": render_summary}, indent=2, sort_keys=True))
         return 0
     if args.powheg:
         output_dir = args.output_dir if args.output_dir is not None else ROOT / run_output_dir(values)

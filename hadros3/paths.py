@@ -13,6 +13,7 @@ UHE_SOURCE_DIR = "UHEsource"
 FORWARD_GEODESICS_DIR = "ForwardGeodesics"
 DIS_DIR = "DIS"
 OBSERVER_BRIDGE_DIR = "ObserverBridge"
+OBSERVER_IMAGE_BRANCHES_DIR = "ObserverImageBranches"
 POWHEG_DIR = "POWHEG"
 DASHBOARD_DIR = "Dashboard"
 
@@ -45,6 +46,10 @@ def observer_bridge_dir(run_output: Path) -> Path:
     return run_output / OBSERVER_BRIDGE_DIR
 
 
+def observer_image_branches_dir(run_output: Path) -> Path:
+    return run_output / OBSERVER_IMAGE_BRANCHES_DIR
+
+
 def powheg_dir(run_output: Path) -> Path:
     return run_output / POWHEG_DIR
 
@@ -72,6 +77,13 @@ def clear_observer_bridge_outputs(run_output: Path) -> None:
 
 def clear_powheg_outputs(run_output: Path) -> None:
     path = powheg_dir(run_output)
+    if path.exists():
+        shutil.rmtree(path)
+    path.mkdir(parents=True, exist_ok=True)
+
+
+def clear_observer_image_branches_outputs(run_output: Path) -> None:
+    path = observer_image_branches_dir(run_output)
     if path.exists():
         shutil.rmtree(path)
     path.mkdir(parents=True, exist_ok=True)
@@ -177,8 +189,40 @@ def ensure_output_layout(run_output: Path) -> None:
             "observer_bridge_geometry_3d.html",
             "observer_bridge_camera_view.png",
             "observer_bridge_camera_overlay.png",
+            "observer_bridge_overlay_background_audit.json",
+            "observer_bridge_background_comparison.png",
+            "observer_bridge_overlay_hemisphere_diagnostic.png",
+            "observer_candidate_position_audit.jsonl",
+            "observer_bridge_overlay_hemisphere_points.png",
+            "observer_bridge_overlay_theta_colormap.png",
+            "observer_bridge_overlay_phi_colormap.png",
+            "observer_bridge_overlay_kerr_vs_geometric.png",
+            "observer_bridge_interactive_vs_overlay_audit.json",
+            "coordinate_conversion_audit.json",
+            "observer_bridge_candidate_source_audit.json",
+            "candidate_multi_image_audit.jsonl",
+            "observer_candidate_multiple_images.png",
+            "observer_candidate_multi_image_view.html",
+            "multiple_image_statistics.json",
+            "observer_overlay_orientation_markers.png",
+            "observer_overlay_orientation_markers.json",
+            "observer_overlay_orientation_full_diagnostic.png",
             "observer_candidate_kerr_pixel_map.jsonl",
             "observer_bridge_kerr_interactive_view.html",
+        ],
+        OBSERVER_IMAGE_BRANCHES_DIR: [
+            "observer_image_branches.jsonl",
+            "observer_image_primary_branches.jsonl",
+            "observer_image_branch_summary.json",
+            "observer_image_branch_report.json",
+            "observer_image_statistics.json",
+            "observer_branch_score_distribution.png",
+            "observer_branch_cluster_map.png",
+            "observer_branch_primary_vs_secondary.png",
+            "observer_branch_statistics.csv",
+            "observer_branch_view.html",
+            "observer_viewpoint_convention_audit.json",
+            "observer_viewpoint_convention_diagnostic.png",
         ],
         POWHEG_DIR: [
             "powheg_event_requests.jsonl",

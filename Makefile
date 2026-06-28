@@ -11,7 +11,7 @@ NVCCFLAGS ?= -O3 -std=c++17
 CPP_INCLUDES := -Icpp/include
 KERR_PORT_SRC := cpp/src/kerr/kerr_metric.cpp cpp/src/kerr/kerr_geodesic.cpp cpp/src/cascade/kerr_local_tetrad.cpp cpp/src/cascade/packet_kerr_null_propagator.cpp
 
-.PHONY: help install-dev test cpp hadros3-forward-geodesics hadros3-dis-sampler hadros3-observer-bridge hadros3-powheg-driver hadros3-geodesic-preview-cuda powheg-fetch powheg-build powheg-smoke powheg powheg-real-smoke powheg-real-free hadros-web render-hadros-web render-camera-preview launch-camera-preview sample-uhe-source propagate-forward-geodesics sample-dis-interactions observer-bridge serve-hadros-web release-software release-physics release-pipeline theory check validate clean
+.PHONY: help install-dev test cpp hadros3-forward-geodesics hadros3-dis-sampler hadros3-observer-bridge hadros3-powheg-driver hadros3-geodesic-preview-cuda powheg-fetch powheg-build powheg-smoke powheg powheg-real-smoke powheg-real-free hadros-web render-hadros-web render-camera-preview launch-camera-preview sample-uhe-source propagate-forward-geodesics sample-dis-interactions observer-bridge observer-image-branches serve-hadros-web release-software release-physics release-pipeline theory check validate clean
 
 help:
 	@echo "HADROS3 commands:"
@@ -36,6 +36,7 @@ help:
 	@echo "  make propagate-forward-geodesics Generate H3-W6 forward geodesics through hadros-web"
 	@echo "  make sample-dis-interactions Generate H3-W7 DIS interaction samples through hadros-web"
 	@echo "  make observer-bridge   Generate H3-W8 Observer Bridge scoring products through hadros-web"
+	@echo "  make observer-image-branches Generate H3-W8b Observer Image Branch Analysis products"
 	@echo "  make release-software  Increment software_version and rebuild the Theory PDF"
 	@echo "  make release-physics   Increment physics_version/theory_version and rebuild the Theory PDF"
 	@echo "  make release-pipeline PIPELINE=H3-W9b Update pipeline_version and rebuild the Theory PDF"
@@ -139,6 +140,9 @@ sample-dis-interactions:
 
 observer-bridge:
 	$(PYTHON) hadros_web.py --observer-bridge
+
+observer-image-branches:
+	$(PYTHON) hadros_web.py --observer-image-branches
 
 serve-hadros-web:
 	$(MAKE) hadros-web

@@ -55,6 +55,11 @@ struct Source {
   double direction_weight = 1.0;
 };
 
+struct PathRecord {
+  std::string event_id;
+  int source_sample_id = 0;
+};
+
 struct SigmaTable {
   std::string path;
   std::vector<std::pair<double, double>> rows;
@@ -164,15 +169,17 @@ static std::vector<Source> load_sources(const fs::path &path) {
   return records;
 }
 
-static std::vector<std::string> load_path_ids(const fs::path &path) {
+static std::vector<PathRecord> load_paths(const fs::path &path) {
   std::ifstream in(path);
   if (!in) throw std::runtime_error("cannot read " + path.string());
-  std::vector<std::string> ids;
+  std::vector<PathRecord> records;
   std::string line;
   while (std::getline(in, line)) {
-    if (!line.empty()) ids.push_back(json_string(line, "event_id", ""));
+    if (!line.empty()) {
+      records.push_back({json_string(line, "event_id", ""), static_cast<int>(json_number(line, "source_sample_id", 0))});
+    }
   }
-  return ids;
+  return records;
 }
 
 static std::vector<Segment> load_segments(const fs::path &path) {
@@ -324,7 +331,7 @@ int main(int argc, char **argv) {
     const Config config = load_config(run_output / "RunMetadata" / "hadros3_config.json");
     const SigmaTable table = load_sigma_table(config.dis_model);
     const auto sources = load_sources(run_output / "UHEsource" / "uhe_neutrino_source_samples.jsonl");
-    const auto path_ids = load_path_ids(run_output / "ForwardGeodesics" / "uhe_neutrino_forward_paths.jsonl");
+    const auto path_records = load_paths(run_output / "ForwardGeodesics" / "uhe_neutrino_forward_paths.jsonl");
     const auto segments = load_segments(run_output / "ForwardGeodesics" / "uhe_neutrino_forward_path_segments.jsonl");
     std::map<int, Source> source_by_id;
     for (const auto &s : sources) source_by_id[s.source_sample_id] = s;
@@ -347,9 +354,10 @@ int main(int argc, char **argv) {
     bool cdf_normalized = true;
     double max_rho = 0.0, max_sigma = 0.0, max_dtau = 0.0;
 
-    for (const std::string &event_id : path_ids) {
+    for (const PathRecord &path_record : path_records) {
+      const std::string &event_id = path_record.event_id;
       const auto event_segments = by_event[event_id];
-      int source_id = event_segments.empty() ? 0 : event_segments.front().source_sample_id;
+      int source_id = event_segments.empty() ? path_record.source_sample_id : event_segments.front().source_sample_id;
       double tau = 0.0, path_max_rho = 0.0, path_max_sigma = 0.0, path_max_dtau = 0.0;
       bool path_oob = false;
       struct TauSeg { Segment s; double rho, nb, e, sig, dtau; };
@@ -469,7 +477,7 @@ int main(int argc, char **argv) {
     const fs::path report_json = out_dir / "dis_optical_depth_report.json";
     std::ofstream summary(summary_json);
     summary << std::setprecision(17)
-            << "{\"acceptance_fraction\":" << (path_ids.empty() ? 0.0 : static_cast<double>(accepted_count) / path_ids.size())
+            << "{\"acceptance_fraction\":" << (path_records.empty() ? 0.0 : static_cast<double>(accepted_count) / path_records.size())
             << ",\"backend_executable\":\"bin/hadros3_dis_sampler\",\"backend_kind\":\"ported_hadros_cpp_dis_optical_depth_sampler\""
             << ",\"backend_language\":\"C++17\",\"backend_version_or_git_commit\":\"local-build\""
             << ",\"cpp_backend_used\":true,\"cuda_backend_used\":false,\"density_model\":\"analytic_torus_density_v1\",\"dis_backend\":\"cpp_hadros_original_port\""
@@ -483,7 +491,7 @@ int main(int argc, char **argv) {
             << ",\"max_d_tau\":" << max_dtau << ",\"max_density_g_cm3\":" << max_rho << ",\"max_sigma_cm2\":" << max_sigma
             << ",\"medium_model\":" << q(config.medium_model) << ",\"medium_velocity_model\":" << q(config.medium_velocity_model)
             << ",\"medium_velocity_physics_risk\":true,\"n_interactions_accepted\":" << accepted_count
-            << ",\"n_oob_sigma_table_segments\":" << n_oob << ",\"n_paths_processed\":" << path_ids.size()
+            << ",\"n_oob_sigma_table_segments\":" << n_oob << ",\"n_paths_processed\":" << path_records.size()
             << ",\"n_segments_processed\":" << n_segments_used << ",\"n_static_to_zamo_fallback_segments\":" << n_static_fallback
             << ",\"observer_bridge_active_filter_invoked\":false,\"optical_depth_dis_sampler_invoked\":true,\"powheg_invoked\":false"
             << ",\"products\":{\"dis_accepted_interactions\":" << q((out_dir / "dis_accepted_interactions.jsonl").string())
@@ -499,14 +507,14 @@ int main(int argc, char **argv) {
             << ",\"status\":\"ok\",\"tau_max\":" << tau_max << ",\"tau_mean\":" << tau_mean << ",\"tau_min\":" << tau_min
             << ",\"uses_hadros_original_runtime_path\":false}\n";
     std::ofstream csv(summary_csv);
-    csv << "field,value\nstatus,ok\nn_paths_processed," << path_ids.size() << "\nn_segments_processed," << n_segments_used
+    csv << "field,value\nstatus,ok\nn_paths_processed," << path_records.size() << "\nn_segments_processed," << n_segments_used
         << "\ntau_min," << tau_min << "\ntau_mean," << tau_mean << "\ntau_max," << tau_max
-        << "\nn_interactions_accepted," << accepted_count << "\nacceptance_fraction," << (path_ids.empty() ? 0.0 : static_cast<double>(accepted_count) / path_ids.size())
+        << "\nn_interactions_accepted," << accepted_count << "\nacceptance_fraction," << (path_records.empty() ? 0.0 : static_cast<double>(accepted_count) / path_records.size())
         << "\nmax_density_g_cm3," << max_rho << "\nmax_sigma_cm2," << max_sigma << "\nmax_d_tau," << max_dtau
         << "\ndis_model," << config.dis_model << "\nmedium_model," << config.medium_model << "\nmedium_velocity_model," << config.medium_velocity_model << "\n";
     std::ofstream report(report_json);
     report << std::setprecision(17)
-           << "{\"acceptance_fraction\":" << (path_ids.empty() ? 0.0 : static_cast<double>(accepted_count) / path_ids.size())
+           << "{\"acceptance_fraction\":" << (path_records.empty() ? 0.0 : static_cast<double>(accepted_count) / path_records.size())
            << ",\"backend_executable\":\"bin/hadros3_dis_sampler\",\"backend_kind\":\"ported_hadros_cpp_dis_optical_depth_sampler\""
            << ",\"backend_language\":\"C++17\",\"backend_version_or_git_commit\":\"local-build\",\"cpp_backend_used\":true"
            << ",\"cuda_backend_used\":false,\"density_model\":\"analytic_torus_density_v1\",\"dis_backend\":\"cpp_hadros_original_port\""
@@ -522,7 +530,7 @@ int main(int argc, char **argv) {
            << ",\"max_d_tau\":" << max_dtau << ",\"max_density_g_cm3\":" << max_rho << ",\"max_sigma_cm2\":" << max_sigma
            << ",\"medium_model\":" << q(config.medium_model) << ",\"medium_velocity_model\":" << q(config.medium_velocity_model)
            << ",\"medium_velocity_physics_risk\":true,\"n_interactions_accepted\":" << accepted_count
-           << ",\"n_oob_sigma_table_segments\":" << n_oob << ",\"n_paths_processed\":" << path_ids.size()
+           << ",\"n_oob_sigma_table_segments\":" << n_oob << ",\"n_paths_processed\":" << path_records.size()
            << ",\"n_segments_processed\":" << n_segments_used << ",\"observer_bridge_active_filter_invoked\":false"
            << ",\"optical_depth_dis_sampler_invoked\":true,\"powheg_invoked\":false,\"python_prototype_used\":false,\"pythia_invoked\":false"
            << ",\"random_seed\":" << config.random_seed << ",\"sigma_table_energy_max_gev\":" << table.emax

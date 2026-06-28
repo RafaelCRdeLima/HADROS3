@@ -51,6 +51,20 @@ Vec3 spherical_position(double r, double theta, double phi, double spin_a = 0.0)
     };
 }
 
+double zamo_spatial_interval_rg(const KerrMetric& metric, const GeodesicState& a, const GeodesicState& b)
+{
+    const double rmid = std::max(0.5 * (a.r + b.r), 1.0e-6);
+    const double thmid = 0.5 * (a.theta + b.theta);
+    const double dphi = std::atan2(std::sin(b.phi - a.phi), std::cos(b.phi - a.phi));
+    const double sigma = metric.Sigma(rmid, thmid);
+    const double delta = std::max(metric.Delta(rmid), 1.0e-12);
+    const double sin2 = std::max(std::sin(thmid) * std::sin(thmid), 1.0e-10);
+    const double ds2 = (sigma / delta) * (b.r - a.r) * (b.r - a.r)
+        + sigma * (b.theta - a.theta) * (b.theta - a.theta)
+        + (metric.A(rmid, thmid) * sin2 / sigma) * dphi * dphi;
+    return std::sqrt(std::max(ds2, 0.0));
+}
+
 void cartesian_to_spherical(const Vec3& pos, double& r, double& theta, double& phi)
 {
     r = norm(pos);
@@ -180,9 +194,7 @@ PacketKerrNullPropagationResult PacketKerrNullPropagator::propagate(
             result.final_status = "FAILED_INTEGRATION";
             break;
         }
-        const Vec3 p0 = spherical_position(previous.r, previous.theta, previous.phi);
-        const Vec3 p1 = spherical_position(y.r, y.theta, y.phi);
-        result.path_length_rg += norm({p1.x - p0.x, p1.y - p0.y, p1.z - p0.z});
+        result.path_length_rg += zamo_spatial_interval_rg(metric, previous, y);
         result.affine_steps = step + 1;
     }
 

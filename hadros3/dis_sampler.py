@@ -151,17 +151,17 @@ def zamo_or_static_local_energy_gev(segment: dict[str, Any], spin_a: float, medi
     p_phi = float(segment["p_phi_mid"])
     metric = kerr_covariant_metric_components(r, theta, spin_a)
     if medium_velocity_model == "static" and metric["gtt"] < 0.0:
-        u_t = 1.0 / math.sqrt(-metric["gtt"])
-        energy = -(p_t * u_t)
+        u_contravariant_t = 1.0 / math.sqrt(-metric["gtt"])
+        energy = -(p_t * u_contravariant_t)
         return max(0.0, energy), False
     sigma = metric["sigma"]
     delta = metric["delta"]
     big_a = metric["A"]
     lapse = math.sqrt(max(sigma * delta / big_a, 1.0e-30))
     omega = 2.0 * spin_a * r / big_a
-    u_t = 1.0 / lapse
-    u_phi = omega / lapse
-    energy = -(p_t * u_t + p_phi * u_phi)
+    u_contravariant_t = 1.0 / lapse
+    u_contravariant_phi = omega / lapse
+    energy = -(p_t * u_contravariant_t + p_phi * u_contravariant_phi)
     return max(0.0, energy), medium_velocity_model == "static"
 
 

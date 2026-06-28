@@ -91,7 +91,7 @@ def horizon_radius_rg(spin_a: float) -> float:
 def kerr_inverse_metric_components(r_rg: float, theta_rad: float, spin_a: float) -> dict[str, float]:
     a = spin_a
     sin_theta = math.sin(theta_rad)
-    sin2 = max(sin_theta * sin_theta, 1.0e-12)
+    sin2 = max(sin_theta * sin_theta, 1.0e-10)
     cos_theta = math.cos(theta_rad)
     sigma = r_rg * r_rg + a * a * cos_theta * cos_theta
     delta = r_rg * r_rg - 2.0 * r_rg + a * a
@@ -109,7 +109,7 @@ def kerr_inverse_metric_components(r_rg: float, theta_rad: float, spin_a: float)
 def kerr_covariant_metric_components(r_rg: float, theta_rad: float, spin_a: float) -> dict[str, float]:
     a = spin_a
     sin_theta = math.sin(theta_rad)
-    sin2 = max(sin_theta * sin_theta, 1.0e-12)
+    sin2 = max(sin_theta * sin_theta, 1.0e-10)
     cos_theta = math.cos(theta_rad)
     sigma = r_rg * r_rg + a * a * cos_theta * cos_theta
     delta = r_rg * r_rg - 2.0 * r_rg + a * a
@@ -162,7 +162,7 @@ def zamo_covariant_momentum(
     sigma = metric["sigma"]
     delta = metric["delta"]
     big_a = metric["A"]
-    sin_theta = max(math.sin(theta_rad), 1.0e-12)
+    sin_theta = math.sqrt(max(math.sin(theta_rad) ** 2, 1.0e-10))
     lapse = math.sqrt(max(sigma * delta / big_a, 1.0e-30))
     omega = 2.0 * spin_a * r_rg / big_a
     e_t = (1.0 / lapse, 0.0, 0.0, omega / lapse)

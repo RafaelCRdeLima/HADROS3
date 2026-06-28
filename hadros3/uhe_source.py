@@ -105,7 +105,7 @@ def _source_uniform_variables(records: list[dict[str, Any]], values: dict[str, d
         theta = float(position["theta_rad"])
         phi = float(position["phi_rad"]) % (2.0 * math.pi)
         variables["u_r"].append((r**3 - r_min**3) / r_denominator)
-        variables["u_theta"].append((math.cos(theta) - math.cos(theta_max)) / theta_denominator)
+        variables["u_theta"].append((math.cos(theta_min) - math.cos(theta)) / theta_denominator)
         variables["u_phi"].append(phi / (2.0 * math.pi))
     return variables
 

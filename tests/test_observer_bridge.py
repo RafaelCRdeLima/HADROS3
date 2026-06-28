@@ -165,9 +165,17 @@ def test_observer_inclination_uses_boyer_lindquist_theta_hemisphere(tmp_path: Pa
     assert payload["camera_preview_observer_position"][2] > 0.0
     assert payload["kerr_pixel_match_observer_position"][2] > 0.0
     assert payload["hemisphere_consistent"] is True
+    assert payload["camera_preview_png_top_direction"] == "+e_theta"
+    assert payload["camera_preview_png_bottom_direction"] == "-e_theta"
+    assert payload["interactive_previous_screen_up_convention"] == "-e_theta"
+    assert payload["interactive_screen_up_convention"] == "+e_theta"
+    assert payload["interactive_matches_camera_preview"] is True
+    assert payload["basis_dot_products"]["previous_up_dot"] < 0.0
+    assert payload["basis_dot_products"]["up_dot"] > 0.0
     assert diagnostic["camera_preview_observer_hemisphere"] == "north"
     assert diagnostic["kerr_pixel_match_observer_hemisphere"] == "north"
     assert diagnostic["hemisphere_consistent"] is True
+    assert diagnostic["interactive_matches_camera_preview"] is True
 
 
 def test_observer_bridge_scores_all_dis_interactions_without_modifying_dis(tmp_path: Path) -> None:
@@ -398,6 +406,10 @@ def test_observer_bridge_scores_all_dis_interactions_without_modifying_dis(tmp_p
     assert "wheel" in html
     assert "touchstart" in html
     assert "touchmove" in html
+    assert '"screen_up"' in html
+    assert "scene.camera.screen_up" in html
+    assert '"screen_up_convention": "+e_theta"' in html
+    assert '"camera_preview_png_top_direction": "+e_theta"' in html
 
     candidates = [json.loads(line) for line in (bridge_dir / "observer_bridge_candidates.jsonl").read_text(encoding="utf-8").splitlines()]
     assert len(candidates) == 3

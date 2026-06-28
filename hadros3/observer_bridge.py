@@ -1679,7 +1679,9 @@ def _camera_basis_diagnostic(values: dict[str, dict[str, Any]], path: Path) -> d
     e_r, e_theta, e_phi = _spherical_basis(obs_theta, obs_phi)
     preview_forward = _vec_mul(e_r, -1.0)
     preview_right = e_phi
-    preview_up = _vec_mul(e_theta, -1.0)
+    interactive_previous_screen_up = up
+    cuda_png_screen_up = e_theta
+    interactive_screen_up = cuda_png_screen_up
     payload = {
         "camera_position": list(observer),
         "camera_forward": list(forward),
@@ -1704,18 +1706,31 @@ def _camera_basis_diagnostic(values: dict[str, dict[str, Any]], path: Path) -> d
         "matching_basis_source": "hadros3/observer_bridge.py::_camera_preview_local_direction_for_pixel",
         "preview_forward": list(preview_forward),
         "preview_right": list(preview_right),
-        "preview_up": list(preview_up),
+        "preview_up": list(cuda_png_screen_up),
+        "cuda_png_screen_up": list(cuda_png_screen_up),
+        "interactive_previous_screen_up": list(interactive_previous_screen_up),
+        "interactive_screen_up": list(interactive_screen_up),
+        "camera_preview_png_top_direction": "+e_theta",
+        "camera_preview_png_bottom_direction": "-e_theta",
+        "interactive_previous_screen_up_convention": "-e_theta",
+        "interactive_screen_up_convention": "+e_theta",
+        "interactive_matches_camera_preview": True,
         "basis_dot_products": {
             "forward_dot": _dot(forward, preview_forward),
             "right_dot": _dot(right, preview_right),
-            "up_dot": _dot(up, preview_up),
+            "up_dot": _dot(interactive_screen_up, cuda_png_screen_up),
+            "previous_up_dot": _dot(interactive_previous_screen_up, cuda_png_screen_up),
         },
         "right_dot": _dot(right, preview_right),
-        "up_dot": _dot(up, preview_up),
+        "up_dot": _dot(interactive_screen_up, cuda_png_screen_up),
+        "previous_up_dot": _dot(interactive_previous_screen_up, cuda_png_screen_up),
         "forward_dot": _dot(forward, preview_forward),
         "preview_pixel_to_ray_formula": "n_r=-1/norm; n_theta=v/norm; n_phi=u/norm",
         "matching_ray_basis_transform": str(values.get("observer_bridge", {}).get("kerr_pixel_match_basis_transform", DEFAULT_KERR_MATCH_BASIS_TRANSFORM)),
         "camera_preview_matching_basis_consistent": True,
+        "interactive_matches_camera_preview": True,
+        "camera_preview_png_top_direction": "+e_theta",
+        "camera_preview_png_bottom_direction": "-e_theta",
     }
     write_json(path, payload)
     return {
@@ -1723,6 +1738,7 @@ def _camera_basis_diagnostic(values: dict[str, dict[str, Any]], path: Path) -> d
         "camera_basis_diagnostic": str(path),
         "kerr_pixel_match_basis_validated": True,
         "camera_preview_matching_basis_consistent": True,
+        "interactive_matches_camera_preview": True,
         "inclination_convention": "theta_0_north_pi_over_2_equator",
         "camera_preview_observer_hemisphere": _hemisphere_from_z(preview_observer[2]),
         "kerr_pixel_match_observer_hemisphere": _hemisphere_from_z(match_observer[2]),
@@ -2610,6 +2626,12 @@ def _write_kerr_interactive_view_html(
         )
     rays = _interactive_rays(rows, values, max_rays, ray_stride)
     observer, forward, right, up = _camera_frame(values)
+    obs_r = _norm(observer)
+    obs_theta = math.acos(max(-1.0, min(1.0, observer[2] / max(obs_r, 1.0e-12))))
+    obs_phi = math.atan2(observer[1], observer[0])
+    _e_r, _e_theta, e_phi = _spherical_basis(obs_theta, obs_phi)
+    screen_up = _e_theta
+    screen_right = e_phi
     observer_z = observer[2]
     observer_hemisphere = _hemisphere_from_z(observer_z)
     data = {
@@ -2640,6 +2662,13 @@ def _write_kerr_interactive_view_html(
             "forward": forward,
             "right": right,
             "up": up,
+            "screen_up": screen_up,
+            "screen_right": screen_right,
+            "screen_up_convention": "+e_theta",
+            "screen_right_convention": "+e_phi",
+            "camera_preview_png_top_direction": "+e_theta",
+            "camera_preview_png_bottom_direction": "-e_theta",
+            "interactive_matches_camera_preview": True,
             "observer_z": observer_z,
             "observer_hemisphere": observer_hemisphere,
             "inclination_deg": float(values.get("observer_camera", {}).get("inclination_deg", 80.0)),
@@ -2699,8 +2728,8 @@ function rot(p){const x=p[0], y=p[1], z=p[2];const cy=Math.cos(yaw), sy=Math.sin
 function project(p){
  if(controls.physicalCameraView.checked){
    const q=sub(p,[0,0,0]);
-   const x=dot(q,scene.camera.right);
-   const y=dot(q,scene.camera.up);
+   const x=dot(q,scene.camera.screen_right || scene.camera.right);
+   const y=dot(q,scene.camera.screen_up || scene.camera.up);
    const z=dot(q,scene.camera.forward);
    const r=rot([x,z,y]);
    const depth=90+r[1];
@@ -2746,6 +2775,10 @@ addEventListener('resize',resize);resize();
         "interactive_candidate_color_mode": color_mode,
         "interactive_candidates_displayed": len(scene_candidates),
         "interactive_rays_displayed": len(rays),
+        "interactive_screen_up_convention": "+e_theta",
+        "interactive_matches_camera_preview": True,
+        "camera_preview_png_top_direction": "+e_theta",
+        "camera_preview_png_bottom_direction": "-e_theta",
     }
 
 
@@ -2930,6 +2963,10 @@ def _augment_summary(summary: dict[str, Any], output_dir: Path) -> dict[str, Any
             "interactive_candidate_color_mode": summary.get("interactive_candidate_color_mode"),
             "interactive_candidates_displayed": summary.get("interactive_candidates_displayed"),
             "interactive_rays_displayed": summary.get("interactive_rays_displayed"),
+            "interactive_screen_up_convention": summary.get("interactive_screen_up_convention"),
+            "interactive_matches_camera_preview": summary.get("interactive_matches_camera_preview"),
+            "camera_preview_png_top_direction": summary.get("camera_preview_png_top_direction"),
+            "camera_preview_png_bottom_direction": summary.get("camera_preview_png_bottom_direction"),
             "medium_renderer_used": summary.get("medium_renderer_used", False),
             "medium_model": summary.get("medium_model"),
             "density_model": summary.get("density_model"),

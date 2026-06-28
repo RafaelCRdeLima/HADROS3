@@ -59,6 +59,7 @@ inline void kerr_inverse_metric_derivatives_analytic(
     const double s = std::sin(th);
     const double c = std::cos(th);
     const double s2 = s * s;
+    const double s2_safe = std::max(s2, 1.0e-10);  // guard against theta=0,pi
     const double ds2_dtheta = 2.0 * s * c;
     const double sigma = metric.Sigma(r, th);
     const double delta = metric.Delta(r);
@@ -121,10 +122,10 @@ inline void kerr_inverse_metric_derivatives_analytic(
     dgdtheta[2][2] = -dsigma_dtheta / (sigma * sigma);
 
     const double n_phiphi = delta - a2 * s2;
-    const double den_phiphi = sigma_delta * s2;
-    const double dden_phiphi_dr = dsigma_delta_dr * s2;
+    const double den_phiphi = sigma_delta * s2_safe;
+    const double dden_phiphi_dr = dsigma_delta_dr * s2_safe;
     const double dden_phiphi_dtheta =
-        dsigma_delta_dtheta * s2 + sigma_delta * ds2_dtheta;
+        dsigma_delta_dtheta * s2_safe + sigma_delta * ds2_dtheta;
 
     dgdr[3][3] = kerr_inverse_metric_derivative_quotient(
         n_phiphi,

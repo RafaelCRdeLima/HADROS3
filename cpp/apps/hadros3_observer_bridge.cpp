@@ -31,7 +31,7 @@ struct Config {
   std::string line_of_sight_proxy_model = "geometric_proxy";
   std::string fov_policy = "hard";
   bool distance_weight_enabled = true;
-  bool redshift_weight_enabled = false;
+  bool redshift_weight_enabled = true;
   bool line_of_sight_check_enabled = true;
   int max_ranked_events = 25;
   double min_observer_weight = 0.0;

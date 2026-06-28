@@ -188,7 +188,8 @@ static std::vector<Candidate> read_candidates(const fs::path& path) {
 }
 
 static double qmax_for_energy(double energy_gev) {
-  return std::min(2.0 * std::sqrt(0.938272 * std::max(energy_gev, 0.0)), 1.0e5);
+  // Q_max = sqrt(2 * m_p * E_nu): kinematic limit for fixed-target DIS
+  return std::min(std::sqrt(2.0 * 0.938272 * std::max(energy_gev, 0.0)), 1.0e5);
 }
 
 static std::string fortran_double(double value, int precision = 10) {

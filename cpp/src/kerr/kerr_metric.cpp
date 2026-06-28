@@ -85,6 +85,7 @@ void KerrMetric::inverse_metric(
 
     const double s = std::sin(th);
     const double s2 = s*s;
+    const double s2_safe = std::max(s2, 1.0e-10);  // guard against theta=0,pi
 
     const double bigA = A(r, th);
 
@@ -112,7 +113,7 @@ void KerrMetric::inverse_metric(
     ginv[3][3] =
         (
             del - a*a*s2
-        ) / (sig * del * s2);
+        ) / (sig * del * s2_safe);
 }
 
 double KerrMetric::lapse(

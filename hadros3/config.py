@@ -313,7 +313,7 @@ def schema() -> list[dict[str, Any]]:
                 field("observer_bridge", "line_of_sight_proxy_model", "Line of sight proxy", "geometric_proxy", kind="select", options=["geometric_proxy"]),
                 field("observer_bridge", "fov_policy", "FOV policy", "hard", kind="select", options=["hard", "soft"]),
                 field("observer_bridge", "distance_weight_enabled", "Distance weight", True, kind="checkbox"),
-                field("observer_bridge", "redshift_weight_enabled", "Redshift weight", False, kind="checkbox"),
+                field("observer_bridge", "redshift_weight_enabled", "Redshift weight", True, kind="checkbox"),
                 field("observer_bridge", "line_of_sight_check_enabled", "Line of sight check", True, kind="checkbox"),
                 field("observer_bridge", "max_ranked_events", "Max ranked events", 25, kind="number"),
                 field("observer_bridge", "min_observer_weight", "Min observer weight", 0.0, kind="number"),

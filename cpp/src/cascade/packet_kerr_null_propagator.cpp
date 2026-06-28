@@ -158,6 +158,10 @@ PacketKerrNullPropagationResult PacketKerrNullPropagator::propagate(
     result.redshift_factor = 1.0;
     result.final_status = "FAILED_INTEGRATION";
 
+    const double alpha_emit = metric.lapse(r0, theta0);
+    const double omega_emit = metric.omega_frame_drag(r0, theta0);
+    const double E_emit = -(init.state.pt + omega_emit * init.state.pphi) / std::max(alpha_emit, 1.0e-10);
+
     const double r_stop = metric.horizon_radius() + 1.0e-3;
     GeodesicState previous = y;
     for (std::size_t step = 0; step < config_.max_steps; ++step) {
@@ -179,6 +183,14 @@ PacketKerrNullPropagationResult PacketKerrNullPropagator::propagate(
         const Vec3 p1 = spherical_position(y.r, y.theta, y.phi);
         result.path_length_rg += norm({p1.x - p0.x, p1.y - p0.y, p1.z - p0.z});
         result.affine_steps = step + 1;
+    }
+
+    if (result.final_status == "ESCAPED_DOMAIN" && E_emit > 0.0) {
+        const double alpha_obs = metric.lapse(y.r, y.theta);
+        const double omega_obs = metric.omega_frame_drag(y.r, y.theta);
+        const double E_obs = -(y.pt + omega_obs * y.pphi) / std::max(alpha_obs, 1.0e-10);
+        result.redshift_factor = std::clamp(E_obs / E_emit, 0.01, 100.0);
+        result.observed_energy_proxy_gev = packet.energy_gev * result.redshift_factor;
     }
 
     result.final_r = y.r;

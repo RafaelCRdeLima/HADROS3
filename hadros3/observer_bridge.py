@@ -138,6 +138,45 @@ def _camera_frame(values: dict[str, dict[str, Any]]) -> tuple[Vec3, Vec3, Vec3, 
     return observer, forward, right, up
 
 
+def _camera_preview_local_direction_for_pixel(
+    pixel_x: float,
+    pixel_y: float,
+    width: int,
+    height: int,
+    values: dict[str, dict[str, Any]],
+    *,
+    basis_transform: str = "cuda_preview_local_tetrad",
+) -> tuple[float, float, float]:
+    """Mirror the CUDA camera preview pixel-to-local-direction convention.
+
+    The CUDA preview constructs ZAMO-local directions directly in the
+    Boyer-Lindquist spherical tetrad:
+
+        u = 2 * (i + 0.5) / width - 1
+        v = 2 * (j + 0.5) / height - 1
+        n = (-e_r + u * e_phi + v * e_theta) / norm
+
+    The CUDA kernel writes row ``j`` into PNG row ``height - 1 - j``.
+    The Python overlay matcher receives PNG/display coordinates, so it must
+    undo that storage flip before computing ``v``. With this convention,
+    positive ``n_theta`` appears at the top of the saved Camera Preview image.
+    """
+
+    camera = values.get("observer_camera", {})
+    fov_x = math.radians(max(1.0e-9, float(camera.get("field_of_view_deg", 25.0))))
+    tan_x = math.tan(0.5 * fov_x)
+    tan_y = tan_x * height / max(width, 1)
+    u = (2.0 * (pixel_x + 0.5) / max(width, 1) - 1.0) * tan_x
+    cuda_j = float(height - 1) - pixel_y
+    v = (2.0 * (cuda_j + 0.5) / max(height, 1) - 1.0) * tan_y
+    if basis_transform in {"up_flipped", "up_right_flipped"}:
+        v = -v
+    if basis_transform in {"right_flipped", "up_right_flipped"}:
+        u = -u
+    norm = math.sqrt(max(1.0 + u * u + v * v, 1.0e-30))
+    return -1.0 / norm, v / norm, u / norm
+
+
 def _project_camera(point: Vec3, values: dict[str, dict[str, Any]]) -> tuple[float, float, bool]:
     observer, forward, right, up = _camera_frame(values)
     camera = values.get("observer_camera", {})
@@ -369,23 +408,15 @@ def _kerr_direction_for_pixel(
     height: int,
     values: dict[str, dict[str, Any]],
 ) -> tuple[Vec3, tuple[float, float, float]]:
-    observer, forward, right, up = _camera_frame(values)
-    camera = values.get("observer_camera", {})
-    fov_x = math.radians(max(1.0e-9, float(camera.get("field_of_view_deg", 25.0))))
-    tan_x = math.tan(0.5 * fov_x)
-    tan_y = tan_x * height / max(width, 1)
-    x_ndc = 2.0 * (pixel_x + 0.5) / max(width, 1) - 1.0
-    y_ndc = 1.0 - 2.0 * (pixel_y + 0.5) / max(height, 1)
-    direction = _unit(_vec_add(_vec_add(forward, _vec_mul(right, x_ndc * tan_x)), _vec_mul(up, y_ndc * tan_y)))
-    obs_r = _norm(observer)
-    obs_theta = math.acos(max(-1.0, min(1.0, observer[2] / max(obs_r, 1.0e-12))))
-    obs_phi = math.atan2(observer[1], observer[0])
-    e_r, e_theta, e_phi = _spherical_basis(obs_theta, obs_phi)
-    n_r = _dot(direction, e_r)
-    n_theta = _dot(direction, e_theta)
-    n_phi = _dot(direction, e_phi)
-    norm = math.sqrt(max(n_r * n_r + n_theta * n_theta + n_phi * n_phi, 1.0e-30))
-    return observer, (n_r / norm, n_theta / norm, n_phi / norm)
+    observer, _, _, _ = _camera_frame(values)
+    n_r, n_theta, n_phi = _camera_preview_local_direction_for_pixel(
+        pixel_x,
+        pixel_y,
+        width,
+        height,
+        values,
+    )
+    return observer, (n_r, n_theta, n_phi)
 
 
 def _initial_kerr_ray_state(

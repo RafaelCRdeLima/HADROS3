@@ -8,7 +8,14 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 from hadros3.config import defaults
-from hadros3.observer_bridge import _kerr_pixel_match_candidates, _project_camera, _select_downstream_candidates, _spherical, generate_observer_bridge_products
+from hadros3.observer_bridge import (
+    _camera_preview_local_direction_for_pixel,
+    _kerr_pixel_match_candidates,
+    _project_camera,
+    _select_downstream_candidates,
+    _spherical,
+    generate_observer_bridge_products,
+)
 from hadros3.pipeline import render_hadros_web
 
 
@@ -339,6 +346,26 @@ def test_observer_bridge_camera_overlay_uses_camera_preview_when_available(tmp_p
     assert summary["camera_overlay_resolution_px"] == "1024x576"
     assert summary["candidate_overlay_projection_model"] == "kerr_geodesic_pixel_match"
     assert summary["candidate_overlay_not_ray_traced"] is False
+
+
+def test_kerr_pixel_match_uses_cuda_png_y_convention() -> None:
+    values = defaults()
+    width = 1024
+    height = 576
+
+    center = _camera_preview_local_direction_for_pixel(width / 2 - 0.5, height / 2 - 0.5, width, height, values)
+    right = _camera_preview_local_direction_for_pixel(width - 1.0, height / 2 - 0.5, width, height, values)
+    top = _camera_preview_local_direction_for_pixel(width / 2 - 0.5, 0.0, width, height, values)
+    bottom = _camera_preview_local_direction_for_pixel(width / 2 - 0.5, height - 1.0, width, height, values)
+    up_flipped = _camera_preview_local_direction_for_pixel(width / 2 - 0.5, height - 1.0, width, height, values, basis_transform="up_flipped")
+    right_flipped = _camera_preview_local_direction_for_pixel(width - 1.0, height / 2 - 0.5, width, height, values, basis_transform="right_flipped")
+
+    assert center == (-1.0, 0.0, 0.0)
+    assert top[1] > 0.0
+    assert bottom[1] < 0.0
+    assert right[2] > 0.0
+    assert up_flipped[1] == -bottom[1]
+    assert right_flipped[2] == -right[2]
 
 
 def test_kerr_pixel_match_maps_optical_axis_near_center() -> None:

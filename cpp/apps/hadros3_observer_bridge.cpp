@@ -265,7 +265,9 @@ static Candidate candidate_from_line(const std::string& line, const Config& c) {
   out.visibility_flag = out.visibility_proxy > 0.0;
   out.redshift_proxy = 1.0;
   out.redshift_weight = c.redshift_weight_enabled ? out.redshift_proxy : 1.0;
-  out.distance_weight = c.distance_weight_enabled ? clamp((c.observer_distance_rg * c.observer_distance_rg) / std::max(out.distance_to_observer_rg * out.distance_to_observer_rg, 1.0e-30), 0.0, 1.0) : 1.0;
+  out.distance_weight = c.distance_weight_enabled
+      ? std::max((c.observer_distance_rg * c.observer_distance_rg) / std::max(out.distance_to_observer_rg * out.distance_to_observer_rg, 1.0e-30), 0.0)
+      : 1.0;
   out.observer_weight = out.escape_weight_proxy * out.visibility_proxy * out.camera_fov_weight * out.distance_weight * out.redshift_weight * out.line_of_sight_weight;
   if (out.observer_weight < c.min_observer_weight) out.observer_weight = 0.0;
   out.final_observation_score = out.physics_weight * out.observer_weight;

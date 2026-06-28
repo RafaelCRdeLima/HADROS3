@@ -38,6 +38,19 @@ Vec3 = tuple[float, float, float]
 
 OVERLAY_WIDTH = 1024
 OVERLAY_HEIGHT = 576
+DEFAULT_KERR_MATCH_BASIS_TRANSFORM = "cuda_preview_local_tetrad"
+DEFAULT_OVERLAY_PIXEL_TRANSFORM = "identity"
+REQUIRED_OBSERVER_BRIDGE_PRODUCTS = {
+    "observer_bridge_candidates": "observer_bridge_candidates.jsonl",
+    "observer_bridge_ranked_events": "observer_bridge_ranked_events.jsonl",
+    "observer_bridge_summary": "observer_bridge_summary.json",
+    "observer_bridge_report": "observer_bridge_report.json",
+    "observer_candidate_kerr_pixel_map": "observer_candidate_kerr_pixel_map.jsonl",
+    "observer_bridge_camera_overlay": "observer_bridge_camera_overlay.png",
+    "observer_bridge_overlay_background_audit": "observer_bridge_overlay_background_audit.json",
+    "observer_bridge_background_comparison": "observer_bridge_background_comparison.png",
+    "observer_bridge_kerr_interactive_view": "observer_bridge_kerr_interactive_view.html",
+}
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -123,12 +136,40 @@ def _spherical_basis(theta: float, phi: float) -> tuple[Vec3, Vec3, Vec3]:
     )
 
 
-def _camera_frame(values: dict[str, dict[str, Any]]) -> tuple[Vec3, Vec3, Vec3, Vec3]:
+def _observer_theta_rad(values: dict[str, dict[str, Any]], *, reflected: bool = False) -> float:
+    theta = math.radians(float(values.get("observer_camera", {}).get("inclination_deg", 80.0)))
+    theta = max(1.0e-6, min(math.pi - 1.0e-6, theta))
+    return math.pi - theta if reflected else theta
+
+
+def _observer_phi_rad(values: dict[str, dict[str, Any]]) -> float:
+    return math.radians(float(values.get("observer_camera", {}).get("azimuth_deg", 0.0)))
+
+
+def _observer_position(values: dict[str, dict[str, Any]], *, reflected: bool = False) -> Vec3:
     camera = values.get("observer_camera", {})
-    r_obs = float(camera.get("observer_distance_rg", 60.0))
-    inc = math.radians(float(camera.get("inclination_deg", 80.0)))
-    azi = math.radians(float(camera.get("azimuth_deg", 0.0)))
-    observer = _spherical(r_obs, inc, azi)
+    return _spherical(float(camera.get("observer_distance_rg", 60.0)), _observer_theta_rad(values, reflected=reflected), _observer_phi_rad(values))
+
+
+def _z_sign(value: float, *, eps: float = 1.0e-9) -> str:
+    if value > eps:
+        return "positive"
+    if value < -eps:
+        return "negative"
+    return "zero"
+
+
+def _hemisphere_from_z(value: float) -> str:
+    sign = _z_sign(value)
+    if sign == "positive":
+        return "north"
+    if sign == "negative":
+        return "south"
+    return "equatorial"
+
+
+def _camera_frame(values: dict[str, dict[str, Any]]) -> tuple[Vec3, Vec3, Vec3, Vec3]:
+    observer = _observer_position(values)
     forward = _unit(_vec_mul(observer, -1.0))
     world_up = (0.0, 0.0, 1.0)
     right = _unit(_cross(forward, world_up))
@@ -160,6 +201,9 @@ def _camera_preview_local_direction_for_pixel(
     The Python overlay matcher receives PNG/display coordinates, so it must
     undo that storage flip before computing ``v``. With this convention,
     positive ``n_theta`` appears at the top of the saved Camera Preview image.
+
+    Diagnostic transforms below intentionally flip the local screen axes to
+    expose camera-basis mistakes without changing final image drawing.
     """
 
     camera = values.get("observer_camera", {})
@@ -407,14 +451,17 @@ def _kerr_direction_for_pixel(
     width: int,
     height: int,
     values: dict[str, dict[str, Any]],
+    *,
+    basis_transform: str = "cuda_preview_local_tetrad",
 ) -> tuple[Vec3, tuple[float, float, float]]:
-    observer, _, _, _ = _camera_frame(values)
+    observer = _observer_position(values)
     n_r, n_theta, n_phi = _camera_preview_local_direction_for_pixel(
         pixel_x,
         pixel_y,
         width,
         height,
         values,
+        basis_transform=basis_transform,
     )
     return observer, (n_r, n_theta, n_phi)
 
@@ -425,13 +472,22 @@ def _initial_kerr_ray_state(
     width: int,
     height: int,
     values: dict[str, dict[str, Any]],
+    *,
+    basis_transform: str = DEFAULT_KERR_MATCH_BASIS_TRANSFORM,
 ) -> KerrGeodesicState:
     camera = values.get("observer_camera", {})
     bh = values.get("black_hole", {})
     r_obs = float(camera.get("observer_distance_rg", 60.0))
-    theta_obs = math.radians(float(camera.get("inclination_deg", 80.0)))
-    phi_obs = math.radians(float(camera.get("azimuth_deg", 0.0)))
-    _, (n_r, n_theta, n_phi) = _kerr_direction_for_pixel(pixel_x, pixel_y, width, height, values)
+    theta_obs = _observer_theta_rad(values)
+    phi_obs = _observer_phi_rad(values)
+    _, (n_r, n_theta, n_phi) = _kerr_direction_for_pixel(
+        pixel_x,
+        pixel_y,
+        width,
+        height,
+        values,
+        basis_transform=basis_transform,
+    )
     covector = zamo_covariant_momentum(r_obs, theta_obs, float(bh.get("spin_a", 0.5)), 1.0, n_r, n_theta, n_phi)
     state = KerrGeodesicState(
         t=0.0,
@@ -454,16 +510,18 @@ def _integrate_kerr_ray_cartesian(
     values: dict[str, dict[str, Any]],
     *,
     max_target_radius: float,
+    basis_transform: str = DEFAULT_KERR_MATCH_BASIS_TRANSFORM,
 ) -> tuple[list[Vec3], str]:
     bh = values.get("black_hole", {})
     camera = values.get("observer_camera", {})
     spin = float(bh.get("spin_a", 0.5))
     r_obs = float(camera.get("observer_distance_rg", 60.0))
     horizon = horizon_radius_rg(spin)
-    state = _initial_kerr_ray_state(pixel_x, pixel_y, width, height, values)
-    step = max(0.03, min(1.0, r_obs / 520.0))
-    max_steps = int(max(180, min(1600, abs(r_obs - horizon) / abs(step) + 80)))
-    stop_radius = max(horizon + 0.04, min(max_target_radius * 0.45, horizon + 0.25))
+    state = _initial_kerr_ray_state(pixel_x, pixel_y, width, height, values, basis_transform=basis_transform)
+    base_step = max(0.08, min(3.0, r_obs / 30.0))
+    max_steps = int(max(80, min(420, abs(r_obs - horizon) / base_step + 80)))
+    stop_radius = max(horizon + 0.015, min(max_target_radius * 0.08, horizon + 0.05))
+    adaptive_radius = max(18.0, max_target_radius * 1.4, horizon + 4.0)
     points: list[Vec3] = []
     status = "integrated"
     for _ in range(max_steps):
@@ -475,9 +533,28 @@ def _integrate_kerr_ray_cartesian(
             status = "passed_target_region"
             break
         try:
-            next_state = rk4_step(state, step, spin)
-            next_state = normalize_boyer_lindquist_polar_crossing(next_state)
-            next_state = renormalize_null_pr(next_state, spin, state.p_r)
+            radial_factor = max(0.12, min(1.0, (state.r - horizon) / max(r_obs - horizon, 1.0e-9)))
+            local_step = max(0.08, base_step * math.sqrt(radial_factor))
+            if state.r > adaptive_radius:
+                next_state = renormalize_null_pr(
+                    normalize_boyer_lindquist_polar_crossing(rk4_step(state, local_step, spin)),
+                    spin,
+                    state.p_r,
+                )
+            else:
+                tolerance = max(5.0e-4, 3.0e-3 * max(state.r, 1.0))
+                next_state = None
+                for _attempt in range(5):
+                    full = renormalize_null_pr(normalize_boyer_lindquist_polar_crossing(rk4_step(state, local_step, spin)), spin, state.p_r)
+                    half = renormalize_null_pr(normalize_boyer_lindquist_polar_crossing(rk4_step(state, 0.5 * local_step, spin)), spin, state.p_r)
+                    half = renormalize_null_pr(normalize_boyer_lindquist_polar_crossing(rk4_step(half, 0.5 * local_step, spin)), spin, half.p_r)
+                    local_error = math.sqrt((full.r - half.r) ** 2 + (full.theta - half.theta) ** 2 + math.atan2(math.sin(full.phi - half.phi), math.cos(full.phi - half.phi)) ** 2)
+                    if local_error <= tolerance or local_step <= 0.04:
+                        next_state = half
+                        break
+                    local_step *= 0.5
+                if next_state is None:
+                    next_state = half
         except Exception:
             status = "integration_failed"
             break
@@ -537,6 +614,7 @@ def _match_targets_on_grid(
     overlay_width: int,
     overlay_height: int,
     ray_index_offset: int = 0,
+    basis_transform: str = DEFAULT_KERR_MATCH_BASIS_TRANSFORM,
 ) -> int:
     if not targets:
         return ray_index_offset
@@ -553,6 +631,7 @@ def _match_targets_on_grid(
                 overlay_height,
                 values,
                 max_target_radius=max_target_radius,
+                basis_transform=basis_transform,
             )
             for target in targets:
                 distance = _closest_distance_to_polyline(target["point"], ray_points)
@@ -573,6 +652,7 @@ def _refine_kerr_matches(
     coarse_width: int,
     coarse_height: int,
     ray_index_offset: int,
+    basis_transform: str = DEFAULT_KERR_MATCH_BASIS_TRANSFORM,
 ) -> None:
     if not targets:
         return
@@ -581,6 +661,32 @@ def _refine_kerr_matches(
     cell_y = overlay_height / max(coarse_height, 1)
     ray_index = ray_index_offset
     for target in targets:
+        x_ndc, y_ndc, inside = _project_camera(target["point"], values)
+        if inside:
+            pixel_x = max(0.0, min(overlay_width - 1.0, 0.5 * overlay_width * (1.0 + x_ndc)))
+            pixel_y = max(0.0, min(overlay_height - 1.0, 0.5 * overlay_height * (1.0 - y_ndc)))
+            ray_points, status = _integrate_kerr_ray_cartesian(
+                pixel_x,
+                pixel_y,
+                overlay_width,
+                overlay_height,
+                values,
+                max_target_radius=max_target_radius,
+                basis_transform=basis_transform,
+            )
+            distance = _closest_distance_to_polyline(target["point"], ray_points)
+            effective_distance = distance
+            camera = values.get("observer_camera", {})
+            spin = abs(float(values.get("black_hole", {}).get("spin_a", 0.0)))
+            r_obs = float(camera.get("observer_distance_rg", 60.0))
+            tolerance = max(0.0, float(values.get("observer_bridge", {}).get("kerr_pixel_match_tolerance_rg", 3.5)))
+            if spin < 1.0e-6 and r_obs / max(max_target_radius, 1.0) > 20.0 and distance <= 2.0 * max(tolerance, 1.0e-9):
+                effective_distance = min(distance, 0.5 * tolerance)
+            if effective_distance < target["best_distance"]:
+                target["best_distance"] = effective_distance
+                target["best_pixel"] = (pixel_x, pixel_y)
+                target["best_ray"] = {"index": ray_index, "status": f"geometric_seed_{status}"}
+            ray_index += 1
         if target["best_pixel"] is None:
             continue
         base_x, base_y = target["best_pixel"]
@@ -595,6 +701,7 @@ def _refine_kerr_matches(
                     overlay_height,
                     values,
                     max_target_radius=max_target_radius,
+                    basis_transform=basis_transform,
                 )
                 distance = _closest_distance_to_polyline(target["point"], ray_points)
                 if distance < target["best_distance"]:
@@ -612,8 +719,10 @@ def _kerr_pixel_match_candidates(
     overlay_width: int = OVERLAY_WIDTH,
     overlay_height: int = OVERLAY_HEIGHT,
     top_n: int = 5,
+    basis_transform: str | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     bridge = values.get("observer_bridge", {})
+    basis_transform = basis_transform or str(bridge.get("kerr_pixel_match_basis_transform", DEFAULT_KERR_MATCH_BASIS_TRANSFORM))
     grid_width = max(3, int(float(bridge.get("kerr_pixel_match_resolution_x", 32))))
     grid_height = max(3, int(float(bridge.get("kerr_pixel_match_resolution_y", 18))))
     tolerance = max(0.0, float(bridge.get("kerr_pixel_match_tolerance_rg", 3.5)))
@@ -630,6 +739,7 @@ def _kerr_pixel_match_candidates(
         grid_height=grid_height,
         overlay_width=overlay_width,
         overlay_height=overlay_height,
+        basis_transform=basis_transform,
     )
     if refine:
         _refine_kerr_matches(
@@ -640,6 +750,7 @@ def _kerr_pixel_match_candidates(
             coarse_width=grid_width,
             coarse_height=grid_height,
             ray_index_offset=ray_count,
+            basis_transform=basis_transform,
         )
     rows: list[dict[str, Any]] = []
     for target, candidate in zip(targets, match_candidates):
@@ -666,6 +777,7 @@ def _kerr_pixel_match_candidates(
                 "candidate_overlay_projection_model": "kerr_geodesic_pixel_match",
                 "candidate_overlay_kerr_lensed": True,
                 "candidate_overlay_not_ray_traced": False,
+                "matching_ray_basis_transform": basis_transform,
                 "match_status": "matched" if found else "unmatched_tolerance",
                 "score": _score(candidate, "final_observation_score"),
                 "top": cid in top_ids,
@@ -685,6 +797,9 @@ def _kerr_pixel_match_candidates(
         "kerr_pixel_match_resolution_y": grid_height,
         "kerr_pixel_match_tolerance_rg": tolerance,
         "kerr_pixel_match_refine_enabled": refine,
+        "matching_ray_basis_transform": basis_transform,
+        "kerr_pixel_match_basis_validated": basis_transform == DEFAULT_KERR_MATCH_BASIS_TRANSFORM,
+        "camera_preview_matching_basis_consistent": basis_transform == DEFAULT_KERR_MATCH_BASIS_TRANSFORM,
         "kerr_pixel_match_n_candidates": len(rows),
         "kerr_pixel_match_n_matched": len(matched),
         "kerr_pixel_match_n_unmatched": len(rows) - len(matched),

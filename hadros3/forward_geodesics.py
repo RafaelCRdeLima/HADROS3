@@ -329,11 +329,23 @@ def normalize_boyer_lindquist_polar_crossing(state: KerrGeodesicState) -> KerrGe
     )
 
 
-def coordinate_path_distance(a: KerrGeodesicState, b: KerrGeodesicState) -> float:
+def coordinate_path_distance(a: KerrGeodesicState, b: KerrGeodesicState, spin_a: float = 0.0) -> float:
     r_mid = max(0.5 * (a.r + b.r), 1.0e-6)
     theta_mid = 0.5 * (a.theta + b.theta)
     dphi = math.atan2(math.sin(b.phi - a.phi), math.cos(b.phi - a.phi))
-    return math.sqrt((b.r - a.r) ** 2 + (r_mid * (b.theta - a.theta)) ** 2 + (r_mid * max(math.sin(theta_mid), 1.0e-6) * dphi) ** 2)
+    sigma = r_mid * r_mid + spin_a * spin_a * math.cos(theta_mid) ** 2
+    delta = max(r_mid * r_mid - 2.0 * r_mid + spin_a * spin_a, 1.0e-12)
+    sin2 = max(math.sin(theta_mid) ** 2, 1.0e-10)
+    big_a = (r_mid * r_mid + spin_a * spin_a) ** 2 - spin_a * spin_a * delta * sin2
+    ds2 = (sigma / delta) * (b.r - a.r) ** 2 + sigma * (b.theta - a.theta) ** 2 + (big_a * sin2 / sigma) * dphi**2
+    return math.sqrt(max(ds2, 0.0))
+
+
+def zamo_local_energy_from_covector_gev(spin_a: float, r_rg: float, theta_rad: float, p_t_gev: float, p_phi_gev: float) -> float:
+    metric = kerr_covariant_metric_components(r_rg, theta_rad, spin_a)
+    lapse = math.sqrt(max(metric["sigma"] * metric["delta"] / metric["A"], 1.0e-30))
+    omega = 2.0 * spin_a * r_rg / metric["A"]
+    return max(0.0, -(p_t_gev + omega * p_phi_gev) / lapse)
 
 
 def physical_momentum_from_state(state: KerrGeodesicState, energy_gev: float) -> dict[str, float]:
@@ -585,7 +597,7 @@ def propagate_one(sample: dict[str, Any], config: ForwardGeodesicConfig) -> tupl
                 stop_condition = "invalid_invariant"
                 status = "invalid_invariant"
                 break
-            integrated_distance += coordinate_path_distance(state, next_state)
+            integrated_distance += coordinate_path_distance(state, next_state, config.spin_a)
             max_curvature_indicator = max(
                 max_curvature_indicator,
                 abs(rhs.theta - previous_rhs.theta),
@@ -594,11 +606,11 @@ def propagate_one(sample: dict[str, Any], config: ForwardGeodesicConfig) -> tupl
             previous_rhs = rhs
             state = next_state
             substeps += 1
-        if stop_condition in {"horizon_crossing", "outer_escape_radius"} and coordinate_path_distance(start, state) <= 0.0:
+        if stop_condition in {"horizon_crossing", "outer_escape_radius"} and coordinate_path_distance(start, state, config.spin_a) <= 0.0:
             break
         if status == "invalid_invariant":
             break
-        if coordinate_path_distance(start, state) <= 0.0:
+        if coordinate_path_distance(start, state, config.spin_a) <= 0.0:
             stop_condition = "max_steps"
             break
         physical_p = physical_momentum_from_state(state, energy_gev)
@@ -636,8 +648,8 @@ def propagate_one(sample: dict[str, Any], config: ForwardGeodesicConfig) -> tupl
                 "p_r_mid": physical_p["p_r"],
                 "p_theta_mid": physical_p["p_theta"],
                 "p_phi_mid": physical_p["p_phi"],
-                "dl_segment_rg": coordinate_path_distance(start, state),
-                "E_nu_local_gev_mid": max(energy_gev / math.sqrt(max(1.0 - 2.0 / max(r_mid, 2.000001), 1.0e-8)), energy_gev),
+                "dl_segment_rg": coordinate_path_distance(start, state, config.spin_a),
+                "E_nu_local_gev_mid": zamo_local_energy_from_covector_gev(config.spin_a, r_mid, theta_mid, physical_p["p_t"], physical_p["p_phi"]),
                 "geodesic_status": status,
                 "full_kerr_geodesic": True,
                 "theta_phi_evolution": True,

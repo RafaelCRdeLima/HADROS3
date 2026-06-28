@@ -1220,7 +1220,7 @@ def _generate_dis_interaction_products_python(values: dict[str, dict[str, Any]],
         if tau_total > 0.0:
             cdf_total = sum(float(entry["d_tau_nuN"]) for entry in segment_tau_records)
             cdf_normalized = cdf_normalized and abs(cdf_total / tau_total - 1.0) <= 1.0e-10
-        accepted_flag = bool(tau_total > 0.0 and rng.random() < probability and len(accepted) < config.max_interactions)
+        accepted_flag = bool(tau_total > 0.0 and len(accepted) < config.max_interactions and rng.random() < probability)
         source = source_map.get(source_sample_id, {})
         source_weight = float(source.get("source_weight", 1.0))
         direction_weight = float(source.get("direction_weight", 1.0))

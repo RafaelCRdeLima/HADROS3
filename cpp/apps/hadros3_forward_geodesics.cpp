@@ -218,14 +218,18 @@ GeodesicState normalize_poles(GeodesicState s)
   return s;
 }
 
-double coordinate_path_distance(const GeodesicState& a, const GeodesicState& b)
+double proper_path_distance(const KerrMetric& metric, const GeodesicState& a, const GeodesicState& b)
 {
   const double rmid = std::max(0.5 * (a.r + b.r), 1.0e-6);
   const double thmid = 0.5 * (a.theta + b.theta);
   const double dphi = std::atan2(std::sin(b.phi - a.phi), std::cos(b.phi - a.phi));
-  return std::sqrt((b.r - a.r) * (b.r - a.r)
-      + std::pow(rmid * (b.theta - a.theta), 2)
-      + std::pow(rmid * std::max(std::sin(thmid), 1.0e-6) * dphi, 2));
+  const double sigma = metric.Sigma(rmid, thmid);
+  const double delta = std::max(metric.Delta(rmid), 1.0e-12);
+  const double sin2 = std::max(std::sin(thmid) * std::sin(thmid), 1.0e-10);
+  const double ds2 = (sigma / delta) * (b.r - a.r) * (b.r - a.r)
+      + sigma * (b.theta - a.theta) * (b.theta - a.theta)
+      + (metric.A(rmid, thmid) * sin2 / sigma) * dphi * dphi;
+  return std::sqrt(std::max(ds2, 0.0));
 }
 
 double zamo_energy_gev(const KerrMetric& metric, const GeodesicState& state, double source_energy_gev)
@@ -349,7 +353,7 @@ int main(int argc, char** argv)
           break;
         }
 
-        const double dl = coordinate_path_distance(start, state);
+        const double dl = proper_path_distance(metric, start, state);
         if (!(dl > 0.0) || !std::isfinite(dl)) {
           stop = "invalid_invariant";
           status = "invalid_invariant";

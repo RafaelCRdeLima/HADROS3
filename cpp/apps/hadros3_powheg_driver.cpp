@@ -240,6 +240,11 @@ static std::string powheg_card(const Candidate& c, const Config& cfg, int seed) 
   out << "iseed " << seed << "\n";
   out << "manyseeds 0\ndoublefsr 0\nrunningscales 1\nolddij 0\n";
   out << "channel_type 3\nvtype 2\n";
+  // Explicit CKM matrix: bypass buggy fallback in init_couplings.f that only
+  // checks ph_CKM(1,1)<0 for all 9 elements, leaving Vus..Vtb at sentinel -1.
+  out << "CKM_Vud 0.9748D0\nCKM_Vus 0.2225D0\nCKM_Vub 3.6D-3\n";
+  out << "CKM_Vcd 0.2225D0\nCKM_Vcs 0.9740D0\nCKM_Vcb 4.1D-2\n";
+  out << "CKM_Vtd 9.0D-3\nCKM_Vts 4.05D-2\nCKM_Vtb 0.9992D0\n";
   out << "smartsig 1\nnores 1\nparallelstage 0\nxgriditeration 1\n";
   out << "py8QED 0\npy8MPI 1\npy8had 2\npy8shower 1\ncolltest 0\nsofttest 0\n";
   return out.str();

@@ -2065,15 +2065,15 @@ function renderContextPanel() {{
     return `<aside class="panel"><h2>DIS Interaction Map</h2><div class="context-figure">${{figure}}</div>${{diagnostics}}</aside>`;
   }}
   if (activeTab === "Observer Bridge") {{
-    const figure = state.outputs.observer_bridge_camera_overlay_exists
-      ? `<img src="${{outUrl("observer_bridge_camera_overlay")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge camera overlay">`
+    const figure = state.outputs.observer_bridge_kerr_interactive_view_exists
+      ? `<a href="${{outUrl("observer_bridge_kerr_interactive_view")}}" target="_blank">Open interactive view</a><iframe class="context-interactive" src="${{outUrl("observer_bridge_kerr_interactive_view")}}?v=${{observerBridgePreviewVersion}}" title="Observer Bridge Kerr Interactive View"></iframe>`
+      : state.outputs.observer_bridge_camera_overlay_exists
+      ? `<img src="${{outUrl("observer_bridge_camera_overlay")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge camera overlay"><p class="note">Interactive Kerr diagnostic not generated yet; showing the diagnostic overlay fallback.</p>`
       : state.outputs.observer_bridge_camera_view_exists
       ? `<img src="${{outUrl("observer_bridge_camera_view")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge camera view">`
-      : state.outputs.observer_bridge_map_exists
-      ? `<img src="${{outUrl("observer_bridge_map")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge candidate map">`
       : `<div class="context-empty">No Observer Bridge diagnostics generated yet.</div>`;
     const diagnosticCards = [
-      state.outputs.observer_bridge_kerr_interactive_view_exists ? `<figure class="diagnostic-plot-card"><figcaption>Observer Bridge Kerr Interactive View</figcaption><a href="${{outUrl("observer_bridge_kerr_interactive_view")}}" target="_blank">Open interactive Kerr diagnostic</a><iframe src="${{outUrl("observer_bridge_kerr_interactive_view")}}?v=${{observerBridgePreviewVersion}}" title="Observer Bridge Kerr Interactive View" style="width:100%;height:420px;border:1px solid #cbd5e1;border-radius:8px;background:#0b0f17"></iframe></figure>` : "",
+      state.outputs.observer_bridge_camera_overlay_exists ? `<figure class="diagnostic-plot-card"><figcaption>Observer Camera Overlay</figcaption><a href="${{outUrl("observer_bridge_camera_overlay")}}" target="_blank"><img src="${{outUrl("observer_bridge_camera_overlay")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge camera overlay"></a><p class="note">Diagnostic overlay. Candidate image branches may be multiple; use the interactive Kerr view and Observer Image Branches for physical inspection.</p></figure>` : "",
       state.outputs.observer_bridge_camera_view_exists ? `<figure class="diagnostic-plot-card"><figcaption>Observer Camera View</figcaption><a href="${{outUrl("observer_bridge_camera_view")}}" target="_blank"><img src="${{outUrl("observer_bridge_camera_view")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge camera view"></a></figure>` : "",
       state.outputs.observer_bridge_map_exists ? `<figure class="diagnostic-plot-card"><figcaption>Candidate map</figcaption><a href="${{outUrl("observer_bridge_map")}}" target="_blank"><img src="${{outUrl("observer_bridge_map")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge map"></a></figure>` : "",
       state.outputs.observer_bridge_score_distribution_exists ? `<figure class="diagnostic-plot-card"><figcaption>Score distribution</figcaption><a href="${{outUrl("observer_bridge_score_distribution")}}" target="_blank"><img src="${{outUrl("observer_bridge_score_distribution")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge score distribution"></a></figure>` : "",
@@ -2082,7 +2082,7 @@ function renderContextPanel() {{
       state.outputs.observer_bridge_ranked_events_png_exists ? `<figure class="diagnostic-plot-card"><figcaption>Ranked events</figcaption><a href="${{outUrl("observer_bridge_ranked_events_png")}}" target="_blank"><img src="${{outUrl("observer_bridge_ranked_events_png")}}?v=${{observerBridgePreviewVersion}}" alt="Observer Bridge ranked events"></a></figure>` : "",
     ].filter(Boolean).join("");
     const diagnostics = diagnosticCards ? `<section><h2>Diagnostics</h2><div class="diagnostic-card-grid">${{diagnosticCards}}</div></section>` : "";
-    return `<aside class="panel"><h2>Observer Camera Overlay</h2><div class="context-figure">${{figure}}</div>${{diagnostics}}</aside>`;
+    return `<aside class="panel"><h2>Observer Bridge Kerr Interactive View</h2><div class="context-figure">${{figure}}</div>${{diagnostics}}</aside>`;
   }}
   if (activeTab === "POWHEG") {{
     const summary = state.powheg_summary || {{}};

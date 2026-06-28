@@ -205,6 +205,13 @@ def test_observer_bridge_scores_all_dis_interactions_without_modifying_dis(tmp_p
     html = (bridge_dir / "observer_bridge_kerr_interactive_view.html").read_text(encoding="utf-8")
     assert "Observer Bridge Kerr Interactive View" in html
     assert "kerr_geodesic_pixel_match" in html
+    assert "Drag: rotate | Scroll: zoom | Shift+drag: pan" in html
+    assert "mousedown" in html
+    assert "mousemove" in html
+    assert "mouseup" in html
+    assert "wheel" in html
+    assert "touchstart" in html
+    assert "touchmove" in html
 
     candidates = [json.loads(line) for line in (bridge_dir / "observer_bridge_candidates.jsonl").read_text(encoding="utf-8").splitlines()]
     assert len(candidates) == 3

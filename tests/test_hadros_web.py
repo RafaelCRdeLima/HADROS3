@@ -403,6 +403,8 @@ def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp
     assert "powheg_particle_content_report.json" in html
     assert "powheg_lhe_event_view.html" in html
     assert "Observer Camera Overlay" in html
+    assert "Diagnostic overlay. Candidate image branches may be multiple" in html
+    assert html.index("Observer Bridge Kerr Interactive View") < html.index("Diagnostic overlay. Candidate image branches may be multiple")
     assert "overlay resolution" in html
     assert "camera_preview_pixel_plane" in html
     assert "Observer Camera View" in html

@@ -1089,7 +1089,7 @@ def _write_kerr_interactive_view_html(
             }
         )
     rays = _interactive_rays(rows, values, max_rays, ray_stride)
-    observer, forward, _, _ = _camera_frame(values)
+    observer, forward, right, up = _camera_frame(values)
     data = {
         "metadata": {
             "title": "Observer Bridge Kerr Interactive View",
@@ -1116,6 +1116,8 @@ def _write_kerr_interactive_view_html(
         "camera": {
             "observer": observer,
             "forward": forward,
+            "right": right,
+            "up": up,
             "frustum": _camera_frustum_segments(values),
             "fov_deg": float(values.get("observer_camera", {}).get("field_of_view_deg", 25.0)),
         },
@@ -1139,9 +1141,10 @@ canvas{display:block;width:100vw;height:100vh;background:#0b0f17}
 <label><input id="showCandidates" type="checkbox" checked> show candidates</label>
 <label><input id="topOnly" type="checkbox"> top ranked only</label>
 <label><input id="showRays" type="checkbox" checked> show matched Kerr rays</label>
+<label><input id="physicalCameraView" type="checkbox" checked> start from physical observer camera view</label>
 <label>number of candidates displayed <input id="candidateLimit" type="range" min="1" max="1" value="1"></label>
 <label>color by <select id="colorMode"><option value="final_observation_score">final_observation_score</option><option value="closest_approach_rg">closest_approach_rg</option><option value="inside_outside_fov">inside/outside FOV</option></select></label>
-<div><span class="pill">drag rotate</span><span class="pill">wheel zoom</span><span class="pill">shift-drag pan</span></div>
+<div class="note">Drag: rotate | Scroll: zoom | Shift+drag: pan</div>
 <div class="stat" id="stats"></div>
 </div>
 <script>
@@ -1154,6 +1157,7 @@ const controls = {
   showCandidates: document.getElementById('showCandidates'),
   topOnly: document.getElementById('topOnly'),
   showRays: document.getElementById('showRays'),
+  physicalCameraView: document.getElementById('physicalCameraView'),
   candidateLimit: document.getElementById('candidateLimit'),
   colorMode: document.getElementById('colorMode'),
   stats: document.getElementById('stats')
@@ -1161,10 +1165,24 @@ const controls = {
 controls.candidateLimit.max = Math.max(1, scene.candidates.length);
 controls.candidateLimit.value = Math.max(1, scene.candidates.length);
 controls.colorMode.value = scene.metadata.interactive_candidate_color_mode || 'final_observation_score';
-let yaw = -0.65, pitch = 0.45, zoom = 7.5, panX = 0, panY = 0, dragging = false, lastX = 0, lastY = 0;
+let yaw = 0, pitch = 0, zoom = 7.5, panX = 0, panY = 0, dragging = false, lastX = 0, lastY = 0;
 function resize(){const dpr=window.devicePixelRatio||1;canvas.width=innerWidth*dpr;canvas.height=innerHeight*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);draw();}
+function dot(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];}
+function sub(a,b){return [a[0]-b[0],a[1]-b[1],a[2]-b[2]];}
 function rot(p){const x=p[0], y=p[1], z=p[2];const cy=Math.cos(yaw), sy=Math.sin(yaw), cp=Math.cos(pitch), sp=Math.sin(pitch);const x1=cy*x+sy*y;const y1=-sy*x+cy*y;const z1=z;return [x1, cp*y1-sp*z1, sp*y1+cp*z1];}
-function project(p){const r=rot(p);const depth=90+r[1];const scale=Math.min(innerWidth,innerHeight)*zoom/Math.max(15,depth);return [innerWidth/2+panX+r[0]*scale, innerHeight/2+panY-r[2]*scale, depth, scale];}
+function project(p){
+ if(controls.physicalCameraView.checked){
+   const q=sub(p,[0,0,0]);
+   const x=dot(q,scene.camera.right);
+   const y=dot(q,scene.camera.up);
+   const z=dot(q,scene.camera.forward);
+   const r=rot([x,z,y]);
+   const depth=90+r[1];
+   const scale=Math.min(innerWidth,innerHeight)*zoom/Math.max(15,depth);
+   return [innerWidth/2+panX+r[0]*scale, innerHeight/2+panY-r[2]*scale, depth, scale];
+ }
+ const r=rot(p);const depth=90+r[1];const scale=Math.min(innerWidth,innerHeight)*zoom/Math.max(15,depth);return [innerWidth/2+panX+r[0]*scale, innerHeight/2+panY-r[2]*scale, depth, scale];
+}
 function line(points,color,alpha,width){if(points.length<2)return;ctx.save();ctx.globalAlpha=alpha;ctx.strokeStyle=color;ctx.lineWidth=width;ctx.beginPath();for(let i=0;i<points.length;i++){const q=project(points[i]);if(i===0)ctx.moveTo(q[0],q[1]);else ctx.lineTo(q[0],q[1]);}ctx.stroke();ctx.restore();}
 function sphere(p,r,color,alpha,stroke){const q=project(p);ctx.save();ctx.globalAlpha=alpha;ctx.fillStyle=color;ctx.beginPath();ctx.arc(q[0],q[1],Math.max(1.5,r*q[3]/28),0,Math.PI*2);ctx.fill();if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.stroke();}ctx.restore();}
 function candidateColor(c){const mode=controls.colorMode.value;if(mode==='inside_outside_fov')return c.inside_fov?'#22c55e':'#f59e0b';if(mode==='closest_approach_rg'){if(!c.matched)return '#64748b';const t=Math.min(1,Math.max(0,(c.closest_approach_rg||0)/(scene.metadata.match_tolerance_rg||4)));return `rgb(${Math.round(80+180*t)},${Math.round(220-120*t)},${Math.round(120-80*t)})`;}const scores=scene.candidates.map(x=>x.score||0);const m=Math.max(1e-30,...scores);const t=Math.sqrt(Math.max(0,c.score||0)/m);return `rgb(${Math.round(80+180*t)},${Math.round(70+40*t)},${Math.round(180-120*t)})`;}
@@ -1182,6 +1200,9 @@ canvas.addEventListener('mousedown',e=>{dragging=true;lastX=e.clientX;lastY=e.cl
 addEventListener('mouseup',()=>dragging=false);
 addEventListener('mousemove',e=>{if(!dragging)return;const dx=e.clientX-lastX,dy=e.clientY-lastY;lastX=e.clientX;lastY=e.clientY;if(e.shiftKey){panX+=dx;panY+=dy;}else{yaw+=dx*0.006;pitch=Math.max(-1.45,Math.min(1.45,pitch+dy*0.006));}draw();});
 canvas.addEventListener('wheel',e=>{e.preventDefault();zoom*=Math.exp(-e.deltaY*0.001);zoom=Math.max(1.0,Math.min(40,zoom));draw();},{passive:false});
+canvas.addEventListener('touchstart',e=>{if(!e.touches.length)return;dragging=true;lastX=e.touches[0].clientX;lastY=e.touches[0].clientY;},{passive:true});
+canvas.addEventListener('touchmove',e=>{if(!dragging||!e.touches.length)return;e.preventDefault();const dx=e.touches[0].clientX-lastX,dy=e.touches[0].clientY-lastY;lastX=e.touches[0].clientX;lastY=e.touches[0].clientY;yaw+=dx*0.006;pitch=Math.max(-1.45,Math.min(1.45,pitch+dy*0.006));draw();},{passive:false});
+canvas.addEventListener('touchend',()=>dragging=false);
 addEventListener('resize',resize);resize();
 </script></body></html>"""
     payload = json.dumps(data)

@@ -32,10 +32,10 @@
 \newcommand{\SoftwareVersion}{0.9.0}
 \newcommand{\PhysicsVersion}{1.2}
 \newcommand{\TheoryVersion}{1.2}
-\newcommand{\TheoryCompatibleCommit}{f14befe}
-\newcommand{\TheoryGenerationDate}{2026-06-27}
+\newcommand{\TheoryCompatibleCommit}{924b632}
+\newcommand{\TheoryGenerationDate}{2026-06-28}
 \newcommand{\TheoryPipelineVersion}{H3-W9b}
-\newcommand{\TheoryImplementationStatus}{implemented through H3-W9b POWHEG real-smoke and real-free execution}
+\newcommand{\TheoryImplementationStatus}{implemented through H3-W8b Observer Image Branch Analysis and H3-W9b POWHEG real-smoke/free execution}
 
 \begin{document}
 
@@ -46,7 +46,7 @@
 \vspace{1.0cm}
 {\Large Rafael C. R. de Lima\par}
 \vfill
-{\large Implemented theory through H3-W9b POWHEG real-smoke and real-free execution\par}
+{\large Implemented theory through H3-W8b Observer Image Branch Analysis and H3-W9b POWHEG real-smoke/free execution\par}
 \vspace{0.5cm}
 {\large \TheoryGenerationDate\par}
 \vfill
@@ -127,6 +127,7 @@ H3-W5 UHE Source & implemented and documented \\
 H3-W6 Forward Geodesics & implemented and documented \\
 H3-W7 DIS Interaction Sampler & implemented and documented \\
 H3-W8 Observer Bridge & implemented/proxy and documented \\
+H3-W8b Observer Image Branch Analysis & implemented/proxy and documented \\
 H3-W9a POWHEG Dry Run & implemented/dry run and documented \\
 H3-W9b POWHEG Real Smoke/Free & implemented/smoke+free and documented \\
 H3-W10 PYTHIA & planned, not documented as implemented \\
@@ -176,6 +177,7 @@ H3-W5 UHE Source & implemented & yes \\
 H3-W6 Forward Geodesics & implemented & yes \\
 H3-W7 DIS Interaction Sampler & implemented & yes \\
 H3-W8 Observer Bridge & implemented/proxy & yes \\
+H3-W8b Observer Image Branch Analysis & implemented/proxy & yes \\
 H3-W9a POWHEG Dry Run & implemented/dry run & yes \\
 H3-W9b POWHEG Real Smoke/Free & implemented/smoke+free & yes \\
 H3-W10 PYTHIA & planned & no \\
@@ -216,6 +218,19 @@ $n_b$ & Baryon number density, $n_b=\rho/m_b$.\\
 $\sigmanun(E)$ & Tabulated charged-current neutrino-nucleon DIS cross section.\\
 $\tau$ & Integrated DIS optical depth along one forward path.\\
 $S_{\rm obs}$ & Observer Bridge final observation score.\\
+$x$ & Bjorken momentum fraction of the struck parton.\\
+$y$ & DIS inelasticity, $y=P\cdot q/(P\cdot k)$.\\
+$Q^2$ & Virtuality of the exchanged boson, $Q^2=-q^2>0$.\\
+$W$ & Invariant mass of the produced hadronic system.\\
+$\sqrt{s}$ & Center-of-mass energy of the neutrino--nucleon system.\\
+$G_F$ & Fermi constant.\\
+$m_W$ & $W$ boson mass.\\
+$V_{q_iq_j}$ & CKM matrix element for the quark flavor transition $q_i\to q_j$.\\
+$F_2,\,xF_3,\,F_L$ & CC neutrino DIS structure functions.\\
+$Y_\pm$ & DIS angular factors, $Y_\pm = 1\pm(1-y)^2$.\\
+$B(\Phi_n)$ & Born differential cross section on $n$-body phase space.\\
+$\bar{B}(\Phi_n)$ & NLO-corrected Born (virtual $+$ integrated real counterterms).\\
+$\Delta(\Phi_n,p_T)$ & POWHEG Sudakov form factor.\\
 \bottomrule
 \end{longtable}
 
@@ -827,13 +842,360 @@ proxies. No secondary-particle generation.\\
 \bottomrule
 \end{longtable}
 
+\chapter{Observer Image Branch Analysis}
+
+H3-W8b introduces an explicit observational image-branch analysis between the
+Observer Bridge and POWHEG. The Observer Bridge remains a non-destructive
+candidate scorer: it maps every accepted DIS interaction into an observational
+candidate and records a closest Kerr-ray diagnostic. H3-W8b asks a different
+question. Instead of assigning
+\begin{equation}
+\mathrm{candidate}\rightarrow\arg\min_{\rm ray} d_{\rm closest},
+\end{equation}
+it groups all compatible camera rays into observed image branches and selects a
+primary branch by an auditable proxy score.
+
+\section{Inputs}
+
+The implemented stage consumes official Observer Bridge products:
+\begin{align}
+&\code{ObserverBridge/observer_candidate_kerr_pixel_map.jsonl},\\
+&\code{ObserverBridge/observer_bridge_selected_candidates.jsonl},\\
+&\code{ObserverBridge/observer_bridge_ranked_events.jsonl}.
+\end{align}
+When available, it also consumes the Observer Bridge multi-image audit product
+\code{ObserverBridge/candidate_multi_image_audit.jsonl}, which records sampled
+camera rays passing within the configured matching radius of each candidate.
+No DIS interaction, forward geodesic, camera preview, or Kerr integrator result
+is modified by H3-W8b.
+
+\section{Image branch definition}
+
+For a candidate $c$, let $\mathcal{R}_c$ be the set of sampled camera rays whose
+minimum spatial separation from the candidate is below the matching tolerance.
+Rays are clustered in image-pixel space. Each connected cluster is an image
+branch $B_{c,j}$ and records:
+\begin{equation}
+B_{c,j} =
+\left\{
+N_{\rm rays},
+\bar{x}_{\rm pix},
+\bar{y}_{\rm pix},
+\mathrm{Cov}(x_{\rm pix},y_{\rm pix}),
+\bar{d}_{\rm closest},
+d_{\rm min},
+d_{\rm max},
+s_{\rm pix}
+\right\}.
+\end{equation}
+Here $N_{\rm rays}$ is the number of compatible rays, $(\bar{x}_{\rm pix},
+\bar{y}_{\rm pix})$ is the branch centroid on the camera preview pixel plane,
+and $s_{\rm pix}$ is the RMS pixel spread around the centroid.
+
+\section{Branch score proxy}
+
+The primary observed branch is not selected by the single closest ray. Instead,
+H3-W8b assigns each branch a proxy score
+\begin{equation}
+S_{\rm branch}
+=
+w_{\rm rays}\,w_{\rm closest}\,w_{\rm compactness},
+\end{equation}
+with the implemented proxy weights
+\begin{align}
+w_{\rm rays} &= N_{\rm rays},\\
+w_{\rm closest} &= \frac{1}{\max(\bar{d}_{\rm closest},\epsilon)},\\
+w_{\rm compactness} &= \frac{1}{\max(s_{\rm pix},1\,{\rm pixel})}.
+\end{align}
+This score favors image branches supported by many rays, small mean closest
+approach, and compact clusters on the image plane. It is a ranking proxy, not a
+full magnification, radiative transfer, or detector-response calculation.
+
+\section{Primary branch selection}
+
+For each candidate, H3-W8b selects
+\begin{equation}
+B_{c,\rm primary}
+=
+\arg\max_j S_{\rm branch}(B_{c,j}).
+\end{equation}
+The selected primary branches are written to
+\code{ObserverImageBranches/observer_image_primary_branches.jsonl}. Downstream
+POWHEG preparation consumes that file, so POWHEG receives one primary observed
+image branch per selected Observer Bridge candidate and does not perform its
+own image-branch selection.
+
+\section{Outputs and provenance}
+
+The stage writes exclusively under \code{ObserverImageBranches/}:
+\code{observer_image_branches.jsonl},
+\code{observer_image_primary_branches.jsonl},
+\code{observer_image_branch_summary.json},
+\code{observer_image_branch_report.json},
+\code{observer_image_statistics.json},
+diagnostic PNGs, a CSV table, and \code{observer_branch_view.html}. Provenance
+records \code{observer_image_branch_analysis_invoked=true},
+\code{branch_scoring_model=ray_count_closeness_compactness_proxy},
+\code{primary_branch_selection_model=argmax_branch_score},
+\code{mean_branches_per_candidate}, \code{fraction_multiple_images}, and
+\code{primary_branch_selection_proxy=true}.
+
+\section{Physical limitations}
+
+The current branch score is observationally motivated but approximate. It does
+not compute rigorous Kerr caustic magnification, phase-space beam Jacobians,
+secondary-particle emission, absorption, or detector response. It should be
+treated as a transparent primary-image proxy until a later stage implements a
+more complete lensing and transport model.
+
 \chapter{POWHEG Hard Process Preparation and Smoke Execution}
+
+\section{Hard subprocess: charged-current neutrino DIS}
+
+The implemented POWHEG process is \texttt{nudis} from POWHEG-BOX-RES, which
+simulates charged-current (CC) deep-inelastic scattering of a neutrino on a
+nucleon at next-to-leading order (NLO) in QCD. The Born-level hard subprocess
+is
+\begin{equation}
+\nu_\ell(k) + q_i(p) \;\longrightarrow\; \ell^-(k') + q_j(p'),
+\label{eq:dis_born}
+\end{equation}
+mediated by a virtual $W^+$ boson with four-momentum transfer
+$q^\mu = k^\mu - k'^\mu$. The incoming neutrino carries the full UHE energy
+$E_{\nu,\rm local}$ from the accepted DIS interaction point; the target is a
+parton $q_i$ drawn from the nucleon PDF with momentum fraction $x$. HADROS3
+specifies the two beam particles as
+\begin{align}
+\texttt{ih1} &= 12 \quad (\nu_e,\; \text{PDG electron neutrino}),\\
+\texttt{ih2} &= 1  \quad (\text{proton/nucleon, PDF target}).
+\end{align}
+The process is selected in the POWHEG input card by \texttt{channel\_type}$=3$
+(CC channel) and \texttt{vtype}$=2$ (specific CC flavor configuration in the
+\texttt{nudis} implementation).
+
+\section{DIS kinematic variables}
+
+The standard DIS kinematic invariants are built from the neutrino
+four-momentum $k^\mu$, the nucleon four-momentum $P^\mu$, and the
+momentum-transfer four-momentum $q^\mu = k^\mu - k'^\mu$:
+\begin{align}
+s &= (k+P)^2 \approx 2\,m_N\,E_{\nu,\rm local},\label{eq:dis_s}\\
+Q^2 &= -q^2 > 0,\label{eq:dis_Q2}\\
+x &= \frac{Q^2}{2\,P\cdot q},\label{eq:dis_x}\\
+y &= \frac{P\cdot q}{P\cdot k} = \frac{Q^2}{xs},\label{eq:dis_y}\\
+W^2 &= (P+q)^2 = m_N^2 + Q^2\frac{1-x}{x}.\label{eq:dis_W2}
+\end{align}
+The approximation for $s$ in equation~\eqref{eq:dis_s} holds at UHE energies
+where $E_{\nu,\rm local}\gg m_N$. The Bjorken variable $x\in(0,1]$ is the
+momentum fraction of the struck parton, $y\in(0,1]$ is the inelasticity
+(fractional energy transfer to the hadronic system in the nucleon rest frame),
+and $W$ is the invariant mass of the produced hadronic system.
+
+\section{CC neutrino--nucleon DIS cross section}
+
+The double-differential cross section for inclusive $\nu_\ell N$ CC DIS is
+expressed through three structure functions $F_2$, $F_L$, and $xF_3$:
+\begin{equation}
+\frac{\dd^2\sigma^{\rm CC}}{\dd x\,\dd y}
+=
+\frac{G_F^2\,s}{4\pi}
+\left(\frac{m_W^2}{m_W^2+Q^2}\right)^{\!2}
+\left[
+  Y_+\,F_2(x,Q^2)
+  -y^2 F_L(x,Q^2)
+  +Y_-\,xF_3(x,Q^2)
+\right],
+\label{eq:dis_xsec}
+\end{equation}
+where $G_F$ is the Fermi constant, $m_W\simeq 80.4\,\mathrm{GeV}$ is the $W$
+boson mass, and the inelasticity factors are
+\begin{equation}
+Y_\pm = 1 \pm (1-y)^2.
+\end{equation}
+The sign in front of $xF_3$ is $+Y_-$ for neutrinos (as written) and
+$-Y_-$ for antineutrinos. The propagator factor
+$(m_W^2/(m_W^2+Q^2))^2$ becomes significant when $Q^2 \gtrsim m_W^2$.
+
+At leading order in QCD the structure functions are expressed through the
+parton distributions weighted by CKM elements. For CC $\nu N$ DIS the struck
+parton must be a down-type quark $q_i\in\{d,s,b\}$ (or an up-type antiquark
+from the sea), and the relevant combinations are
+\begin{align}
+F_2^{\rm CC}(x,Q^2)
+&= 2x\sum_i \left|V_{q_iq_j}\right|^2 f_{q_i}(x,Q^2),
+\label{eq:F2}\\
+xF_3^{\rm CC}(x,Q^2)
+&= 2x\sum_i \left|V_{q_iq_j}\right|^2
+   \operatorname{sign}(q_i)\,f_{q_i}(x,Q^2),
+\label{eq:xF3}
+\end{align}
+where $V_{q_iq_j}$ is the CKM element for the transition $q_i\to q_j$ and
+$\operatorname{sign}(q_i)=+1$ ($-1$) for quarks (antiquarks).
+The longitudinal structure function $F_L = F_2 - 2xF_1$ vanishes at LO
+(Callan--Gross relation) but receives $\mathcal{O}(\alpha_s)$ NLO corrections.
+
+\section{The POWHEG method}
+
+POWHEG generates the first (hardest) QCD emission with NLO accuracy and
+provides it as input to a subsequent parton shower. The starting point is the
+NLO-corrected Born weight
+\begin{equation}
+\bar{B}(\Phi_n) = B(\Phi_n) + V(\Phi_n)
++ \int\!\dd\Phi_{\rm rad}\,C(\Phi_{n+1}),
+\label{eq:powheg_bbar}
+\end{equation}
+where $\Phi_n$ is the $n$-body Born phase space, $B(\Phi_n)$ is the Born
+squared amplitude, $V(\Phi_n)$ is the renormalized one-loop virtual
+correction, and $C(\Phi_{n+1})$ is the integrated infrared counterterm
+that removes double-counting with the real emission. The POWHEG master formula
+for the fully-differential cross section is
+\begin{equation}
+\dd\sigma_{\rm POWHEG}
+=
+\bar{B}(\Phi_n)\,\dd\Phi_n
+\Biggl[
+\Delta(\Phi_n,\,p_{T,\min})
++\sum_\alpha
+\frac{R_\alpha(\Phi_{n+1})}{B(\Phi_n)}\,
+\Delta(\Phi_n,\,k_{T,\alpha})\,
+\dd\Phi_{\rm rad,\alpha}
+\Biggr],
+\label{eq:powheg_master}
+\end{equation}
+where the sum is over all QCD singular regions $\alpha$, $R_\alpha$ is the
+real squared amplitude in region $\alpha$, and $k_{T,\alpha}$ is the emission
+transverse momentum in that region. The POWHEG Sudakov form factor is
+\begin{equation}
+\Delta(\Phi_n,\,p_T)
+=
+\exp\!\left[
+-\sum_\alpha
+\int_{p_T}^{\infty}
+\frac{R_\alpha(\Phi_{n+1})}{B(\Phi_n)}
+\,\dd\Phi_{\rm rad,\alpha}
+\right].
+\label{eq:powheg_sudakov}
+\end{equation}
+The Sudakov factor ensures that the hardest emission is generated with the
+correct NLO-improved distribution. Events generated by
+equation~\eqref{eq:powheg_master} carry predominantly positive weights---the
+property that gives POWHEG its name---and reproduce the NLO-accurate inclusive
+rate after integration.
+
+For the \texttt{nudis} process the Born phase space $\Phi_n$ covers the
+two-body $\nu_\ell q_i \to \ell^- q_j$ kinematics parameterized by
+$(x,y,Q^2)$. The NLO real corrections include quark-gluon emission
+\begin{equation}
+\nu_\ell + q_i \;\longrightarrow\; \ell^- + q_j + g
+\end{equation}
+and the gluon-splitting channel
+\begin{equation}
+\nu_\ell + g \;\longrightarrow\; \ell^- + q_j + \bar{q}_i,
+\end{equation}
+both of which can produce a gluon or an extra $q\bar{q}$ pair among the
+outgoing hard-process particles in the LHE record.
+
+After the hardest emission is fixed by the POWHEG Sudakov, the parton shower
+(Pythia~8, not yet invoked in the current HADROS3 pipeline) adds further
+softer radiation using the POWHEG emission scale as its starting scale.
+
+\section{Center-of-mass energy and scale}
+
+Each accepted DIS interaction vertex in HADROS3 provides the local-frame
+neutrino energy $E_{\nu,\rm local}$ to POWHEG as \texttt{ebeam1}. The
+invariant mass of the neutrino--nucleon hard system is
+\begin{equation}
+\sqrt{s} = \sqrt{2\,m_N\,E_{\nu,\rm local}}.
+\end{equation}
+For the UHE range $E_{\nu,\rm local}\sim 10^9$--$10^{12}\,\mathrm{GeV}$,
+this gives $\sqrt{s}\sim 43$--$1400\,\mathrm{TeV}$. The upper kinematic
+bound on the virtuality integration is
+\begin{equation}
+Q_{\max}
+=
+\min\!\left(2\sqrt{m_N\,E_{\nu,\rm local}},\;10^5\,\mathrm{GeV}\right),
+\end{equation}
+and the lower bound is fixed at $Q_{\min}=10\,\mathrm{GeV}$. The cap at
+$10^5\,\mathrm{GeV}$ prevents integration beyond kinematic regions where the
+fixed-order NLO approximation is reliable. Renormalization and factorization
+scales are set equal to the virtuality $Q$ at each phase-space point
+(\texttt{runningscales}$=1$):
+\begin{equation}
+\mu_R = \mu_F = Q.
+\end{equation}
+
+\section{Parton distributions and CKM flavor structure}
+
+HADROS3 uses NNPDF31\_nlo\_as\_0118 (LHAPDF set 303400) for both incoming
+beams. This is an NLO PDF set consistent with the perturbative order of the
+POWHEG hard process. The strong coupling $\alpha_s$ is taken from the same
+PDF set at each renormalization scale (\texttt{alphas\_from\_pdf}$=1$).
+
+For CC $\nu_\ell N$ DIS the incoming parton must be a down-type quark. The
+weak transition to an up-type quark is weighted by the squared CKM elements.
+The dominant channels and their approximate weights are
+\begin{align}
+d &\to u: \quad |V_{ud}|^2 \approx 0.947,\\
+s &\to c: \quad |V_{cs}|^2 \approx 0.947,\\
+b &\to t: \quad |V_{tb}|^2 \approx 1.0
+            \quad (\text{kinematically suppressed by }m_t \approx 173\,\mathrm{GeV}).
+\end{align}
+Off-diagonal CKM contributions ($d\to c$, $s\to u$, etc.) are suppressed by
+the Cabibbo angle and are included by POWHEG but are numerically subdominant.
+Antiquark sea contributions, including $\bar{u}\to \bar{d}$ and
+$\bar{c}\to \bar{s}$ transitions, also enter through the PDF at small $x$.
+At NLO, the gluon PDF contributes through the splitting subprocess
+$\nu_\ell + g\to \ell^- + q_j + \bar{q}_i$. The resulting outgoing
+parton flavors that can appear in the LHE hard-process record are
+$u$, $c$, $d$, $s$, and $g$, with the exact flavor mix determined by
+PDF support and POWHEG matrix-element channel selection at the given $(x,Q^2)$.
+
+\section{LHE hard-process event structure}
+
+The Les Houches Event (LHE) file written by \texttt{pwhg\_main} contains one
+\texttt{<event>} block per generated hard-process realization. Each block
+records the incoming and outgoing particles with their PDG identifiers,
+four-momenta $(p_x,p_y,p_z,E,m)$ in GeV, and a status code: $-1$ for
+incoming, $+1$ for outgoing. The event header also carries the POWHEG event
+weight and the hardest-emission scale $\mu_{\rm POWHEG}$ that will serve as
+the starting scale for the subsequent parton shower.
+
+At Born level the event topology is
+\begin{equation}
+\begin{array}{ll}
+\text{status}=-1: & \nu_\ell + q_i,\\
+\text{status}=+1: & \ell^- + q_j.
+\end{array}
+\end{equation}
+With the NLO real emission included, the topologies are
+\begin{equation}
+\begin{array}{ll}
+\text{status}=-1: & \nu_\ell + q_i,\\
+\text{status}=+1: & \ell^- + q_j + g
+\end{array}
+\qquad\text{or}\qquad
+\begin{array}{ll}
+\text{status}=-1: & \nu_\ell + g,\\
+\text{status}=+1: & \ell^- + q_j + \bar{q}_i.
+\end{array}
+\end{equation}
+The event weight in the LHE header is the POWHEG weight from
+equation~\eqref{eq:powheg_master} in units of pb. The total event rate is
+recovered by summing weights over all events. Because POWHEG weights are
+predominantly positive, unweighted event generation is possible with
+statistical efficiency close to unity.
+
+The LHE particles are parton-level hard-process records. PYTHIA~8
+hadronization and GEANT4 detector transport are not invoked in the current
+HADROS3 pipeline (H3-W9b). These records represent the input to future
+shower and detector stages, not observable hadronic final states.
 
 \section{Dry-run role}
 
 H3-W9a prepares local POWHEG DIS jobs but deliberately does not execute
-\code{pwhg_main}. It consumes ranked Observer Bridge events and writes its own
+\code{pwhg_main}. It consumes primary Observer Image Branch records and writes its own
 products under \code{POWHEG/}. It does not modify \code{ObserverBridge/},
+\code{ObserverImageBranches/},
 \code{DIS/}, \code{ForwardGeodesics/}, or \code{UHEsource/}.
 
 The H3-W9a run mode is
@@ -851,24 +1213,22 @@ H3-W9b adds a controlled real-smoke mode:
 \begin{equation}
 \code{powheg_run_mode}=\code{real_smoke}.
 \end{equation}
-This mode selects only the top-ranked candidate, writes one input card, executes
+This mode executes only the first primary branch record, writes one input card, executes
 the self-contained local executable
 \code{external/powheg/build/DIS/pwhg_main}, and validates a minimal LHE file.
 It is a pipeline smoke execution, not the full production event-generation
 stage. PYTHIA, GEANT4, photon transport, and spectra remain disabled.
 
-\section{Candidate selection}
+\section{POWHEG input branch contract}
 
-The driver reads \code{ObserverBridge/observer_bridge_ranked_events.jsonl},
-sorts candidates by decreasing final observation score, and uses the original
-input order as a tie-breaker. The implemented selection policies are:
-\begin{itemize}
-\item \code{top_score}: take highest-score candidates up to
-\code{max_powheg_events}.
-\item \code{score_threshold}: discard candidates below
-\code{min_final_observation_score}, then cap at \code{max_powheg_events}.
-\item \code{all_candidates}: represented by the same sorted traversal and cap.
-\end{itemize}
+The driver reads
+\code{ObserverImageBranches/observer_image_primary_branches.jsonl}. The
+selection of downstream candidates is performed by the Observer Bridge and the
+selection of the primary observed image is performed by H3-W8b. POWHEG does not
+rank candidates and does not choose among multiple image branches. It prepares
+one POWHEG request for each primary branch record, except in real-smoke mode
+where the Python wrapper intentionally executes only the first prepared request
+as a safety smoke test.
 
 \section{Input-card mapping}
 
@@ -913,14 +1273,15 @@ The validated LHE and run log are copied to
 The validation report records \code{powheg_invoked=true},
 \code{pwhg_main_executed=true}, \code{powheg_lhe_generated=true}, and
 \code{n_lhe_events}. This smoke mode does not modify
-\code{ObserverBridge/}, \code{DIS/}, \code{ForwardGeodesics/}, or
+\code{ObserverImageBranches/}, \code{ObserverBridge/}, \code{DIS/}, \code{ForwardGeodesics/}, or
 \code{UHEsource/}.
 
 H3-W9b real-free mode uses the same local POWHEG execution and LHE validation
 rules, but it removes the real-smoke safety clamp. The number of interaction
-candidates is set by \code{max_powheg_events}, and the number of independent
-POWHEG hard-scattering realizations per selected interaction is set by
-\code{events_per_candidate}. Each selected candidate is executed in its own
+candidates is set by the number of records in
+\code{ObserverImageBranches/observer_image_primary_branches.jsonl}, and the
+number of independent POWHEG hard-scattering realizations per selected
+interaction is set by \code{events_per_candidate}. Each primary branch record is executed in its own
 isolated POWHEG work directory. The produced LHE files are copied under
 \code{POWHEG/powheg_lhe/<powheg_request_id>/pwgevents.lhe}, and the parser
 aggregates all produced LHE files into the POWHEG particle and event summaries.
@@ -964,7 +1325,7 @@ LHE products may be recorded in a single POWHEG run.
 \toprule
 Role & Implemented item \\
 \midrule
-Inputs & \code{ObserverBridge/observer_bridge_ranked_events.jsonl} and POWHEG
+Inputs & \code{ObserverImageBranches/observer_image_primary_branches.jsonl} and POWHEG
 configuration values.\\
 Outputs & \code{POWHEG/powheg_event_requests.jsonl}, input cards, summary
 JSON/CSV, report JSON, validation report, diagnostic plots, and in real-smoke
@@ -1084,7 +1445,10 @@ optical-depth and accepted interactions & Optical-depth DIS sampler.\\
 Observer Bridge & \code{DIS/dis_accepted_interactions.jsonl} &
 \code{ObserverBridge/} candidates and ranked events & Non-destructive
 geometric scoring proxy.\\
-POWHEG Real Smoke & \code{ObserverBridge/observer_bridge_ranked_events.jsonl} &
+Observer Image Branches & \code{ObserverBridge/} selected candidates and Kerr
+pixel-map products & \code{ObserverImageBranches/} branches and primary
+branches & Observed image branch proxy selection.\\
+POWHEG Real Smoke & \code{ObserverImageBranches/observer_image_primary_branches.jsonl} &
 \code{POWHEG/} requests, input cards, validation report, and one smoke LHE &
 H3-W9a dry run plus H3-W9b local one-job LHE smoke.\\
 \bottomrule
@@ -1129,6 +1493,8 @@ density-checked interaction points.\\
 as observation candidates.\\
 \code{observer_bridge_ranked_events.jsonl} & Same candidate family ranked by
 final observation score.\\
+\code{observer_image_primary_branches.jsonl} & Primary observed image branch
+per selected Observer Bridge candidate.\\
 \code{powheg_event_requests.jsonl} & Dry-run POWHEG event requests and card
 paths.\\
 \code{final_pre_event_weight} & Physics weight consumed by Observer Bridge as

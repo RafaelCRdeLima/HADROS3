@@ -4,7 +4,7 @@
   "pipeline_version": "H3-W9b",
   "theory_version": "1.2",
   "theory_document": "docs/Theory/HADROS3_Physics_Theory.pdf",
-  "last_release_date": "2026-06-27",
-  "git_commit": "f14befe",
+  "last_release_date": "2026-06-28",
+  "git_commit": "924b632",
   "current_stage": "H3-W9b"
 }

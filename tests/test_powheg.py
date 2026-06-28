@@ -33,9 +33,9 @@ def test_powheg_particle_plot_labels_use_latex_names() -> None:
 
 
 def _write_selected_candidates(run_dir: Path, rows: list[dict[str, object]] | None = None) -> Path:
-    bridge_dir = run_dir / "ObserverBridge"
-    bridge_dir.mkdir(parents=True, exist_ok=True)
-    selected_path = bridge_dir / "observer_bridge_selected_candidates.jsonl"
+    branch_dir = run_dir / "ObserverImageBranches"
+    branch_dir.mkdir(parents=True, exist_ok=True)
+    selected_path = branch_dir / "observer_image_primary_branches.jsonl"
     if rows is None:
         rows = [
             {
@@ -51,6 +51,8 @@ def _write_selected_candidates(run_dir: Path, rows: list[dict[str, object]] | No
                 "downstream_stage_target": "powheg",
                 "selection_rank": 1,
                 "selection_reason": "rank<=2",
+                "primary_branch_id": "int-high:branch-01",
+                "primary_branch_score": 1.0,
             },
             {
                 "interaction_id": "int-mid",
@@ -65,6 +67,8 @@ def _write_selected_candidates(run_dir: Path, rows: list[dict[str, object]] | No
                 "downstream_stage_target": "powheg",
                 "selection_rank": 2,
                 "selection_reason": "rank<=2",
+                "primary_branch_id": "int-mid:branch-01",
+                "primary_branch_score": 0.5,
             },
         ]
     selected_path.write_text("\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n", encoding="utf-8")
@@ -106,9 +110,9 @@ def test_powheg_dry_run_generates_ranked_cards_without_lhe_or_observer_modificat
     assert summary["powheg_lhe_message"] == "No LHE available: POWHEG dry run only."
     assert summary["powheg_jobs_prepared"] == 2
     assert summary["powheg_cards_generated"] == 2
-    assert summary["powheg_candidate_source"] == "ObserverBridge/observer_bridge_selected_candidates.jsonl"
+    assert summary["powheg_candidate_source"] == "ObserverImageBranches/observer_image_primary_branches.jsonl"
     assert summary["powheg_n_selected_candidates_input"] == 2
-    assert summary["powheg_selection_performed_by"] == "ObserverBridge"
+    assert summary["powheg_selection_performed_by"] == "ObserverImageBranches"
     assert summary["powheg_selection_policy"] == "top_n"
     assert summary["backend_language"] == "C++17"
     assert requests[0]["interaction_id"] == "int-high"
@@ -119,7 +123,7 @@ def test_powheg_dry_run_generates_ranked_cards_without_lhe_or_observer_modificat
     assert requests[1]["powheg_seed"] == 1002
     assert all(row["powheg_status"] == "dry_run_ready" for row in requests)
     assert all(row["powheg_invoked"] is False for row in requests)
-    assert all(row["powheg_selection_performed_by"] == "ObserverBridge" for row in requests)
+    assert all(row["powheg_selection_performed_by"] == "ObserverImageBranches" for row in requests)
 
     first_card = tmp_path / requests[0]["powheg_input_path"]
     card = first_card.read_text(encoding="utf-8")
@@ -197,7 +201,7 @@ def test_powheg_uses_selected_candidates_without_applying_own_ranking(tmp_path: 
     assert summary["powheg_jobs_prepared"] == 2
     assert summary["n_powheg_jobs_requested"] == 2
     assert summary["events_per_candidate_requested"] == 4
-    assert summary["powheg_selection_performed_by"] == "ObserverBridge"
+    assert summary["powheg_selection_performed_by"] == "ObserverImageBranches"
 
     generate_powheg_products(values, run_output_dir=tmp_path)
     repeated = _requests(tmp_path)
@@ -205,7 +209,7 @@ def test_powheg_uses_selected_candidates_without_applying_own_ranking(tmp_path: 
 
 def test_powheg_fails_without_selected_candidates(tmp_path: Path) -> None:
     values = defaults()
-    with pytest.raises(FileNotFoundError, match="ObserverBridge selected candidates not found"):
+    with pytest.raises(FileNotFoundError, match="Observer Image Branch primary branches not found"):
         generate_powheg_products(values, run_output_dir=tmp_path)
 
 

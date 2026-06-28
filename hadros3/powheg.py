@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 
 from .config import validate_values
-from .paths import clear_powheg_outputs, observer_bridge_dir, powheg_dir, run_metadata_dir
+from .paths import clear_powheg_outputs, observer_image_branches_dir, powheg_dir, run_metadata_dir
 from .provenance import write_json
 
 
@@ -1249,7 +1249,7 @@ def _augment_summary(summary: dict[str, Any], output_dir: Path, requests: list[d
             "powheg_dry_run_invoked": run_mode == "dry_run",
             "powheg_real_smoke_invoked": is_real_smoke,
             "powheg_real_free_invoked": is_real_free,
-            "powheg_invoked": False,
+            "powheg_invoked": is_real_smoke or is_real_free,
             "pwhg_main_executed": False,
             "powheg_lhe_generated": False,
             "lhe_found": False,
@@ -1274,9 +1274,9 @@ def _augment_summary(summary: dict[str, Any], output_dir: Path, requests: list[d
             "n_powheg_jobs_requested": int(summary.get("powheg_n_selected_candidates_input", len(requests))),
             "n_powheg_jobs_run": 0,
             "events_per_candidate_requested": int(summary.get("events_per_candidate", 0)),
-            "powheg_candidate_source": summary.get("powheg_candidate_source", "ObserverBridge/observer_bridge_selected_candidates.jsonl"),
+            "powheg_candidate_source": summary.get("powheg_candidate_source", "ObserverImageBranches/observer_image_primary_branches.jsonl"),
             "powheg_n_selected_candidates_input": int(summary.get("powheg_n_selected_candidates_input", len(requests))),
-            "powheg_selection_performed_by": summary.get("powheg_selection_performed_by", "ObserverBridge"),
+            "powheg_selection_performed_by": summary.get("powheg_selection_performed_by", "ObserverImageBranches"),
             "powheg_selection_policy": summary.get("powheg_selection_policy"),
             "n_lhe_events_total": 0,
             "real_free_mode": is_real_free,
@@ -1298,10 +1298,10 @@ def generate_powheg_products(values: dict[str, dict[str, Any]], *, run_output_di
     if not POWHEG_CPP_EXECUTABLE.exists():
         raise FileNotFoundError(f"POWHEG dry-run C++ backend not found: {POWHEG_CPP_EXECUTABLE}")
 
-    selected_path = observer_bridge_dir(run_output_dir) / "observer_bridge_selected_candidates.jsonl"
+    selected_path = observer_image_branches_dir(run_output_dir) / "observer_image_primary_branches.jsonl"
     if not selected_path.exists():
         raise FileNotFoundError(
-            "ObserverBridge selected candidates not found. Run Observer Bridge with downstream selection first: "
+            "Observer Image Branch primary branches not found. Run observer-image-branches first: "
             f"{selected_path}"
         )
 
@@ -1331,7 +1331,7 @@ def generate_powheg_products(values: dict[str, dict[str, Any]], *, run_output_di
         "powheg_validation_status": "not_run",
         "run_mode": run_mode,
         "powheg_run_mode": run_mode,
-        "powheg_invoked": False,
+        "powheg_invoked": run_mode in {"real_smoke", "real_free"},
         "pwhg_main_executed": False,
         "powheg_lhe_generated": False,
         "lhe_found": False,
@@ -1367,9 +1367,9 @@ def generate_powheg_products(values: dict[str, dict[str, Any]], *, run_output_di
                 "n_powheg_jobs_requested": int(summary.get("powheg_n_selected_candidates_input", len(requests))),
                 "n_powheg_jobs_run": int(validation_report["n_powheg_jobs_run"]),
                 "events_per_candidate_requested": int(summary.get("events_per_candidate", 0)),
-                "powheg_candidate_source": summary.get("powheg_candidate_source", "ObserverBridge/observer_bridge_selected_candidates.jsonl"),
+                "powheg_candidate_source": summary.get("powheg_candidate_source", "ObserverImageBranches/observer_image_primary_branches.jsonl"),
                 "powheg_n_selected_candidates_input": int(summary.get("powheg_n_selected_candidates_input", len(requests))),
-                "powheg_selection_performed_by": summary.get("powheg_selection_performed_by", "ObserverBridge"),
+                "powheg_selection_performed_by": summary.get("powheg_selection_performed_by", "ObserverImageBranches"),
                 "powheg_selection_policy": summary.get("powheg_selection_policy"),
                 "powheg_jobs_prepared": len(requests),
                 "powheg_cards_generated": len(requests),

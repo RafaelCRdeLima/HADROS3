@@ -177,7 +177,7 @@ static Candidate candidate_from_line(const std::string& line, std::size_t index)
 
 static std::vector<Candidate> read_candidates(const fs::path& path) {
   std::ifstream in(path);
-  if (!in) throw std::runtime_error("ObserverBridge selected candidates not found. Run Observer Bridge with downstream selection first: " + path.string());
+  if (!in) throw std::runtime_error("ObserverImageBranches primary branches not found. Run observer-image-branches first: " + path.string());
   std::vector<Candidate> rows;
   std::string line;
   while (std::getline(in, line)) {
@@ -277,8 +277,8 @@ static void write_requests(const fs::path& path, const std::vector<Request>& req
         << "\"physics_weight\":" << r.candidate.physics_weight << ","
         << "\"observer_weight\":" << r.candidate.observer_weight << ","
         << "\"final_observation_score\":" << r.candidate.final_score << ","
-        << "\"powheg_candidate_source\":\"ObserverBridge/observer_bridge_selected_candidates.jsonl\","
-        << "\"powheg_selection_performed_by\":\"ObserverBridge\","
+        << "\"powheg_candidate_source\":\"ObserverImageBranches/observer_image_primary_branches.jsonl\","
+        << "\"powheg_selection_performed_by\":\"ObserverImageBranches\","
         << "\"powheg_selection_policy\":" << quote(r.candidate.selection_policy) << ","
         << "\"selection_reason\":" << quote(r.candidate.selection_reason) << ","
         << "\"powheg_input_path\":" << quote(rel_to(r.card_path, run_output)) << ","
@@ -335,9 +335,9 @@ static void write_summary_json(const fs::path& path, const Config& cfg, int inpu
       << "  \"powheg_runtime_self_contained\": true,\n"
       << "  \"backend_language\": \"C++17\",\n"
       << "  \"backend_executable\": \"bin/hadros3_powheg_driver\",\n"
-      << "  \"powheg_candidate_source\": \"ObserverBridge/observer_bridge_selected_candidates.jsonl\",\n"
+      << "  \"powheg_candidate_source\": \"ObserverImageBranches/observer_image_primary_branches.jsonl\",\n"
       << "  \"powheg_n_selected_candidates_input\": " << input_count << ",\n"
-      << "  \"powheg_selection_performed_by\": \"ObserverBridge\",\n"
+      << "  \"powheg_selection_performed_by\": \"ObserverImageBranches\",\n"
       << "  \"powheg_selection_policy\": " << quote(selection_policy) << ",\n"
       << "  \"powheg_jobs_prepared\": " << requests.size() << ",\n"
       << "  \"n_candidates_input\": " << input_count << ",\n"
@@ -385,7 +385,7 @@ int main(int argc, char** argv) {
     }
     if (run_output.empty()) throw std::runtime_error("--run-output is required");
     const fs::path config_path = run_output / "RunMetadata" / "hadros3_config.json";
-    const fs::path input_path = run_output / "ObserverBridge" / "observer_bridge_selected_candidates.jsonl";
+    const fs::path input_path = run_output / "ObserverImageBranches" / "observer_image_primary_branches.jsonl";
     const fs::path output_dir = run_output / "POWHEG";
     fs::create_directories(output_dir);
     fs::create_directories(output_dir / "powheg_input_cards");

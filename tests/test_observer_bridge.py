@@ -13,6 +13,7 @@ from hadros3.observer_bridge import (
     _camera_basis_diagnostic,
     _camera_plane_to_overlay_image_pixel,
     _camera_preview_local_direction_for_pixel,
+    _interactive_rays,
     _kerr_pixel_match_candidates,
     _map_kerr_match_to_overlay_pixel,
     _observer_position,
@@ -118,6 +119,71 @@ def test_map_kerr_match_to_overlay_pixel_conventions() -> None:
     assert _map_kerr_match_to_overlay_pixel(x, y, width, height, "flip_y") == (x, height - 1.0 - y)
     assert _map_kerr_match_to_overlay_pixel(x, y, width, height, "flip_x") == (width - 1.0 - x, y)
     assert _map_kerr_match_to_overlay_pixel(x, y, width, height, "flip_x_y") == (width - 1.0 - x, height - 1.0 - y)
+
+
+def test_interactive_rays_use_pixel_map_resolution(monkeypatch) -> None:
+    calls: list[tuple[float, float, int, int]] = []
+
+    def fake_integrate(pixel_x, pixel_y, width, height, values, *, max_target_radius):
+        calls.append((pixel_x, pixel_y, width, height))
+        return [(1.0, 0.0, 0.0), (2.0, 0.0, 0.0)], "integrated"
+
+    monkeypatch.setattr("hadros3.observer_bridge._integrate_kerr_ray_cartesian", fake_integrate)
+    rows = [
+        {
+            "interaction_id": "H3DIS-test",
+            "candidate_rank": 1,
+            "interaction_r_rg": 12.0,
+            "matched_pixel_found": True,
+            "matched_pixel_x": 295.5,
+            "matched_pixel_y": 189.1,
+            "pixel_map_width": 512,
+            "pixel_map_height": 288,
+            "pixel_coordinate_convention": "camera_preview_pixel_grid",
+            "closest_approach_rg": 0.0477,
+        }
+    ]
+
+    rays, metadata = _interactive_rays(rows, defaults(), max_rays=1, stride=1)
+
+    assert calls == [(295.5, 189.1, 512, 288)]
+    assert rays[0]["pixel_map_width"] == 512
+    assert rays[0]["pixel_map_height"] == 288
+    assert metadata["interactive_rays_resolution_source"] == "observer_candidate_kerr_pixel_map"
+    assert metadata["interactive_rays_pixel_map_width"] == 512
+    assert metadata["interactive_rays_pixel_map_height"] == 288
+    assert metadata["interactive_rays_global_overlay_width"] == 1024
+    assert metadata["interactive_rays_global_overlay_height"] == 576
+    assert metadata["interactive_rays_resolution_warning"] is False
+    assert metadata["interactive_rays_resolution_matches_pixel_map"] is True
+
+
+def test_interactive_rays_mark_fallback_for_legacy_pixel_maps(monkeypatch) -> None:
+    calls: list[tuple[float, float, int, int]] = []
+
+    def fake_integrate(pixel_x, pixel_y, width, height, values, *, max_target_radius):
+        calls.append((pixel_x, pixel_y, width, height))
+        return [(1.0, 0.0, 0.0)], "integrated"
+
+    monkeypatch.setattr("hadros3.observer_bridge._integrate_kerr_ray_cartesian", fake_integrate)
+    rows = [
+        {
+            "interaction_id": "H3DIS-legacy",
+            "candidate_rank": 1,
+            "interaction_r_rg": 12.0,
+            "matched_pixel_found": True,
+            "matched_pixel_x": 295.5,
+            "matched_pixel_y": 189.1,
+            "closest_approach_rg": 0.0477,
+        }
+    ]
+
+    _rays, metadata = _interactive_rays(rows, defaults(), max_rays=1, stride=1)
+
+    assert calls == [(295.5, 189.1, 1024, 576)]
+    assert metadata["interactive_rays_resolution_source"] == "fallback_global_constants"
+    assert metadata["interactive_rays_resolution_warning"] is True
+    assert metadata["interactive_rays_resolution_matches_pixel_map"] is False
 
 
 def test_kerr_pixel_match_uses_cuda_preview_local_tetrad_basis() -> None:
@@ -348,6 +414,13 @@ def test_observer_bridge_scores_all_dis_interactions_without_modifying_dis(tmp_p
     assert summary["interactive_max_rays"] == 2
     assert summary["interactive_ray_source"].startswith("observer_candidate_kerr_pixel_map.jsonl")
     assert summary["interactive_rays_displayed"] <= 2
+    assert summary["interactive_rays_resolution_source"] == "observer_candidate_kerr_pixel_map"
+    assert summary["interactive_rays_pixel_map_width"] == 1024
+    assert summary["interactive_rays_pixel_map_height"] == 576
+    assert summary["interactive_rays_global_overlay_width"] == 1024
+    assert summary["interactive_rays_global_overlay_height"] == 576
+    assert summary["interactive_rays_resolution_warning"] is False
+    assert summary["interactive_rays_resolution_matches_pixel_map"] is True
 
     report = json.loads((bridge_dir / "observer_bridge_report.json").read_text(encoding="utf-8"))
     assert report["observer_bridge_camera_view_generated"] is True
@@ -395,6 +468,9 @@ def test_observer_bridge_scores_all_dis_interactions_without_modifying_dis(tmp_p
     assert all(row["candidate_overlay_projection_model"] == "kerr_geodesic_pixel_match" for row in pixel_map)
     assert all(row["candidate_overlay_kerr_lensed"] is True for row in pixel_map)
     assert all(row["candidate_overlay_not_ray_traced"] is False for row in pixel_map)
+    assert all(row["pixel_map_width"] == 1024 for row in pixel_map)
+    assert all(row["pixel_map_height"] == 576 for row in pixel_map)
+    assert all(row["pixel_coordinate_convention"] == "camera_preview_pixel_grid" for row in pixel_map)
     assert any(row["matched_pixel_found"] is True for row in pixel_map)
     html = (bridge_dir / "observer_bridge_kerr_interactive_view.html").read_text(encoding="utf-8")
     assert "Observer Bridge Kerr Interactive View" in html
@@ -613,6 +689,13 @@ def test_observer_bridge_provenance_is_scoring_only(tmp_path: Path) -> None:
     assert provenance["observer_bridge"]["interactive_view_not_final_observed_image"] is True
     assert provenance["observer_bridge"]["interactive_view_diagnostic_only"] is True
     assert provenance["observer_bridge"]["interactive_rays_displayed"] <= 2
+    assert provenance["observer_bridge"]["interactive_rays_resolution_source"] == "observer_candidate_kerr_pixel_map"
+    assert provenance["observer_bridge"]["interactive_rays_pixel_map_width"] == 1024
+    assert provenance["observer_bridge"]["interactive_rays_pixel_map_height"] == 576
+    assert provenance["observer_bridge"]["interactive_rays_global_overlay_width"] == 1024
+    assert provenance["observer_bridge"]["interactive_rays_global_overlay_height"] == 576
+    assert provenance["observer_bridge"]["interactive_rays_resolution_warning"] is False
+    assert provenance["observer_bridge"]["interactive_rays_resolution_matches_pixel_map"] is True
     assert provenance["disabled_expensive_or_future_stages"]["observer_bridge_active_filter"] == "active_H3_W8_scoring_only"
 
 

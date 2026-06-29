@@ -779,6 +779,9 @@ def _kerr_pixel_match_candidates(
                 "matched_pixel_x": float(pixel[0]) if found and pixel is not None else None,
                 "matched_pixel_y": float(pixel[1]) if found and pixel is not None else None,
                 "matched_pixel_found": bool(found),
+                "pixel_map_width": overlay_width,
+                "pixel_map_height": overlay_height,
+                "pixel_coordinate_convention": "camera_preview_pixel_grid",
                 "closest_approach_rg": float(target["best_distance"]) if math.isfinite(target["best_distance"]) else None,
                 "matching_tolerance_rg": tolerance,
                 "kerr_ray_index": ray.get("index"),
@@ -804,6 +807,9 @@ def _kerr_pixel_match_candidates(
         "kerr_pixel_match_resolution": f"{grid_width}x{grid_height}",
         "kerr_pixel_match_resolution_x": grid_width,
         "kerr_pixel_match_resolution_y": grid_height,
+        "pixel_map_width": overlay_width,
+        "pixel_map_height": overlay_height,
+        "pixel_coordinate_convention": "camera_preview_pixel_grid",
         "kerr_pixel_match_tolerance_rg": tolerance,
         "kerr_pixel_match_refine_enabled": refine,
         "matching_ray_basis_transform": basis_transform,
@@ -2562,16 +2568,38 @@ def _ranked_candidate_rows(candidates: list[dict[str, Any]], ranked: list[dict[s
     return ordered
 
 
-def _interactive_rays(rows: list[dict[str, Any]], values: dict[str, dict[str, Any]], max_rays: int, stride: int) -> list[dict[str, Any]]:
+def _interactive_ray_resolution(row: dict[str, Any]) -> tuple[int, int, str, bool]:
+    width = row.get("pixel_map_width")
+    height = row.get("pixel_map_height")
+    try:
+        pixel_map_width = int(float(width))
+        pixel_map_height = int(float(height))
+    except (TypeError, ValueError):
+        return OVERLAY_WIDTH, OVERLAY_HEIGHT, "fallback_global_constants", True
+    if pixel_map_width <= 0 or pixel_map_height <= 0:
+        return OVERLAY_WIDTH, OVERLAY_HEIGHT, "fallback_global_constants", True
+    return pixel_map_width, pixel_map_height, "observer_candidate_kerr_pixel_map", False
+
+
+def _interactive_rays(rows: list[dict[str, Any]], values: dict[str, dict[str, Any]], max_rays: int, stride: int) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     rays: list[dict[str, Any]] = []
     matched = [row for row in rows if bool(row.get("matched_pixel_found")) and row.get("matched_pixel_x") is not None and row.get("matched_pixel_y") is not None]
     max_target_radius = max([_score(row, "interaction_r_rg") for row in rows], default=10.0)
+    resolution_sources: set[str] = set()
+    warnings: list[bool] = []
+    widths: set[int] = set()
+    heights: set[int] = set()
     for row in matched[: max(0, max_rays)]:
+        pixel_map_width, pixel_map_height, resolution_source, resolution_warning = _interactive_ray_resolution(row)
+        resolution_sources.add(resolution_source)
+        warnings.append(resolution_warning)
+        widths.add(pixel_map_width)
+        heights.add(pixel_map_height)
         points, status = _integrate_kerr_ray_cartesian(
             float(row["matched_pixel_x"]),
             float(row["matched_pixel_y"]),
-            OVERLAY_WIDTH,
-            OVERLAY_HEIGHT,
+            pixel_map_width,
+            pixel_map_height,
             values,
             max_target_radius=max_target_radius,
         )
@@ -2583,11 +2611,25 @@ def _interactive_rays(rows: list[dict[str, Any]], values: dict[str, dict[str, An
                 "interaction_id": row.get("interaction_id"),
                 "candidate_rank": row.get("candidate_rank"),
                 "closest_approach_rg": row.get("closest_approach_rg"),
+                "pixel_map_width": pixel_map_width,
+                "pixel_map_height": pixel_map_height,
+                "pixel_coordinate_convention": row.get("pixel_coordinate_convention", "camera_preview_pixel_grid"),
                 "points": sampled,
                 "status": status,
             }
         )
-    return rays
+    source = "observer_candidate_kerr_pixel_map" if resolution_sources == {"observer_candidate_kerr_pixel_map"} else "fallback_global_constants"
+    width = next(iter(widths)) if len(widths) == 1 else None
+    height = next(iter(heights)) if len(heights) == 1 else None
+    return rays, {
+        "interactive_rays_resolution_source": source,
+        "interactive_rays_pixel_map_width": width,
+        "interactive_rays_pixel_map_height": height,
+        "interactive_rays_global_overlay_width": OVERLAY_WIDTH,
+        "interactive_rays_global_overlay_height": OVERLAY_HEIGHT,
+        "interactive_rays_resolution_warning": any(warnings) or not rays,
+        "interactive_rays_resolution_matches_pixel_map": bool(rays) and source == "observer_candidate_kerr_pixel_map" and not any(warnings),
+    }
 
 
 def _write_kerr_interactive_view_html(
@@ -2624,7 +2666,7 @@ def _write_kerr_interactive_view_html(
                 "top": cid in top_ids,
             }
         )
-    rays = _interactive_rays(rows, values, max_rays, ray_stride)
+    rays, ray_resolution_metadata = _interactive_rays(rows, values, max_rays, ray_stride)
     observer, forward, right, up = _camera_frame(values)
     obs_r = _norm(observer)
     obs_theta = math.acos(max(-1.0, min(1.0, observer[2] / max(obs_r, 1.0e-12))))
@@ -2648,6 +2690,7 @@ def _write_kerr_interactive_view_html(
             "match_tolerance_rg": float(bridge.get("kerr_pixel_match_tolerance_rg", 3.5)),
             "candidate_count": len(scene_candidates),
             "ray_count": len(rays),
+            **ray_resolution_metadata,
         },
         "black_hole": {
             "horizon_radius_rg": horizon_radius_rg(float(values.get("black_hole", {}).get("spin_a", 0.5))),
@@ -2790,6 +2833,7 @@ addEventListener('resize',resize);resize();
         "interactive_candidate_color_mode": color_mode,
         "interactive_candidates_displayed": len(scene_candidates),
         "interactive_rays_displayed": len(rays),
+        **ray_resolution_metadata,
         "interactive_screen_up_convention": "+e_theta",
         "interactive_matches_camera_preview": True,
         "camera_preview_png_top_direction": "+e_theta",
@@ -2961,6 +3005,9 @@ def _augment_summary(summary: dict[str, Any], output_dir: Path) -> dict[str, Any
             "kerr_pixel_match_resolution": summary.get("kerr_pixel_match_resolution"),
             "kerr_pixel_match_resolution_x": summary.get("kerr_pixel_match_resolution_x"),
             "kerr_pixel_match_resolution_y": summary.get("kerr_pixel_match_resolution_y"),
+            "pixel_map_width": summary.get("pixel_map_width"),
+            "pixel_map_height": summary.get("pixel_map_height"),
+            "pixel_coordinate_convention": summary.get("pixel_coordinate_convention"),
             "kerr_pixel_match_tolerance_rg": summary.get("kerr_pixel_match_tolerance_rg"),
             "kerr_pixel_match_refine_enabled": summary.get("kerr_pixel_match_refine_enabled"),
             "kerr_pixel_match_n_candidates": summary.get("kerr_pixel_match_n_candidates", 0),
@@ -2978,6 +3025,13 @@ def _augment_summary(summary: dict[str, Any], output_dir: Path) -> dict[str, Any
             "interactive_candidate_color_mode": summary.get("interactive_candidate_color_mode"),
             "interactive_candidates_displayed": summary.get("interactive_candidates_displayed"),
             "interactive_rays_displayed": summary.get("interactive_rays_displayed"),
+            "interactive_rays_resolution_source": summary.get("interactive_rays_resolution_source"),
+            "interactive_rays_pixel_map_width": summary.get("interactive_rays_pixel_map_width"),
+            "interactive_rays_pixel_map_height": summary.get("interactive_rays_pixel_map_height"),
+            "interactive_rays_global_overlay_width": summary.get("interactive_rays_global_overlay_width"),
+            "interactive_rays_global_overlay_height": summary.get("interactive_rays_global_overlay_height"),
+            "interactive_rays_resolution_warning": summary.get("interactive_rays_resolution_warning"),
+            "interactive_rays_resolution_matches_pixel_map": summary.get("interactive_rays_resolution_matches_pixel_map"),
             "interactive_screen_up_convention": summary.get("interactive_screen_up_convention"),
             "interactive_matches_camera_preview": summary.get("interactive_matches_camera_preview"),
             "camera_preview_png_top_direction": summary.get("camera_preview_png_top_direction"),

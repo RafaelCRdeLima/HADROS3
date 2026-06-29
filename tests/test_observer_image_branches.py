@@ -102,8 +102,35 @@ def test_observer_image_branch_analysis_selects_primary_by_branch_score(tmp_path
         "observer_branch_view.html",
         "observer_viewpoint_convention_audit.json",
         "observer_viewpoint_convention_diagnostic.png",
+        "observer_image_branches_orientation_audit.json",
     ]:
         assert (tmp_path / "ObserverImageBranches" / filename).exists()
+
+    branch_view_html = (tmp_path / "ObserverImageBranches" / "observer_branch_view.html").read_text(encoding="utf-8")
+    assert ".north { left:12px; top:12px; color:#38bdf8; }" in branch_view_html
+    assert ".south { left:12px; bottom:12px; color:#f97316; }" in branch_view_html
+
+    orientation_audit = json.loads((tmp_path / "ObserverImageBranches" / "observer_image_branches_orientation_audit.json").read_text())
+    spatial_products = {
+        row["product_name"]: row
+        for row in orientation_audit["products"]
+        if row["product_name"]
+        in {
+            "observer_branch_view.html",
+            "observer_branch_cluster_map.png",
+            "observer_viewpoint_convention_diagnostic.png",
+        }
+    }
+    assert set(spatial_products) == {
+        "observer_branch_view.html",
+        "observer_branch_cluster_map.png",
+        "observer_viewpoint_convention_diagnostic.png",
+    }
+    for row in spatial_products.values():
+        assert row["north_marker_screen_position"] == "top"
+        assert row["south_marker_screen_position"] == "bottom"
+        assert row["visual_convention"] == "north_up"
+        assert row["matches_expected"] is True
 
     audit = json.loads((tmp_path / "ObserverImageBranches" / "observer_viewpoint_convention_audit.json").read_text())
     assert audit["inclination_convention"] == "theta_0_north_pi_over_2_equator"

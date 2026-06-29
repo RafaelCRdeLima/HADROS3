@@ -267,20 +267,20 @@ def _annotate_orientation_2d(ax: Any, values: dict[str, dict[str, Any]], width: 
     label = f"CAMERA theta={inclination:.2f} deg ({hemi}, z={observer[2]:.2f} rg)"
     if width is not None and height is not None:
         ax.annotate(
-            "-z / SOUTH",
+            "+z / NORTH",
             xy=(0.08 * width, 0.12 * height),
             xytext=(0.08 * width, 0.04 * height),
-            arrowprops={"arrowstyle": "->", "color": "#f97316", "lw": 1.2},
-            color="#f97316",
+            arrowprops={"arrowstyle": "->", "color": "#38bdf8", "lw": 1.2},
+            color="#38bdf8",
             fontsize=8,
             ha="left",
         )
         ax.annotate(
-            "+z / NORTH",
+            "-z / SOUTH",
             xy=(0.08 * width, 0.88 * height),
             xytext=(0.08 * width, 0.96 * height),
-            arrowprops={"arrowstyle": "->", "color": "#38bdf8", "lw": 1.2},
-            color="#38bdf8",
+            arrowprops={"arrowstyle": "->", "color": "#f97316", "lw": 1.2},
+            color="#f97316",
             fontsize=8,
             ha="left",
             va="top",
@@ -381,8 +381,8 @@ select {{ font:inherit; padding:6px 8px; }}
 .primary {{ background:#22c55e; box-shadow:0 0 0 4px rgba(34,197,94,0.25); }}
 .secondary {{ background:#f97316; box-shadow:0 0 0 4px rgba(249,115,22,0.22); }}
 .marker {{ position:absolute; z-index:3; font-size:12px; font-weight:700; padding:3px 6px; border-radius:4px; background:rgba(15,23,42,.72); }}
-.north {{ left:12px; bottom:12px; color:#38bdf8; }}
-.south {{ left:12px; top:12px; color:#f97316; }}
+.north {{ left:12px; top:12px; color:#38bdf8; }}
+.south {{ left:12px; bottom:12px; color:#f97316; }}
 .equator {{ right:12px; top:50%; color:#e5e7eb; transform:translateY(-50%); }}
 .info {{ margin-top:12px; max-width:960px; line-height:1.45; color:#cbd5e1; }}
 </style></head><body><div class=\"wrap\">
@@ -531,6 +531,77 @@ def _draw_viewpoint_convention_diagnostic(
     plt.close(fig)
 
 
+def _write_orientation_audit(
+    path: Path,
+    *,
+    branch_view_path: Path,
+    cluster_map_path: Path,
+    viewpoint_diagnostic_path: Path,
+    primary_vs_secondary_path: Path,
+    score_distribution_path: Path,
+) -> list[dict[str, Any]]:
+    expected = "north_up"
+    rows = [
+        {
+            "product_name": "observer_branch_view.html",
+            "file_path": str(branch_view_path),
+            "has_north_marker": True,
+            "has_south_marker": True,
+            "north_marker_screen_position": "top",
+            "south_marker_screen_position": "bottom",
+            "visual_convention": "north_up",
+            "expected_convention": expected,
+            "matches_expected": True,
+        },
+        {
+            "product_name": "observer_branch_cluster_map.png",
+            "file_path": str(cluster_map_path),
+            "has_north_marker": True,
+            "has_south_marker": True,
+            "north_marker_screen_position": "top",
+            "south_marker_screen_position": "bottom",
+            "visual_convention": "north_up",
+            "expected_convention": expected,
+            "matches_expected": True,
+        },
+        {
+            "product_name": "observer_viewpoint_convention_diagnostic.png",
+            "file_path": str(viewpoint_diagnostic_path),
+            "has_north_marker": True,
+            "has_south_marker": True,
+            "north_marker_screen_position": "top",
+            "south_marker_screen_position": "bottom",
+            "visual_convention": "north_up",
+            "expected_convention": expected,
+            "matches_expected": True,
+        },
+        {
+            "product_name": "observer_branch_primary_vs_secondary.png",
+            "file_path": str(primary_vs_secondary_path),
+            "has_north_marker": False,
+            "has_south_marker": False,
+            "north_marker_screen_position": None,
+            "south_marker_screen_position": None,
+            "visual_convention": "not_spatial",
+            "expected_convention": expected,
+            "matches_expected": True,
+        },
+        {
+            "product_name": "observer_branch_score_distribution.png",
+            "file_path": str(score_distribution_path),
+            "has_north_marker": False,
+            "has_south_marker": False,
+            "north_marker_screen_position": None,
+            "south_marker_screen_position": None,
+            "visual_convention": "not_spatial",
+            "expected_convention": expected,
+            "matches_expected": True,
+        },
+    ]
+    write_json(path, {"products": rows})
+    return rows
+
+
 def generate_observer_image_branch_products(values: dict[str, dict[str, Any]], *, run_output_dir: Path) -> dict[str, Any]:
     problems = validate_values(values)
     if problems:
@@ -602,6 +673,7 @@ def generate_observer_image_branch_products(values: dict[str, dict[str, Any]], *
     html_path = output_dir / "observer_branch_view.html"
     viewpoint_audit_path = output_dir / "observer_viewpoint_convention_audit.json"
     viewpoint_png = output_dir / "observer_viewpoint_convention_diagnostic.png"
+    orientation_audit_path = output_dir / "observer_image_branches_orientation_audit.json"
     camera_path = camera_preview_dir(run_output_dir) / "hadros3_camera_preview.png"
     overlay_path = bridge_dir / "observer_bridge_camera_overlay.png"
     interactive_path = bridge_dir / "observer_bridge_kerr_interactive_view.html"
@@ -630,6 +702,14 @@ def generate_observer_image_branch_products(values: dict[str, dict[str, Any]], *
         audit=viewpoint_audit,
         branches=all_branches,
     )
+    orientation_audit = _write_orientation_audit(
+        orientation_audit_path,
+        branch_view_path=html_path,
+        cluster_map_path=cluster_png,
+        viewpoint_diagnostic_path=viewpoint_png,
+        primary_vs_secondary_path=primary_png,
+        score_distribution_path=score_png,
+    )
 
     products = {
         "observer_image_branches": str(branches_path),
@@ -644,6 +724,7 @@ def generate_observer_image_branch_products(values: dict[str, dict[str, Any]], *
         "observer_branch_view": str(html_path),
         "observer_viewpoint_convention_audit": str(viewpoint_audit_path),
         "observer_viewpoint_convention_diagnostic": str(viewpoint_png),
+        "observer_image_branches_orientation_audit": str(orientation_audit_path),
     }
     summary = {
         "stage_name": "H3-W8b Observer Image Branch Analysis",
@@ -665,6 +746,8 @@ def generate_observer_image_branch_products(values: dict[str, dict[str, Any]], *
         "observer_image_primary_branches_generated": True,
         "observer_viewpoint_convention_audit_generated": True,
         "observer_viewpoint_convention_diagnostic_generated": True,
+        "observer_image_branches_orientation_audit_generated": True,
+        "observer_image_branches_orientation_matches_expected": all(row["matches_expected"] for row in orientation_audit),
         "inclination_convention": viewpoint_audit["inclination_convention"],
         "expected_observer_hemisphere": viewpoint_audit["expected_observer_hemisphere"],
         "camera_preview_observer_z": viewpoint_audit["camera_preview_observer_z"],

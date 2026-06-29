@@ -259,6 +259,26 @@ def _draw_score_distribution(path: Path, branches: list[dict[str, Any]]) -> None
     plt.close(fig)
 
 
+def _display_y(pixel_y: float, height: int | float) -> float:
+    return float(height) - float(pixel_y)
+
+
+def _display_ys(pixel_values: list[float], height: int | None) -> list[float]:
+    if height is None:
+        return pixel_values
+    return [_display_y(pixel_y, height) for pixel_y in pixel_values]
+
+
+def _imshow_north_up(ax: Any, image_path: Path, *, flip_y: bool = True) -> tuple[int | None, int | None]:
+    if not image_path.exists():
+        return None, None
+    image = plt.imread(image_path)
+    height, width = int(image.shape[0]), int(image.shape[1])
+    display_image = np.flipud(image) if flip_y else image
+    ax.imshow(display_image, extent=(0, width, height, 0))
+    return width, height
+
+
 def _annotate_orientation_2d(ax: Any, values: dict[str, dict[str, Any]], width: int | None, height: int | None) -> None:
     camera = values.get("observer_camera", {})
     inclination = float(camera.get("inclination_deg", 80.0))
@@ -312,12 +332,13 @@ def _annotate_orientation_2d(ax: Any, values: dict[str, dict[str, Any]], width: 
 def _draw_cluster_map(path: Path, branches: list[dict[str, Any]], camera_preview_path: Path, values: dict[str, dict[str, Any]]) -> None:
     fig, ax = plt.subplots(figsize=(9, 5), dpi=140)
     width, height = _image_dimensions(camera_preview_path)
-    if camera_preview_path.exists():
-        ax.imshow(plt.imread(camera_preview_path))
+    display_width, display_height = _imshow_north_up(ax, camera_preview_path)
+    width = display_width or width
+    height = display_height or height
     prim_x = [float(b["pixel_centroid_x"]) for b in branches if b.get("is_primary_branch")]
-    prim_y = [float(b["pixel_centroid_y"]) for b in branches if b.get("is_primary_branch")]
+    prim_y = _display_ys([float(b["pixel_centroid_y"]) for b in branches if b.get("is_primary_branch")], height)
     sec_x = [float(b["pixel_centroid_x"]) for b in branches if not b.get("is_primary_branch")]
-    sec_y = [float(b["pixel_centroid_y"]) for b in branches if not b.get("is_primary_branch")]
+    sec_y = _display_ys([float(b["pixel_centroid_y"]) for b in branches if not b.get("is_primary_branch")], height)
     if sec_x:
         ax.scatter(sec_x, sec_y, s=54, facecolors="none", edgecolors="#f97316", linewidths=1.4, label="secondary branches")
     if prim_x:
@@ -350,6 +371,7 @@ def _draw_primary_vs_secondary(path: Path, primary_rows: list[dict[str, Any]]) -
 
 def _write_branch_html(path: Path, primary_rows: list[dict[str, Any]], branches: list[dict[str, Any]], camera_preview_path: Path, values: dict[str, dict[str, Any]]) -> None:
     background_uri = ""
+    background_width, background_height = _image_dimensions(camera_preview_path)
     if camera_preview_path.exists():
         encoded = base64.b64encode(camera_preview_path.read_bytes()).decode("ascii")
         background_uri = f"data:image/png;base64,{encoded}"
@@ -367,6 +389,9 @@ def _write_branch_html(path: Path, primary_rows: list[dict[str, Any]], branches:
         "candidates": primary_rows,
         "branches": branches_by_candidate,
         "background": background_uri,
+        "background_width": background_width,
+        "background_height": background_height,
+        "display_transform": "flip_y",
         "orientation": orientation,
     }
     path.write_text(f"""<!doctype html>
@@ -376,7 +401,7 @@ body {{ margin:0; font-family: system-ui, sans-serif; background:#0b1020; color:
 .wrap {{ padding:16px; }}
 select {{ font:inherit; padding:6px 8px; }}
 .stage {{ position:relative; display:inline-block; margin-top:12px; border:1px solid #334155; }}
-.stage img {{ display:block; max-width:100%; }}
+.stage img {{ display:block; max-width:100%; transform:scaleY(-1); }}
 .dot {{ position:absolute; width:18px; height:18px; border-radius:50%; transform:translate(-50%,-50%); border:2px solid #111827; }}
 .primary {{ background:#22c55e; box-shadow:0 0 0 4px rgba(34,197,94,0.25); }}
 .secondary {{ background:#f97316; box-shadow:0 0 0 4px rgba(249,115,22,0.22); }}
@@ -411,11 +436,12 @@ function draw() {{
   [...stage.querySelectorAll('.dot')].forEach(el => el.remove());
   const candidateId = select.value;
   const branches = payload.branches[candidateId] || [];
+  const imageHeight = Number(payload.background_height);
   branches.forEach(branch => {{
     const dot = document.createElement('div');
     dot.className = 'dot ' + (branch.is_primary_branch ? 'primary' : 'secondary');
     dot.style.left = `${{branch.pixel_centroid_x}}px`;
-    dot.style.top = `${{branch.pixel_centroid_y}}px`;
+    dot.style.top = `${{Number.isFinite(imageHeight) ? imageHeight - Number(branch.pixel_centroid_y) : Number(branch.pixel_centroid_y)}}px`;
     dot.title = `${{branch.branch_id}} score=${{Number(branch.branch_score).toExponential(3)}}`;
     stage.appendChild(dot);
   }});
@@ -485,19 +511,20 @@ def _draw_viewpoint_convention_diagnostic(
 ) -> None:
     fig, axes = plt.subplots(2, 2, figsize=(12, 7), dpi=140)
     panels = [
-        ("A: Camera Preview", camera_preview_path),
-        ("B: Observer Camera Overlay", overlay_path),
+        ("A: Camera Preview", camera_preview_path, True),
+        ("B: Observer Camera Overlay", overlay_path, False),
         ("C: Interactive View proxy", None),
-        ("D: Branch View pixel plane", camera_preview_path),
+        ("D: Branch View pixel plane", camera_preview_path, True),
     ]
-    for ax, (title, image_path) in zip(axes.flat, panels, strict=True):
+    for ax, panel in zip(axes.flat, panels, strict=True):
+        title = str(panel[0])
+        image_path = panel[1]
+        flip_y = bool(panel[2]) if len(panel) > 2 else False
         ax.set_title(title)
         width: int | None = None
         height: int | None = None
         if image_path is not None and image_path.exists():
-            image = plt.imread(image_path)
-            height, width = int(image.shape[0]), int(image.shape[1])
-            ax.imshow(image)
+            width, height = _imshow_north_up(ax, image_path, flip_y=flip_y)
         else:
             ax.set_facecolor("#0b1020")
             ax.set_xlim(0, 512)
@@ -510,9 +537,9 @@ def _draw_viewpoint_convention_diagnostic(
         _annotate_orientation_2d(ax, values, width, height)
         if title.startswith("D") and width is not None and height is not None:
             prim_x = [float(b["pixel_centroid_x"]) for b in branches if b.get("is_primary_branch")]
-            prim_y = [float(b["pixel_centroid_y"]) for b in branches if b.get("is_primary_branch")]
+            prim_y = _display_ys([float(b["pixel_centroid_y"]) for b in branches if b.get("is_primary_branch")], height)
             sec_x = [float(b["pixel_centroid_x"]) for b in branches if not b.get("is_primary_branch")]
-            sec_y = [float(b["pixel_centroid_y"]) for b in branches if not b.get("is_primary_branch")]
+            sec_y = _display_ys([float(b["pixel_centroid_y"]) for b in branches if not b.get("is_primary_branch")], height)
             if sec_x:
                 ax.scatter(sec_x, sec_y, s=40, facecolors="none", edgecolors="#f97316", linewidths=1.0, label="secondary")
             if prim_x:
@@ -550,6 +577,8 @@ def _write_orientation_audit(
             "north_marker_screen_position": "top",
             "south_marker_screen_position": "bottom",
             "visual_convention": "north_up",
+            "visual_image_transform": "flip_y",
+            "display_coordinate_transform": "display_y = image_height - source_y",
             "expected_convention": expected,
             "matches_expected": True,
         },
@@ -561,6 +590,8 @@ def _write_orientation_audit(
             "north_marker_screen_position": "top",
             "south_marker_screen_position": "bottom",
             "visual_convention": "north_up",
+            "visual_image_transform": "flip_y",
+            "display_coordinate_transform": "display_y = image_height - source_y",
             "expected_convention": expected,
             "matches_expected": True,
         },
@@ -572,6 +603,8 @@ def _write_orientation_audit(
             "north_marker_screen_position": "top",
             "south_marker_screen_position": "bottom",
             "visual_convention": "north_up",
+            "visual_image_transform": "flip_y",
+            "display_coordinate_transform": "display_y = image_height - source_y",
             "expected_convention": expected,
             "matches_expected": True,
         },
@@ -583,6 +616,8 @@ def _write_orientation_audit(
             "north_marker_screen_position": None,
             "south_marker_screen_position": None,
             "visual_convention": "not_spatial",
+            "visual_image_transform": "none",
+            "display_coordinate_transform": "none",
             "expected_convention": expected,
             "matches_expected": True,
         },
@@ -594,6 +629,8 @@ def _write_orientation_audit(
             "north_marker_screen_position": None,
             "south_marker_screen_position": None,
             "visual_convention": "not_spatial",
+            "visual_image_transform": "none",
+            "display_coordinate_transform": "none",
             "expected_convention": expected,
             "matches_expected": True,
         },

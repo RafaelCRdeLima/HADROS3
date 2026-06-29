@@ -899,6 +899,7 @@ def render_html(values: dict[str, dict[str, Any]], config_path: Path) -> str:
     button:disabled {{ opacity: 0.75; cursor: progress; }}
     pre {{ white-space: pre-wrap; background: #101318; color: #f0f4f8; padding: 12px; min-height: 120px; border-radius: 6px; overflow: auto; }}
     .panel {{ background: white; border: 1px solid #d6dce5; border-radius: 6px; padding: 16px; }}
+    .panel.observer-image-branches-panel {{ grid-column: 2 / -1; }}
     .run-strip {{ grid-column: 1 / -1; background: white; border: 1px solid #d6dce5; border-radius: 6px; padding: 12px 16px; display: grid; gap: 12px; }}
     .run-main-row {{ display: grid; grid-template-columns: 140px minmax(240px, 420px) 110px 1fr; gap: 10px; align-items: center; }}
     .workflow-actions {{ display: grid; grid-template-columns: repeat(3, minmax(140px, 1fr)); gap: 10px; align-items: end; }}
@@ -925,6 +926,11 @@ def render_html(values: dict[str, dict[str, Any]], config_path: Path) -> str:
     .diagnostic-plot-card {{ margin: 0; border: 1px solid #d6dce5; border-radius: 6px; background: #f8fafc; padding: 10px; }}
     .diagnostic-plot-card img {{ width: 100%; display: block; border: 1px solid #d6dce5; border-radius: 5px; background: white; }}
     .diagnostic-plot-card figcaption {{ margin: 0 0 8px; font-weight: 650; overflow-wrap: anywhere; }}
+    .observer-image-branches-layout {{ display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); gap: 14px; align-items: start; }}
+    .observer-image-branches-main, .observer-image-branches-diagnostics {{ display: grid; gap: 12px; }}
+    .observer-image-branches-diagnostics section {{ margin: 0; }}
+    .observer-image-branches-diagnostics .diagnostic-grid {{ display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }}
+    .observer-image-branches-diagnostics .context-interactive {{ min-height: 520px; height: min(70vh, 720px); }}
     .ok {{ color: #1f6f46; font-weight: 650; }}
     .pending {{ color: #8a5a0a; font-weight: 650; }}
     .active-panel h2 {{ margin-top: 0; }}
@@ -956,7 +962,7 @@ def render_html(values: dict[str, dict[str, Any]], config_path: Path) -> str:
     .camera-control-item {{ display: flex; gap: 8px; align-items: center; font-size: 12px; color: #4d5b6b; }}
     kbd {{ min-width: 70px; text-align: center; border: 1px solid #b8c3d1; border-bottom-width: 2px; border-radius: 4px; padding: 2px 5px; background: white; color: #18202a; font-family: ui-monospace, monospace; }}
     @keyframes pulse {{ 0% {{ transform: scale(1); }} 50% {{ transform: scale(1.04); box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.18); }} 100% {{ transform: scale(1); }} }}
-    @media (max-width: 1080px) {{ main {{ grid-template-columns: 1fr; }} nav {{ position: static; }} }}
+    @media (max-width: 1080px) {{ main {{ grid-template-columns: 1fr; }} nav {{ position: static; }} .panel.observer-image-branches-panel {{ grid-column: auto; }} .observer-image-branches-layout {{ grid-template-columns: 1fr; }} }}
   </style>
 </head>
 <body>
@@ -2110,8 +2116,7 @@ function renderObserverImageBranchesPanel() {{
     ${{state.outputs.observer_viewpoint_convention_diagnostic_exists ? `<figure class="diagnostic-plot-card"><figcaption>Viewpoint convention audit</figcaption><a href="${{outUrl("observer_viewpoint_convention_diagnostic")}}" target="_blank"><img src="${{outUrl("observer_viewpoint_convention_diagnostic")}}?v=${{observerBridgePreviewVersion}}" alt="Observer viewpoint convention diagnostic"></a></figure>` : ""}}
     ${{state.outputs.observer_branch_view_exists ? `<figure class="diagnostic-plot-card"><figcaption>Observer Branch View</figcaption><a href="${{outUrl("observer_branch_view")}}" target="_blank">Open interactive branch viewer</a><iframe class="context-interactive" src="${{outUrl("observer_branch_view")}}?v=${{observerBridgePreviewVersion}}" title="Observer branch viewer"></iframe></figure>` : ""}}
   </div></section>`;
-  return `<div class="source-panel">
-    <section><h2>Inputs</h2><div class="summary-grid">
+  const inputsHtml = `<section><h2>Inputs</h2><div class="summary-grid">
       <div class="summary-item"><strong>Selected candidates</strong><span class="${{status.input_selected_candidates_found ? "ok" : "pending"}}">${{status.input_selected_candidates_found ? "found" : "missing"}}</span></div>
       <div class="summary-item"><strong>Kerr pixel map</strong><span class="${{status.input_kerr_pixel_map_found ? "ok" : "pending"}}">${{status.input_kerr_pixel_map_found ? "found" : "missing"}}</span></div>
       <div class="summary-item"><strong>Output directory</strong><code>${{status.output_dir || "ObserverImageBranches/"}}</code></div>
@@ -2123,9 +2128,15 @@ function renderObserverImageBranchesPanel() {{
     </section>
     <section><h2>Run</h2><button type="button" id="observer-image-branches-button" class="source-action" ${{canRun ? "" : "disabled"}}>Analyze Observer Image Branches</button>
       <p class="note">H3-W8b groups Kerr ray matches into observed image branches, scores each branch with an auditable proxy, and writes the primary observed branch consumed by POWHEG.</p>
-    </section>
-    ${{resultsHtml}}
-    ${{diagnostics}}
+    </section>`;
+  return `<div class="source-panel observer-image-branches-layout">
+    <div class="observer-image-branches-main">
+      ${{inputsHtml}}
+      ${{resultsHtml}}
+    </div>
+    <div class="observer-image-branches-diagnostics">
+      ${{diagnostics}}
+    </div>
   </div>`;
 }}
 function renderPowhegPanel() {{
@@ -2673,7 +2684,8 @@ function render() {{
   const nav = `<nav>${{tabs.map(tab => `<button class="tab-button ${{tabLabel(tab) === activeTab ? "active" : ""}}" data-tab="${{tabLabel(tab)}}">${{tabLabel(tab)}}</button>`).join("")}}</nav>`;
   const customTabs = new Set(["DIS Interaction Sampler", "Observer Bridge", "Observer Image Branches", "POWHEG"]);
   const genericFields = customTabs.has(activeTab) ? "" : renderFields(active);
-  root.innerHTML = runStrip + nav + `<div class="panel"><p class="note">Geometry/configuration shell only. Expensive event stages are disabled.</p>${{genericFields}}${{activeTab === "Camera" ? renderHadrosCameraPanel() + renderBackendTable() : ""}}${{activeTab === "UHE Source" ? renderSourcePanel() : ""}}${{activeTab === "Forward Geodesics" ? renderForwardPanel() : ""}}${{activeTab === "DIS Interaction Sampler" ? renderDisPanel() : ""}}${{activeTab === "Observer Bridge" ? renderObserverBridgePanel() : ""}}${{activeTab === "Observer Image Branches" ? renderObserverImageBranchesPanel() : ""}}${{activeTab === "POWHEG" ? renderPowhegPanel() : ""}}${{activeTab === "Outputs" ? renderOutputsPanel() : ""}}` +
+  const panelClass = activeTab === "Observer Image Branches" ? "panel observer-image-branches-panel" : "panel";
+  root.innerHTML = runStrip + nav + `<div class="${{panelClass}}"><p class="note">Geometry/configuration shell only. Expensive event stages are disabled.</p>${{genericFields}}${{activeTab === "Camera" ? renderHadrosCameraPanel() + renderBackendTable() : ""}}${{activeTab === "UHE Source" ? renderSourcePanel() : ""}}${{activeTab === "Forward Geodesics" ? renderForwardPanel() : ""}}${{activeTab === "DIS Interaction Sampler" ? renderDisPanel() : ""}}${{activeTab === "Observer Bridge" ? renderObserverBridgePanel() : ""}}${{activeTab === "Observer Image Branches" ? renderObserverImageBranchesPanel() : ""}}${{activeTab === "POWHEG" ? renderPowhegPanel() : ""}}${{activeTab === "Outputs" ? renderOutputsPanel() : ""}}` +
     `<pre id="log"></pre></div>` +
     renderContextPanel();
   bindHadrosCameraPanel();

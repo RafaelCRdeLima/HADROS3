@@ -107,6 +107,8 @@ def test_observer_image_branch_analysis_selects_primary_by_branch_score(tmp_path
         assert (tmp_path / "ObserverImageBranches" / filename).exists()
 
     branch_view_html = (tmp_path / "ObserverImageBranches" / "observer_branch_view.html").read_text(encoding="utf-8")
+    assert ".stage img { display:block; max-width:100%; transform:scaleY(-1); }" in branch_view_html
+    assert "imageHeight - Number(branch.pixel_centroid_y)" in branch_view_html
     assert ".north { left:12px; top:12px; color:#38bdf8; }" in branch_view_html
     assert ".south { left:12px; bottom:12px; color:#f97316; }" in branch_view_html
 
@@ -130,6 +132,8 @@ def test_observer_image_branch_analysis_selects_primary_by_branch_score(tmp_path
         assert row["north_marker_screen_position"] == "top"
         assert row["south_marker_screen_position"] == "bottom"
         assert row["visual_convention"] == "north_up"
+        assert row["visual_image_transform"] == "flip_y"
+        assert row["display_coordinate_transform"] == "display_y = image_height - source_y"
         assert row["matches_expected"] is True
 
     audit = json.loads((tmp_path / "ObserverImageBranches" / "observer_viewpoint_convention_audit.json").read_text())

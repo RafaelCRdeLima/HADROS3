@@ -408,6 +408,13 @@ def test_observer_bridge_scores_all_dis_interactions_without_modifying_dis(tmp_p
     assert "touchmove" in html
     assert '"screen_up"' in html
     assert "scene.camera.screen_up" in html
+    assert "function currentBasis()" in html
+    assert "rotateAround(baseRight,baseUp,yaw)" in html
+    assert "rotateAround(yawForward,yawRight,pitch)" in html
+    assert "const basis=currentBasis();" in html
+    assert "dot(q,basis.right)" in html
+    assert "dot(q,basis.up)" in html
+    assert "dot(q,basis.forward)" in html
     assert '"screen_up_convention": "+e_theta"' in html
     assert '"camera_preview_png_top_direction": "+e_theta"' in html
 

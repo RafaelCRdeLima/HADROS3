@@ -2724,17 +2724,32 @@ let yaw = 0, pitch = 0, zoom = 7.5, panX = 0, panY = 0, dragging = false, lastX 
 function resize(){const dpr=window.devicePixelRatio||1;canvas.width=innerWidth*dpr;canvas.height=innerHeight*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);draw();}
 function dot(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];}
 function sub(a,b){return [a[0]-b[0],a[1]-b[1],a[2]-b[2]];}
+function mul(a,s){return [a[0]*s,a[1]*s,a[2]*s];}
+function add(a,b){return [a[0]+b[0],a[1]+b[1],a[2]+b[2]];}
+function cross(a,b){return [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];}
+function unit(a){const n=Math.hypot(a[0],a[1],a[2])||1;return [a[0]/n,a[1]/n,a[2]/n];}
+function rotateAround(v,axis,angle){const k=unit(axis);const c=Math.cos(angle),s=Math.sin(angle);return add(add(mul(v,c),mul(cross(k,v),s)),mul(k,dot(k,v)*(1-c)));}
 function rot(p){const x=p[0], y=p[1], z=p[2];const cy=Math.cos(yaw), sy=Math.sin(yaw), cp=Math.cos(pitch), sp=Math.sin(pitch);const x1=cy*x+sy*y;const y1=-sy*x+cy*y;const z1=z;return [x1, cp*y1-sp*z1, sp*y1+cp*z1];}
+function currentBasis(){
+ const baseForward=unit(scene.camera.forward);
+ const baseRight=unit(scene.camera.screen_right || scene.camera.right);
+ const baseUp=unit(scene.camera.screen_up || scene.camera.up);
+ const yawRight=unit(rotateAround(baseRight,baseUp,yaw));
+ const yawForward=unit(rotateAround(baseForward,baseUp,yaw));
+ const currentForward=unit(rotateAround(yawForward,yawRight,pitch));
+ const currentUp=unit(rotateAround(baseUp,yawRight,pitch));
+ return {forward:currentForward,right:yawRight,up:currentUp};
+}
 function project(p){
  if(controls.physicalCameraView.checked){
    const q=sub(p,[0,0,0]);
-   const x=dot(q,scene.camera.screen_right || scene.camera.right);
-   const y=dot(q,scene.camera.screen_up || scene.camera.up);
-   const z=dot(q,scene.camera.forward);
-   const r=rot([x,z,y]);
-   const depth=90+r[1];
+   const basis=currentBasis();
+   const x=dot(q,basis.right);
+   const y=dot(q,basis.up);
+   const z=dot(q,basis.forward);
+   const depth=90+z;
    const scale=Math.min(innerWidth,innerHeight)*zoom/Math.max(15,depth);
-   return [innerWidth/2+panX+r[0]*scale, innerHeight/2+panY-r[2]*scale, depth, scale];
+   return [innerWidth/2+panX+x*scale, innerHeight/2+panY-y*scale, depth, scale];
  }
  const r=rot(p);const depth=90+r[1];const scale=Math.min(innerWidth,innerHeight)*zoom/Math.max(15,depth);return [innerWidth/2+panX+r[0]*scale, innerHeight/2+panY-r[2]*scale, depth, scale];
 }

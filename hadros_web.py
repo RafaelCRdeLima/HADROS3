@@ -231,6 +231,12 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
     branch_view_path = branch_dir / "observer_branch_view.html"
     branch_viewpoint_audit_path = branch_dir / "observer_viewpoint_convention_audit.json"
     branch_viewpoint_diagnostic_path = branch_dir / "observer_viewpoint_convention_diagnostic.png"
+    grav_multiplicity_path = branch_dir / "gravitational_image_multiplicity.png"
+    grav_score_breakdown_path = branch_dir / "gravitational_image_branch_score_breakdown.png"
+    grav_candidate_story_path = branch_dir / "gravitational_image_candidate_story.png"
+    grav_primary_selection_table_path = branch_dir / "gravitational_image_primary_selection_table.csv"
+    grav_powheg_forwarding_table_path = branch_dir / "gravitational_image_powheg_forwarding_table.csv"
+    grav_candidate_view_path = branch_dir / "gravitational_image_candidate_view.html"
     powheg_requests_path = powheg_output_dir / "powheg_event_requests.jsonl"
     powheg_summary_json_path = powheg_output_dir / "powheg_summary.json"
     powheg_summary_csv_path = powheg_output_dir / "powheg_summary.csv"
@@ -527,6 +533,12 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "observer_branch_view": branch_view_path.exists(),
                 "observer_viewpoint_convention_audit": branch_viewpoint_audit_path.exists(),
                 "observer_viewpoint_convention_diagnostic": branch_viewpoint_diagnostic_path.exists(),
+                "gravitational_image_multiplicity": grav_multiplicity_path.exists(),
+                "gravitational_image_branch_score_breakdown": grav_score_breakdown_path.exists(),
+                "gravitational_image_candidate_story": grav_candidate_story_path.exists(),
+                "gravitational_image_primary_selection_table": grav_primary_selection_table_path.exists(),
+                "gravitational_image_powheg_forwarding_table": grav_powheg_forwarding_table_path.exists(),
+                "gravitational_image_candidate_view": grav_candidate_view_path.exists(),
             },
             "summary": observer_image_branch_summary,
             "links": {
@@ -542,6 +554,12 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "observer_branch_view": rel(branch_view_path, output_dir),
                 "observer_viewpoint_convention_audit": rel(branch_viewpoint_audit_path, output_dir),
                 "observer_viewpoint_convention_diagnostic": rel(branch_viewpoint_diagnostic_path, output_dir),
+                "gravitational_image_multiplicity": rel(grav_multiplicity_path, output_dir),
+                "gravitational_image_branch_score_breakdown": rel(grav_score_breakdown_path, output_dir),
+                "gravitational_image_candidate_story": rel(grav_candidate_story_path, output_dir),
+                "gravitational_image_primary_selection_table": rel(grav_primary_selection_table_path, output_dir),
+                "gravitational_image_powheg_forwarding_table": rel(grav_powheg_forwarding_table_path, output_dir),
+                "gravitational_image_candidate_view": rel(grav_candidate_view_path, output_dir),
             },
         },
         "powheg": {
@@ -614,7 +632,7 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             {"stage": "Forward Geodesics", "status": "done" if forward_paths_path.exists() and forward_segments_path.exists() else "pending", "tab": "Forward Geodesics"},
             {"stage": "DIS Interaction Sampler", "status": "done" if dis_summary_path.exists() else "pending", "tab": "DIS Interaction Sampler"},
             {"stage": "Observer Bridge", "status": "done" if bridge_summary_complete else "pending", "tab": "Observer Bridge"},
-            {"stage": "Observer Image Branches", "status": "done" if branch_summary_path.exists() else "pending", "tab": "Observer Image Branches"},
+            {"stage": "Gravitational Image Analysis", "status": "done" if branch_summary_path.exists() else "pending", "tab": "Gravitational Image Analysis"},
             {"stage": "POWHEG", "status": "done" if powheg_summary_json_path.exists() else "pending", "tab": "POWHEG"},
             {"stage": "Event Generation", "status": "pending", "tab": "Event Generation"},
             {"stage": "GEANT4", "status": "pending", "tab": "GEANT4"},
@@ -718,6 +736,12 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             "observer_branch_view_exists": branch_view_path.exists(),
             "observer_viewpoint_convention_audit_exists": branch_viewpoint_audit_path.exists(),
             "observer_viewpoint_convention_diagnostic_exists": branch_viewpoint_diagnostic_path.exists(),
+            "gravitational_image_multiplicity_exists": grav_multiplicity_path.exists(),
+            "gravitational_image_branch_score_breakdown_exists": grav_score_breakdown_path.exists(),
+            "gravitational_image_candidate_story_exists": grav_candidate_story_path.exists(),
+            "gravitational_image_primary_selection_table_exists": grav_primary_selection_table_path.exists(),
+            "gravitational_image_powheg_forwarding_table_exists": grav_powheg_forwarding_table_path.exists(),
+            "gravitational_image_candidate_view_exists": grav_candidate_view_path.exists(),
             "powheg_event_requests_exists": powheg_requests_path.exists(),
             "powheg_summary_json_exists": powheg_summary_json_path.exists(),
             "powheg_summary_exists": powheg_summary_csv_path.exists(),
@@ -843,6 +867,12 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "observer_branch_view": rel(branch_view_path, output_dir),
                 "observer_viewpoint_convention_audit": rel(branch_viewpoint_audit_path, output_dir),
                 "observer_viewpoint_convention_diagnostic": rel(branch_viewpoint_diagnostic_path, output_dir),
+                "gravitational_image_multiplicity": rel(grav_multiplicity_path, output_dir),
+                "gravitational_image_branch_score_breakdown": rel(grav_score_breakdown_path, output_dir),
+                "gravitational_image_candidate_story": rel(grav_candidate_story_path, output_dir),
+                "gravitational_image_primary_selection_table": rel(grav_primary_selection_table_path, output_dir),
+                "gravitational_image_powheg_forwarding_table": rel(grav_powheg_forwarding_table_path, output_dir),
+                "gravitational_image_candidate_view": rel(grav_candidate_view_path, output_dir),
                 "powheg_event_requests": rel(powheg_requests_path, output_dir),
                 "powheg_summary_json": rel(powheg_summary_json_path, output_dir),
                 "powheg_summary": rel(powheg_summary_csv_path, output_dir),
@@ -1496,7 +1526,7 @@ async function analyzeObserverImageBranches() {{
       setPowhegOutputs(false);
       state.outputs.provenance_exists = true;
       state.outputs.config_exists = true;
-      activeTab = "Observer Image Branches";
+      activeTab = "Gravitational Image Analysis";
       observerBridgePreviewVersion = Date.now();
       const logText = result.text;
       render();
@@ -1748,11 +1778,11 @@ function safeRunName(name) {{
   return cleaned || "HADROS3_run";
 }}
 function tabLabel(tab) {{
-  const aliases = {{"Analytic Torus": "Torus / Medium", "Polar Cone": "Funnel / Cone"}};
+  const aliases = {{"Analytic Torus": "Torus / Medium", "Polar Cone": "Funnel / Cone", "Observer Image Branches": "Gravitational Image Analysis"}};
   return aliases[tab.tab] || tab.tab;
 }}
 function orderedTabs() {{
-  const order = ["Camera", "Black Hole", "Torus / Medium", "Funnel / Cone", "UHE Source", "Forward Geodesics", "DIS Interaction Sampler", "Observer Bridge", "Observer Image Branches", "POWHEG", "Event Generation", "GEANT4", "Photon Transport", "Spectra", "Outputs", "Provenance"];
+  const order = ["Camera", "Black Hole", "Torus / Medium", "Funnel / Cone", "UHE Source", "Forward Geodesics", "DIS Interaction Sampler", "Observer Bridge", "Gravitational Image Analysis", "POWHEG", "Event Generation", "GEANT4", "Photon Transport", "Spectra", "Outputs", "Provenance"];
   return [...state.schema].sort((a, b) => {{
     const ai = order.indexOf(tabLabel(a));
     const bi = order.indexOf(tabLabel(b));
@@ -2097,9 +2127,10 @@ function renderObserverImageBranchesPanel() {{
   const value = key => state.values.observer_image_branches[key];
   const input = key => `<label><span class="field-label"><span>${{fields[key].label}}</span>${{fields[key].help ? `<span class="field-help">${{fields[key].help}}</span>` : ""}}</span>${{inputFor(fields[key], value(key))}}</label>`;
   const canRun = Boolean(status.input_selected_candidates_found && status.input_kerr_pixel_map_found);
-  const resultsHtml = summary ? `<section><h2>Results</h2><div class="summary-grid">
+  const resultsHtml = summary ? `<section><h2>Summary</h2><div class="summary-grid">
     <div class="summary-item"><strong>Candidate count</strong>${{summary.n_candidates || 0}}</div>
     <div class="summary-item"><strong>Total image branches</strong>${{summary.n_branches || 0}}</div>
+    <div class="summary-item"><strong>Zero-branch candidates</strong>${{summary.n_zero_image || 0}}</div>
     <div class="summary-item"><strong>Mean branches/candidate</strong>${{Number(summary.mean_branches_per_candidate || 0).toFixed(3)}}</div>
     <div class="summary-item"><strong>Fraction with multiple images</strong>${{Number(summary.fraction_multiple_images || 0).toFixed(3)}}</div>
     <div class="summary-item"><strong>Single image candidates</strong>${{summary.n_single_image || 0}}</div>
@@ -2107,8 +2138,27 @@ function renderObserverImageBranchesPanel() {{
     <div class="summary-item"><strong>Maximum branches/candidate</strong>${{summary.maximum_branches_per_candidate || 0}}</div>
     <div class="summary-item"><strong>Branch scoring</strong><code>${{summary.branch_scoring_model || "pending"}}</code></div>
     <div class="summary-item"><strong>Primary branch selection</strong><code>${{summary.primary_branch_selection_model || "pending"}}</code></div>
+    <div class="summary-item"><strong>POWHEG forwarding</strong>${{summary.powheg_forwarding_uses_primary_branch ? "primary branch" : "pending"}}</div>
     <div class="summary-item"><strong>Proxy selection</strong>${{String(summary.primary_branch_selection_proxy ?? true)}}</div>
-  </div></section>` : `<section><h2>Results</h2><p class="note">No Observer Image Branch Analysis products yet.</p></section>`;
+  </div><p class="note">Primary branch = argmax(branch_score). branch_score is a proxy, not true magnification. This primary branch is the one forwarded to POWHEG when a reconstructed branch exists.</p></section>` : `<section><h2>Summary</h2><p class="note">No Gravitational Image Analysis products yet.</p></section>`;
+  const scientificProducts = `<section><h2>Image Multiplicity</h2><div class="diagnostic-grid">
+    ${{state.outputs.gravitational_image_multiplicity_exists ? `<figure class="diagnostic-plot-card"><figcaption>Gravitational image multiplicity</figcaption><a href="${{outUrl("gravitational_image_multiplicity")}}" target="_blank"><img src="${{outUrl("gravitational_image_multiplicity")}}?v=${{observerBridgePreviewVersion}}" alt="Gravitational image multiplicity"></a></figure>` : `<p class="note">Multiplicity diagnostic pending.</p>`}}
+  </div></section>
+  <section><h2>Candidate Story</h2><div class="diagnostic-grid">
+    ${{state.outputs.gravitational_image_candidate_story_exists ? `<figure class="diagnostic-plot-card"><figcaption>Candidate story</figcaption><a href="${{outUrl("gravitational_image_candidate_story")}}" target="_blank"><img src="${{outUrl("gravitational_image_candidate_story")}}?v=${{observerBridgePreviewVersion}}" alt="Gravitational image candidate story"></a></figure>` : ""}}
+    ${{state.outputs.gravitational_image_candidate_view_exists ? `<figure class="diagnostic-plot-card"><figcaption>Candidate viewer</figcaption><a href="${{outUrl("gravitational_image_candidate_view")}}" target="_blank">Open candidate viewer</a><iframe class="context-interactive" src="${{outUrl("gravitational_image_candidate_view")}}?v=${{observerBridgePreviewVersion}}" title="Gravitational image candidate viewer"></iframe></figure>` : ""}}
+  </div></section>
+  <section><h2>Branch Score Breakdown</h2><div class="diagnostic-grid">
+    ${{state.outputs.gravitational_image_branch_score_breakdown_exists ? `<figure class="diagnostic-plot-card"><figcaption>Branch score breakdown</figcaption><a href="${{outUrl("gravitational_image_branch_score_breakdown")}}" target="_blank"><img src="${{outUrl("gravitational_image_branch_score_breakdown")}}?v=${{observerBridgePreviewVersion}}" alt="Gravitational image branch score breakdown"></a></figure>` : ""}}
+  </div></section>
+  <section><h2>Primary Image Selection</h2><div class="summary-grid">
+    <div class="summary-item"><strong>Selection table</strong>${{state.outputs.gravitational_image_primary_selection_table_exists ? `<a href="${{outUrl("gravitational_image_primary_selection_table")}}" target="_blank">CSV</a>` : "pending"}}</div>
+    <div class="summary-item"><strong>Criterion</strong><code>argmax(branch_score)</code></div>
+  </div></section>
+  <section><h2>POWHEG Forwarding</h2><div class="summary-grid">
+    <div class="summary-item"><strong>Forwarding table</strong>${{state.outputs.gravitational_image_powheg_forwarding_table_exists ? `<a href="${{outUrl("gravitational_image_powheg_forwarding_table")}}" target="_blank">CSV</a>` : "pending"}}</div>
+    <div class="summary-item"><strong>Rule</strong>primary branch goes to POWHEG</div>
+  </div></section>`;
   const diagnostics = `<section><h2>Diagnostics</h2><div class="diagnostic-grid">
     ${{state.outputs.observer_branch_cluster_map_exists ? `<figure class="diagnostic-plot-card"><figcaption>Branch cluster map</figcaption><a href="${{outUrl("observer_branch_cluster_map")}}" target="_blank"><img src="${{outUrl("observer_branch_cluster_map")}}?v=${{observerBridgePreviewVersion}}" alt="Observer image branch cluster map"></a></figure>` : ""}}
     ${{state.outputs.observer_branch_score_distribution_exists ? `<figure class="diagnostic-plot-card"><figcaption>Branch score distribution</figcaption><a href="${{outUrl("observer_branch_score_distribution")}}" target="_blank"><img src="${{outUrl("observer_branch_score_distribution")}}?v=${{observerBridgePreviewVersion}}" alt="Observer branch score distribution"></a></figure>` : ""}}
@@ -2126,13 +2176,14 @@ function renderObserverImageBranchesPanel() {{
       ${{input("primary_branch_selection_model")}}
       ${{input("minimum_branch_rays")}}
     </section>
-    <section><h2>Run</h2><button type="button" id="observer-image-branches-button" class="source-action" ${{canRun ? "" : "disabled"}}>Analyze Observer Image Branches</button>
-      <p class="note">H3-W8b groups Kerr ray matches into observed image branches, scores each branch with an auditable proxy, and writes the primary observed branch consumed by POWHEG.</p>
+    <section><h2>Run</h2><button type="button" id="observer-image-branches-button" class="source-action" ${{canRun ? "" : "disabled"}}>Run Gravitational Image Analysis</button>
+      <p class="note">H3-W8b groups Kerr ray matches into gravitational image branches, scores each branch with an auditable proxy, and writes the primary observed branch consumed by POWHEG.</p>
     </section>`;
   return `<div class="source-panel observer-image-branches-layout">
     <div class="observer-image-branches-main">
       ${{inputsHtml}}
       ${{resultsHtml}}
+      ${{scientificProducts}}
     </div>
     <div class="observer-image-branches-diagnostics">
       ${{diagnostics}}
@@ -2525,6 +2576,15 @@ function renderOutputsPanel() {{
     ${{link(out.observer_image_statistics_exists, "observer_image_statistics", "Observer image statistics")}}
     ${{link(out.observer_branch_statistics_exists, "observer_branch_statistics", "Observer branch statistics CSV")}}
     ${{link(out.observer_branch_view_exists, "observer_branch_view", "Observer branch view")}}
+    ${{link(out.gravitational_image_multiplicity_exists, "gravitational_image_multiplicity", "Gravitational image multiplicity")}}
+    ${{out.gravitational_image_multiplicity_exists ? `<img src="${{outUrl("gravitational_image_multiplicity")}}" alt="Gravitational image multiplicity">` : ""}}
+    ${{link(out.gravitational_image_branch_score_breakdown_exists, "gravitational_image_branch_score_breakdown", "Gravitational image branch score breakdown")}}
+    ${{out.gravitational_image_branch_score_breakdown_exists ? `<img src="${{outUrl("gravitational_image_branch_score_breakdown")}}" alt="Gravitational image branch score breakdown">` : ""}}
+    ${{link(out.gravitational_image_candidate_story_exists, "gravitational_image_candidate_story", "Gravitational image candidate story")}}
+    ${{out.gravitational_image_candidate_story_exists ? `<img src="${{outUrl("gravitational_image_candidate_story")}}" alt="Gravitational image candidate story">` : ""}}
+    ${{link(out.gravitational_image_primary_selection_table_exists, "gravitational_image_primary_selection_table", "Gravitational image primary selection table")}}
+    ${{link(out.gravitational_image_powheg_forwarding_table_exists, "gravitational_image_powheg_forwarding_table", "Gravitational image POWHEG forwarding table")}}
+    ${{link(out.gravitational_image_candidate_view_exists, "gravitational_image_candidate_view", "Gravitational image candidate view")}}
     ${{link(out.observer_viewpoint_convention_audit_exists, "observer_viewpoint_convention_audit", "Observer viewpoint convention audit")}}
     ${{link(out.observer_viewpoint_convention_diagnostic_exists, "observer_viewpoint_convention_diagnostic", "Observer viewpoint convention diagnostic")}}
     ${{link(out.observer_branch_cluster_map_exists, "observer_branch_cluster_map", "Observer branch cluster map")}}
@@ -2682,10 +2742,10 @@ function render() {{
     </div>
   </div>`;
   const nav = `<nav>${{tabs.map(tab => `<button class="tab-button ${{tabLabel(tab) === activeTab ? "active" : ""}}" data-tab="${{tabLabel(tab)}}">${{tabLabel(tab)}}</button>`).join("")}}</nav>`;
-  const customTabs = new Set(["DIS Interaction Sampler", "Observer Bridge", "Observer Image Branches", "POWHEG"]);
+  const customTabs = new Set(["DIS Interaction Sampler", "Observer Bridge", "Gravitational Image Analysis", "POWHEG"]);
   const genericFields = customTabs.has(activeTab) ? "" : renderFields(active);
-  const panelClass = activeTab === "Observer Image Branches" ? "panel observer-image-branches-panel" : "panel";
-  root.innerHTML = runStrip + nav + `<div class="${{panelClass}}"><p class="note">Geometry/configuration shell only. Expensive event stages are disabled.</p>${{genericFields}}${{activeTab === "Camera" ? renderHadrosCameraPanel() + renderBackendTable() : ""}}${{activeTab === "UHE Source" ? renderSourcePanel() : ""}}${{activeTab === "Forward Geodesics" ? renderForwardPanel() : ""}}${{activeTab === "DIS Interaction Sampler" ? renderDisPanel() : ""}}${{activeTab === "Observer Bridge" ? renderObserverBridgePanel() : ""}}${{activeTab === "Observer Image Branches" ? renderObserverImageBranchesPanel() : ""}}${{activeTab === "POWHEG" ? renderPowhegPanel() : ""}}${{activeTab === "Outputs" ? renderOutputsPanel() : ""}}` +
+  const panelClass = activeTab === "Gravitational Image Analysis" ? "panel observer-image-branches-panel" : "panel";
+  root.innerHTML = runStrip + nav + `<div class="${{panelClass}}"><p class="note">Geometry/configuration shell only. Expensive event stages are disabled.</p>${{genericFields}}${{activeTab === "Camera" ? renderHadrosCameraPanel() + renderBackendTable() : ""}}${{activeTab === "UHE Source" ? renderSourcePanel() : ""}}${{activeTab === "Forward Geodesics" ? renderForwardPanel() : ""}}${{activeTab === "DIS Interaction Sampler" ? renderDisPanel() : ""}}${{activeTab === "Observer Bridge" ? renderObserverBridgePanel() : ""}}${{activeTab === "Gravitational Image Analysis" ? renderObserverImageBranchesPanel() : ""}}${{activeTab === "POWHEG" ? renderPowhegPanel() : ""}}${{activeTab === "Outputs" ? renderOutputsPanel() : ""}}` +
     `<pre id="log"></pre></div>` +
     renderContextPanel();
   bindHadrosCameraPanel();

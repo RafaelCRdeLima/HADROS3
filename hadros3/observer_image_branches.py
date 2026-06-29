@@ -245,6 +245,99 @@ def _write_branch_csv(path: Path, branches: list[dict[str, Any]]) -> None:
             writer.writerow({key: row.get(key) for key in fields})
 
 
+def _branch_role(branch: dict[str, Any]) -> str:
+    rank = int(branch.get("branch_rank", 0))
+    if rank == 1:
+        return "primary"
+    if rank == 2:
+        return "secondary"
+    if rank == 3:
+        return "tertiary"
+    return f"branch_{rank}" if rank > 0 else "unranked"
+
+
+def _branches_by_candidate(branches: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for branch in branches:
+        grouped.setdefault(str(branch["candidate_id"]), []).append(branch)
+    for rows in grouped.values():
+        rows.sort(key=lambda item: int(item.get("branch_rank", 999999)))
+    return grouped
+
+
+def _why_selected(primary: dict[str, Any] | None) -> str:
+    if not primary:
+        return "no gravitational image branch reconstructed for this candidate"
+    return "highest branch_score by argmax(branch_score)"
+
+
+def _write_primary_selection_csv(path: Path, primary_rows: list[dict[str, Any]], branches: list[dict[str, Any]]) -> None:
+    grouped = _branches_by_candidate(branches)
+    fields = [
+        "candidate_id",
+        "n_image_branches",
+        "primary_branch_id",
+        "primary_branch_score",
+        "primary_w_rays",
+        "primary_w_closest",
+        "primary_w_compactness",
+        "primary_number_of_matching_rays",
+        "primary_closest_approach_mean_rg",
+        "primary_closest_approach_min_rg",
+        "primary_pixel_spread",
+        "why_selected",
+    ]
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        for row in primary_rows:
+            candidate_id = str(row.get("candidate_id", ""))
+            primary = next((branch for branch in grouped.get(candidate_id, []) if branch.get("is_primary_branch")), None)
+            weights = dict((primary or {}).get("branch_score_weights") or {})
+            writer.writerow({
+                "candidate_id": candidate_id,
+                "n_image_branches": int(row.get("number_of_image_branches", 0)),
+                "primary_branch_id": (primary or {}).get("branch_id", ""),
+                "primary_branch_score": (primary or {}).get("branch_score", ""),
+                "primary_w_rays": weights.get("w_rays", ""),
+                "primary_w_closest": weights.get("w_closest", ""),
+                "primary_w_compactness": weights.get("w_compactness", ""),
+                "primary_number_of_matching_rays": (primary or {}).get("number_of_matching_rays", ""),
+                "primary_closest_approach_mean_rg": (primary or {}).get("closest_approach_mean_rg", ""),
+                "primary_closest_approach_min_rg": (primary or {}).get("closest_approach_min_rg", ""),
+                "primary_pixel_spread": (primary or {}).get("pixel_spread", ""),
+                "why_selected": _why_selected(primary),
+            })
+
+
+def _write_powheg_forwarding_csv(path: Path, primary_rows: list[dict[str, Any]], branches: list[dict[str, Any]]) -> None:
+    grouped = _branches_by_candidate(branches)
+    fields = [
+        "powheg_forwarded_candidate_id",
+        "powheg_forwarded_branch_id",
+        "powheg_forwarded_role",
+        "powheg_forwarded_pixel_x",
+        "powheg_forwarded_pixel_y",
+        "powheg_forwarded_score",
+        "powheg_forwarding_reason",
+    ]
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        for row in primary_rows:
+            candidate_id = str(row.get("candidate_id", ""))
+            primary = next((branch for branch in grouped.get(candidate_id, []) if branch.get("is_primary_branch")), None)
+            writer.writerow({
+                "powheg_forwarded_candidate_id": candidate_id,
+                "powheg_forwarded_branch_id": (primary or {}).get("branch_id", ""),
+                "powheg_forwarded_role": "primary" if primary else "",
+                "powheg_forwarded_pixel_x": (primary or {}).get("pixel_centroid_x", ""),
+                "powheg_forwarded_pixel_y": (primary or {}).get("pixel_centroid_y", ""),
+                "powheg_forwarded_score": (primary or {}).get("branch_score", ""),
+                "powheg_forwarding_reason": "selected primary branch by argmax(branch_score)" if primary else "no reconstructed branch available for POWHEG branch annotation",
+            })
+
+
 def _draw_score_distribution(path: Path, branches: list[dict[str, Any]]) -> None:
     scores = [float(row.get("branch_score", 0.0)) for row in branches]
     fig, ax = plt.subplots(figsize=(8, 4.5), dpi=140)
@@ -254,6 +347,121 @@ def _draw_score_distribution(path: Path, branches: list[dict[str, Any]]) -> None
     ax.set_xlabel("branch_score")
     ax.set_ylabel("branches")
     ax.grid(alpha=0.25)
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+
+
+def _draw_gravitational_image_multiplicity(path: Path, stats: dict[str, Any]) -> None:
+    labels = ["0", "1", "2", "3+"]
+    values = [
+        int(stats.get("n_zero_image", 0)),
+        int(stats.get("n_single_image", 0)),
+        int(stats.get("n_double_image", 0)),
+        int(stats.get("n_triple_or_more_image", stats.get("n_triple_image", 0))),
+    ]
+    fig, ax = plt.subplots(figsize=(8, 4.8), dpi=140)
+    colors = ["#94a3b8", "#22c55e", "#38bdf8", "#f97316"]
+    ax.bar(labels, values, color=colors, alpha=0.9)
+    ax.set_title("Gravitational image multiplicity")
+    ax.set_xlabel("image branches per candidate")
+    ax.set_ylabel("candidates")
+    ax.grid(axis="y", alpha=0.25)
+    note = (
+        f"fraction_multiple_images = {float(stats.get('fraction_multiple_images', 0.0)):.3f}\n"
+        f"mean_branches_per_candidate = {float(stats.get('mean_branches_per_candidate', 0.0)):.3f}\n"
+        f"zero-image candidates = {int(stats.get('n_zero_image', 0))}"
+    )
+    ax.text(0.98, 0.96, note, transform=ax.transAxes, ha="right", va="top", fontsize=9, bbox={
+        "boxstyle": "round,pad=0.35",
+        "facecolor": "white",
+        "edgecolor": "#cbd5e1",
+        "alpha": 0.9,
+    })
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+
+
+def _draw_gravitational_image_score_breakdown(path: Path, branches: list[dict[str, Any]]) -> None:
+    selected = sorted(branches, key=lambda row: float(row.get("branch_score", 0.0)), reverse=True)[:12]
+    fig, ax = plt.subplots(figsize=(10, 5.2), dpi=140)
+    if selected:
+        labels = [f"{row['candidate_id']}\n{_branch_role(row)}" for row in selected]
+        x = np.arange(len(selected))
+        w_rays = [float((row.get("branch_score_weights") or {}).get("w_rays", 0.0)) for row in selected]
+        w_closest = [float((row.get("branch_score_weights") or {}).get("w_closest", 0.0)) for row in selected]
+        w_compactness = [float((row.get("branch_score_weights") or {}).get("w_compactness", 0.0)) for row in selected]
+        scores = [float(row.get("branch_score", 0.0)) for row in selected]
+        ax.plot(x, scores, color="#111827", marker="o", lw=1.6, label="branch_score")
+        ax.bar(x, w_rays, width=0.25, color="#38bdf8", alpha=0.75, label="w_rays")
+        ax.bar(x + 0.25, w_closest, width=0.25, color="#f97316", alpha=0.75, label="w_closest")
+        ax.bar(x + 0.50, w_compactness, width=0.25, color="#22c55e", alpha=0.75, label="w_compactness")
+        ax.set_xticks(x + 0.25)
+        ax.set_xticklabels(labels, rotation=35, ha="right", fontsize=8)
+        ax.legend(fontsize=8)
+    else:
+        ax.text(0.5, 0.55, "No gravitational image branches reconstructed", transform=ax.transAxes, ha="center", va="center", fontsize=13)
+        ax.text(0.5, 0.42, "branch_score = w_rays * w_closest * w_compactness", transform=ax.transAxes, ha="center", va="center", fontsize=10)
+    ax.set_title("Gravitational image branch score breakdown")
+    ax.set_ylabel("proxy component value")
+    ax.grid(axis="y", alpha=0.25)
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+
+
+def _draw_gravitational_image_candidate_story(path: Path, primary_rows: list[dict[str, Any]], branches: list[dict[str, Any]]) -> None:
+    grouped = _branches_by_candidate(branches)
+    candidate = next((row for row in primary_rows if int(row.get("number_of_image_branches", 0)) > 0), primary_rows[0] if primary_rows else {})
+    candidate_id = str(candidate.get("candidate_id", "no candidate"))
+    candidate_branches = grouped.get(candidate_id, [])
+    primary = next((branch for branch in candidate_branches if branch.get("is_primary_branch")), None)
+    fig, ax = plt.subplots(figsize=(9, 4.6), dpi=140)
+    ax.set_axis_off()
+    boxes = [
+        ("Candidate", candidate_id),
+        ("Image branches", f"{len(candidate_branches)} reconstructed"),
+        ("Primary branch", str((primary or {}).get("branch_id", "none"))),
+        ("POWHEG forwarding", "primary branch" if primary else "no branch annotation"),
+    ]
+    x_positions = [0.12, 0.38, 0.64, 0.88]
+    for idx, ((title, body), x_pos) in enumerate(zip(boxes, x_positions, strict=True)):
+        ax.text(x_pos, 0.58, title, transform=ax.transAxes, ha="center", va="center", fontsize=11, fontweight="bold", bbox={
+            "boxstyle": "round,pad=0.45",
+            "facecolor": "#e0f2fe" if idx != 3 else "#dcfce7",
+            "edgecolor": "#64748b",
+        })
+        ax.text(x_pos, 0.38, body, transform=ax.transAxes, ha="center", va="center", fontsize=9, wrap=True)
+        if idx < len(x_positions) - 1:
+            ax.annotate("", xy=(x_positions[idx + 1] - 0.08, 0.58), xytext=(x_pos + 0.08, 0.58), xycoords=ax.transAxes, arrowprops={
+                "arrowstyle": "->",
+                "lw": 1.6,
+                "color": "#475569",
+            })
+    if not candidate_branches:
+        ax.text(
+            0.5,
+            0.15,
+            "No gravitational image branch reconstructed for this candidate",
+            transform=ax.transAxes,
+            ha="center",
+            va="center",
+            fontsize=12,
+            color="#991b1b",
+        )
+    else:
+        ax.text(
+            0.5,
+            0.15,
+            f"Why selected: {_why_selected(primary)}",
+            transform=ax.transAxes,
+            ha="center",
+            va="center",
+            fontsize=10,
+            color="#334155",
+        )
+    ax.set_title("Gravitational image candidate story")
     fig.tight_layout()
     fig.savefig(path)
     plt.close(fig)
@@ -446,6 +654,100 @@ function draw() {{
     stage.appendChild(dot);
   }});
   info.innerHTML = branches.map(branch => `<div><strong>${{branch.is_primary_branch ? 'Primary' : 'Secondary'}}</strong> ${{branch.branch_id}}: score=${{Number(branch.branch_score).toExponential(3)}}, rays=${{branch.number_of_matching_rays}}, closest_mean=${{Number(branch.closest_approach_mean_rg).toFixed(3)}} rg, spread=${{Number(branch.pixel_spread).toFixed(2)}} px</div>`).join('');
+}}
+select.addEventListener('change', draw);
+draw();
+</script></body></html>
+""", encoding="utf-8")
+
+
+def _write_gravitational_image_candidate_view(path: Path, primary_rows: list[dict[str, Any]], branches: list[dict[str, Any]], camera_preview_path: Path) -> None:
+    background_uri = ""
+    background_width, background_height = _image_dimensions(camera_preview_path)
+    if camera_preview_path.exists():
+        encoded = base64.b64encode(camera_preview_path.read_bytes()).decode("ascii")
+        background_uri = f"data:image/png;base64,{encoded}"
+    payload = {
+        "candidates": primary_rows,
+        "branches": _branches_by_candidate(branches),
+        "background": background_uri,
+        "background_width": background_width,
+        "background_height": background_height,
+    }
+    path.write_text(f"""<!doctype html>
+<html lang=\"en\"><head><meta charset=\"utf-8\"><title>Gravitational Image Candidate View</title>
+<style>
+body {{ margin:0; font-family:system-ui,sans-serif; background:#f8fafc; color:#0f172a; }}
+.wrap {{ padding:16px; }}
+select {{ font:inherit; padding:6px 8px; }}
+.layout {{ display:grid; grid-template-columns:minmax(320px, 1fr) minmax(360px, 1.4fr); gap:16px; align-items:start; margin-top:14px; }}
+.stage {{ position:relative; display:inline-block; border:1px solid #cbd5e1; background:#020617; }}
+.stage img {{ display:block; max-width:100%; transform:scaleY(-1); }}
+.dot {{ position:absolute; width:18px; height:18px; border-radius:50%; transform:translate(-50%,-50%); border:2px solid #111827; }}
+.primary {{ background:#22c55e; box-shadow:0 0 0 4px rgba(34,197,94,0.25); }}
+.secondary {{ background:#f97316; box-shadow:0 0 0 4px rgba(249,115,22,0.22); }}
+table {{ border-collapse:collapse; width:100%; font-size:13px; background:white; }}
+th, td {{ border:1px solid #cbd5e1; padding:6px 8px; text-align:left; }}
+th {{ background:#e2e8f0; }}
+.note {{ color:#475569; line-height:1.45; }}
+@media (max-width: 850px) {{ .layout {{ grid-template-columns:1fr; }} }}
+</style></head><body><div class=\"wrap\">
+<h1>Gravitational Image Analysis</h1>
+<label>Candidate <select id=\"candidate\"></select></label>
+<div class=\"layout\">
+  <section>
+    <h2>Candidate Story</h2>
+    <div id=\"story\" class=\"note\"></div>
+    <h2>Branch Score Table</h2>
+    <div id=\"table\"></div>
+  </section>
+  <section>
+    <h2>Camera Preview Overlay</h2>
+    <div class=\"stage\" id=\"stage\"><img id=\"bg\" alt=\"Camera Preview background\"></div>
+  </section>
+</div>
+</div>
+<script>
+const payload = {json.dumps(payload)};
+const select = document.getElementById('candidate');
+const stage = document.getElementById('stage');
+const bg = document.getElementById('bg');
+const story = document.getElementById('story');
+const table = document.getElementById('table');
+bg.src = payload.background || '';
+payload.candidates.forEach((candidate, index) => {{
+  const opt = document.createElement('option');
+  opt.value = candidate.candidate_id;
+  opt.textContent = `${{index + 1}} · ${{candidate.candidate_id}}`;
+  select.appendChild(opt);
+}});
+function role(branch) {{
+  if (branch.is_primary_branch) return 'primary';
+  if (branch.branch_rank === 2) return 'secondary';
+  if (branch.branch_rank === 3) return 'tertiary';
+  return `branch ${{branch.branch_rank}}`;
+}}
+function draw() {{
+  [...stage.querySelectorAll('.dot')].forEach(el => el.remove());
+  const candidateId = select.value;
+  const candidate = payload.candidates.find(row => row.candidate_id === candidateId) || {{}};
+  const branches = payload.branches[candidateId] || [];
+  const primary = branches.find(branch => branch.is_primary_branch);
+  const imageHeight = Number(payload.background_height);
+  branches.forEach(branch => {{
+    const dot = document.createElement('div');
+    dot.className = 'dot ' + (branch.is_primary_branch ? 'primary' : 'secondary');
+    dot.style.left = `${{branch.pixel_centroid_x}}px`;
+    dot.style.top = `${{Number.isFinite(imageHeight) ? imageHeight - Number(branch.pixel_centroid_y) : Number(branch.pixel_centroid_y)}}px`;
+    dot.title = `${{role(branch)}} · ${{branch.branch_id}}`;
+    stage.appendChild(dot);
+  }});
+  story.innerHTML = branches.length
+    ? `<p><strong>${{candidateId}}</strong> has ${{branches.length}} gravitational image branch(es). The primary branch is <code>${{primary.branch_id}}</code>, selected by argmax(branch_score). This primary branch is the one forwarded to POWHEG.</p>`
+    : `<p><strong>${{candidateId}}</strong>: No gravitational image branch reconstructed for this candidate.</p>`;
+  table.innerHTML = `<table><thead><tr><th>Branch</th><th>Role</th><th>Rays</th><th>Mean closest</th><th>Min closest</th><th>Pixel spread</th><th>Score</th><th>Why selected?</th></tr></thead><tbody>` +
+    (branches.length ? branches.map(branch => `<tr><td>${{branch.branch_id}}</td><td>${{role(branch)}}</td><td>${{branch.number_of_matching_rays}}</td><td>${{Number(branch.closest_approach_mean_rg).toFixed(4)}}</td><td>${{Number(branch.closest_approach_min_rg).toFixed(4)}}</td><td>${{Number(branch.pixel_spread).toFixed(3)}}</td><td>${{Number(branch.branch_score).toExponential(3)}}</td><td>${{branch.is_primary_branch ? 'selected primary branch by argmax(branch_score)' : 'not maximum branch_score'}}</td></tr>`).join('') : `<tr><td colspan=\"8\">No gravitational image branch reconstructed for this candidate</td></tr>`) +
+    `</tbody></table>`;
 }}
 select.addEventListener('change', draw);
 draw();
@@ -682,20 +984,33 @@ def generate_observer_image_branch_products(values: dict[str, dict[str, Any]], *
         "n_candidates": n_candidates,
         "n_branches": len(all_branches),
         "n_single_image": sum(1 for value in counts if value == 1),
+        "n_single_image_candidates": sum(1 for value in counts if value == 1),
         "n_double_image": sum(1 for value in counts if value == 2),
+        "n_double_image_candidates": sum(1 for value in counts if value == 2),
         "n_triple_image": sum(1 for value in counts if value == 3),
+        "n_triple_image_candidates": sum(1 for value in counts if value == 3),
+        "n_triple_or_more_image": sum(1 for value in counts if value >= 3),
+        "n_triple_or_more_image_candidates": sum(1 for value in counts if value >= 3),
         "n_zero_image": sum(1 for value in counts if value == 0),
+        "n_zero_image_candidates": sum(1 for value in counts if value == 0),
         "maximum_branches_per_candidate": max(counts) if counts else 0,
+        "max_branches_per_candidate": max(counts) if counts else 0,
         "mean_branches_per_candidate": _mean([float(value) for value in counts]),
         "fraction_multiple_images": float(n_multiple / n_candidates) if n_candidates else 0.0,
         "candidates_with_multiple_images": [row["candidate_id"] for row in primary_rows if int(row.get("number_of_image_branches", 0)) > 1],
         "branch_scoring_model": "ray_count_closeness_compactness_proxy",
         "branch_score_definition": "w_rays * w_closest * w_compactness",
+        "branch_score_is_proxy": True,
+        "branch_score_not_true_magnification": True,
         "w_rays_proxy": "number_of_matching_rays",
         "w_closest_proxy": "1 / closest_approach_mean_rg",
         "w_compactness_proxy": "1 / max(pixel_spread, 1 px)",
+        "possible_magnification_proxy": "branch_score",
+        "possible_visibility_proxy": "number_of_matching_rays and closest_approach proxy only",
         "primary_branch_selection_model": "argmax_branch_score",
+        "branch_selection_model": "argmax_branch_score",
         "primary_branch_selection_proxy": True,
+        "powheg_forwarding_uses_primary_branch": True,
     }
 
     branches_path = output_dir / "observer_image_branches.jsonl"
@@ -711,6 +1026,12 @@ def generate_observer_image_branch_products(values: dict[str, dict[str, Any]], *
     viewpoint_audit_path = output_dir / "observer_viewpoint_convention_audit.json"
     viewpoint_png = output_dir / "observer_viewpoint_convention_diagnostic.png"
     orientation_audit_path = output_dir / "observer_image_branches_orientation_audit.json"
+    grav_multiplicity_png = output_dir / "gravitational_image_multiplicity.png"
+    grav_score_breakdown_png = output_dir / "gravitational_image_branch_score_breakdown.png"
+    grav_candidate_story_png = output_dir / "gravitational_image_candidate_story.png"
+    grav_primary_table_csv = output_dir / "gravitational_image_primary_selection_table.csv"
+    grav_powheg_forwarding_csv = output_dir / "gravitational_image_powheg_forwarding_table.csv"
+    grav_candidate_view_html = output_dir / "gravitational_image_candidate_view.html"
     camera_path = camera_preview_dir(run_output_dir) / "hadros3_camera_preview.png"
     overlay_path = bridge_dir / "observer_bridge_camera_overlay.png"
     interactive_path = bridge_dir / "observer_bridge_kerr_interactive_view.html"
@@ -718,10 +1039,16 @@ def generate_observer_image_branch_products(values: dict[str, dict[str, Any]], *
     _write_jsonl(branches_path, all_branches)
     _write_jsonl(primary_path, primary_rows)
     _write_branch_csv(csv_path, all_branches)
+    _write_primary_selection_csv(grav_primary_table_csv, primary_rows, all_branches)
+    _write_powheg_forwarding_csv(grav_powheg_forwarding_csv, primary_rows, all_branches)
     _draw_score_distribution(score_png, all_branches)
+    _draw_gravitational_image_multiplicity(grav_multiplicity_png, stats)
+    _draw_gravitational_image_score_breakdown(grav_score_breakdown_png, all_branches)
+    _draw_gravitational_image_candidate_story(grav_candidate_story_png, primary_rows, all_branches)
     _draw_cluster_map(cluster_png, all_branches, camera_path, values)
     _draw_primary_vs_secondary(primary_png, primary_rows)
     _write_branch_html(html_path, primary_rows, all_branches, camera_path, values)
+    _write_gravitational_image_candidate_view(grav_candidate_view_html, primary_rows, all_branches, camera_path)
     viewpoint_audit = _write_viewpoint_convention_audit(
         viewpoint_audit_path,
         values,
@@ -762,11 +1089,19 @@ def generate_observer_image_branch_products(values: dict[str, dict[str, Any]], *
         "observer_viewpoint_convention_audit": str(viewpoint_audit_path),
         "observer_viewpoint_convention_diagnostic": str(viewpoint_png),
         "observer_image_branches_orientation_audit": str(orientation_audit_path),
+        "gravitational_image_multiplicity": str(grav_multiplicity_png),
+        "gravitational_image_branch_score_breakdown": str(grav_score_breakdown_png),
+        "gravitational_image_candidate_story": str(grav_candidate_story_png),
+        "gravitational_image_primary_selection_table": str(grav_primary_table_csv),
+        "gravitational_image_powheg_forwarding_table": str(grav_powheg_forwarding_csv),
+        "gravitational_image_candidate_view": str(grav_candidate_view_html),
     }
     summary = {
         "stage_name": "H3-W8b Observer Image Branch Analysis",
+        "visual_stage_name": "Gravitational Image Analysis",
         "status": "ok",
         "observer_image_branch_analysis_invoked": True,
+        "gravitational_image_analysis_invoked": True,
         "input_observer_candidate_kerr_pixel_map": str(bridge_dir / "observer_candidate_kerr_pixel_map.jsonl"),
         "input_observer_bridge_selected_candidates": str(bridge_dir / "observer_bridge_selected_candidates.jsonl"),
         "input_observer_bridge_ranked_events": str(bridge_dir / "observer_bridge_ranked_events.jsonl"),
@@ -778,9 +1113,14 @@ def generate_observer_image_branch_products(values: dict[str, dict[str, Any]], *
         "candidates_with_multiple_images": stats["candidates_with_multiple_images"],
         "branch_scoring_model": stats["branch_scoring_model"],
         "branch_score_definition": stats["branch_score_definition"],
+        "branch_score_is_proxy": True,
+        "branch_score_not_true_magnification": True,
         "primary_branch_selection_model": stats["primary_branch_selection_model"],
+        "branch_selection_model": "argmax_branch_score",
         "primary_branch_selection_proxy": True,
+        "powheg_forwarding_uses_primary_branch": True,
         "observer_image_primary_branches_generated": True,
+        "gravitational_image_products_generated": True,
         "observer_viewpoint_convention_audit_generated": True,
         "observer_viewpoint_convention_diagnostic_generated": True,
         "observer_image_branches_orientation_audit_generated": True,

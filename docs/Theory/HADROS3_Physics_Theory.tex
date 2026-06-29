@@ -854,6 +854,9 @@ question. Instead of assigning
 \end{equation}
 it groups all compatible camera rays into observed image branches and selects a
 primary branch by an auditable proxy score.
+The dashboard presents this stage visually as \code{Gravitational Image
+Analysis}, while the legacy \code{ObserverImageBranches/} directory and base
+file names remain the compatibility contract.
 
 \section{Inputs}
 
@@ -910,6 +913,9 @@ w_{\rm compactness} &= \frac{1}{\max(s_{\rm pix},1\,{\rm pixel})}.
 This score favors image branches supported by many rays, small mean closest
 approach, and compact clusters on the image plane. It is a ranking proxy, not a
 full magnification, radiative transfer, or detector-response calculation.
+Reports and provenance explicitly mark this with
+\code{branch_score_is_proxy=true} and
+\code{branch_score_not_true_magnification=true}.
 
 \section{Primary branch selection}
 
@@ -935,10 +941,15 @@ The stage writes exclusively under \code{ObserverImageBranches/}:
 \code{observer_image_statistics.json},
 diagnostic PNGs, a CSV table, and \code{observer_branch_view.html}. Provenance
 records \code{observer_image_branch_analysis_invoked=true},
+\code{gravitational_image_analysis_invoked=true},
+\code{visual_stage_name=Gravitational Image Analysis},
 \code{branch_scoring_model=ray_count_closeness_compactness_proxy},
 \code{primary_branch_selection_model=argmax_branch_score},
 \code{mean_branches_per_candidate}, \code{fraction_multiple_images}, and
-\code{primary_branch_selection_proxy=true}.
+\code{primary_branch_selection_proxy=true}. The stage also writes
+\code{gravitational_image_*} explanatory products for multiplicity, score
+decomposition, primary selection, and POWHEG forwarding without changing the
+selection algorithm.
 
 \section{Physical limitations}
 
@@ -1445,7 +1456,7 @@ optical-depth and accepted interactions & Optical-depth DIS sampler.\\
 Observer Bridge & \code{DIS/dis_accepted_interactions.jsonl} &
 \code{ObserverBridge/} candidates and ranked events & Non-destructive
 geometric scoring proxy.\\
-Observer Image Branches & \code{ObserverBridge/} selected candidates and Kerr
+Gravitational Image Analysis & \code{ObserverBridge/} selected candidates and Kerr
 pixel-map products & \code{ObserverImageBranches/} branches and primary
 branches & Observed image branch proxy selection.\\
 POWHEG Real Smoke & \code{ObserverImageBranches/observer_image_primary_branches.jsonl} &

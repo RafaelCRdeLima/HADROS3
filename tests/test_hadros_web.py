@@ -96,8 +96,11 @@ def test_downstream_selection_lives_in_observer_bridge_and_powheg_consumes_it() 
     assert "field-help" in powheg_panel
     assert "Downstream Candidate Selection" in observer_panel
     assert "Observer Bridge selects the ranked candidates that downstream stages consume." in html
-    assert "Observer Image Branches" in html
-    assert "Analyze Observer Image Branches" in html
+    assert "Gravitational Image Analysis" in html
+    assert "Run Gravitational Image Analysis" in html
+    assert "gravitational_image_multiplicity" in html
+    assert "gravitational_image_powheg_forwarding_table" in html
+    assert "Zero-branch candidates" in html
     assert "primary observed branch consumed by POWHEG" in html
     assert "Number of highest-scoring Observer Bridge candidates selected for downstream stages when policy is top_n." in html
     assert "Number of independent POWHEG Monte Carlo hard-scattering realizations generated for each selected interaction site." in html

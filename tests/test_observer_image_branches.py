@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import csv
 from pathlib import Path
 
 from hadros3.config import defaults
 from hadros3.observer_image_branches import generate_observer_image_branch_products
+from hadros3.provenance import build_provenance
 
 
 def _write_jsonl(path: Path, rows: list[dict[str, object]]) -> None:
@@ -84,6 +86,22 @@ def test_observer_image_branch_analysis_selects_primary_by_branch_score(tmp_path
     assert summary["n_single_image"] == 1
     assert summary["n_double_image"] == 1
     assert summary["fraction_multiple_images"] == 0.5
+    assert summary["gravitational_image_analysis_invoked"] is True
+    assert summary["visual_stage_name"] == "Gravitational Image Analysis"
+    assert summary["branch_score_is_proxy"] is True
+    assert summary["branch_score_not_true_magnification"] is True
+    assert summary["branch_selection_model"] == "argmax_branch_score"
+    assert summary["powheg_forwarding_uses_primary_branch"] is True
+    provenance = build_provenance(
+        root=Path.cwd(),
+        values=defaults(),
+        products={},
+        validation={"expensive_event_generation_invoked": False},
+        observer_image_branch_summary=summary,
+    )
+    assert provenance["observer_image_branches"]["branch_score_is_proxy"] is True
+    assert provenance["observer_image_branches"]["branch_score_not_true_magnification"] is True
+    assert provenance["observer_image_branches"]["visual_stage_name"] == "Gravitational Image Analysis"
     assert {row["candidate_id"] for row in branch_rows} == {"single", "double"}
     double_primary = next(row for row in primary_rows if row["candidate_id"] == "double")
     assert double_primary["number_of_image_branches"] == 2
@@ -103,8 +121,29 @@ def test_observer_image_branch_analysis_selects_primary_by_branch_score(tmp_path
         "observer_viewpoint_convention_audit.json",
         "observer_viewpoint_convention_diagnostic.png",
         "observer_image_branches_orientation_audit.json",
+        "gravitational_image_multiplicity.png",
+        "gravitational_image_branch_score_breakdown.png",
+        "gravitational_image_candidate_story.png",
+        "gravitational_image_primary_selection_table.csv",
+        "gravitational_image_powheg_forwarding_table.csv",
+        "gravitational_image_candidate_view.html",
     ]:
         assert (tmp_path / "ObserverImageBranches" / filename).exists()
+
+    primary_table = list(csv.DictReader((tmp_path / "ObserverImageBranches" / "gravitational_image_primary_selection_table.csv").open(encoding="utf-8")))
+    double_primary_table = next(row for row in primary_table if row["candidate_id"] == "double")
+    assert double_primary_table["primary_branch_id"] == "double:branch-02"
+    assert double_primary_table["why_selected"] == "highest branch_score by argmax(branch_score)"
+
+    powheg_table = list(csv.DictReader((tmp_path / "ObserverImageBranches" / "gravitational_image_powheg_forwarding_table.csv").open(encoding="utf-8")))
+    double_powheg_row = next(row for row in powheg_table if row["powheg_forwarded_candidate_id"] == "double")
+    assert double_powheg_row["powheg_forwarded_branch_id"] == "double:branch-02"
+    assert double_powheg_row["powheg_forwarded_role"] == "primary"
+    assert double_powheg_row["powheg_forwarding_reason"] == "selected primary branch by argmax(branch_score)"
+
+    candidate_view_html = (tmp_path / "ObserverImageBranches" / "gravitational_image_candidate_view.html").read_text(encoding="utf-8")
+    assert "Gravitational Image Analysis" in candidate_view_html
+    assert "This primary branch is the one forwarded to POWHEG" in candidate_view_html
 
     branch_view_html = (tmp_path / "ObserverImageBranches" / "observer_branch_view.html").read_text(encoding="utf-8")
     assert ".stage img { display:block; max-width:100%; transform:scaleY(-1); }" in branch_view_html

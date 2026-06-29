@@ -83,6 +83,11 @@ Every new HADROS3 stage should define and maintain these elements.
    summaries, diagnostics, and Outputs tab entries. Dashboard state must not
    contaminate static presets.
 
+   H3-W8b is presented visually as `Gravitational Image Analysis`. Its
+   compatibility output directory remains `ObserverImageBranches/`, and its
+   reports must make clear that `branch_score` is a proxy ranking score rather
+   than true magnification, radiative-transfer intensity, or detector response.
+
 9. Makefile target
 
    The stage must have an explicit Makefile target. Running that target should

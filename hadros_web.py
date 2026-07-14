@@ -8,6 +8,7 @@ render the geometry/configuration products and exit.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import mimetypes
 import subprocess
@@ -20,10 +21,12 @@ from urllib.parse import urlparse
 from hadros3.camera_preview import available_backends, launch_interactive_camera_preview, render_camera_preview
 from hadros3.config import deep_update, defaults, load_values, run_output_dir, safe_run_name, schema, validate_values
 from hadros3.dis_sampler import generate_dis_interaction_products, generate_gbw_iim_comparison
+from hadros3.event_generation import backend_availability as event_generation_backend_availability, generate_event_generation_products
+from hadros3.geant4_transport import backend_availability as geant4_backend_availability, generate_geant4_products
 from hadros3.forward_geodesics import generate_forward_geodesic_products
 from hadros3.observer_bridge import generate_observer_bridge_products
 from hadros3.observer_image_branches import generate_observer_image_branch_products
-from hadros3.paths import camera_preview_dir, clear_dis_outputs, clear_forward_geodesics_outputs, clear_observer_bridge_outputs, clear_observer_image_branches_outputs, clear_powheg_outputs, dashboard_dir, dis_dir, ensure_output_layout, forward_geodesics_dir, geometry_dir, observer_bridge_dir, observer_image_branches_dir, powheg_dir, rel, run_metadata_dir, uhe_source_dir
+from hadros3.paths import camera_preview_dir, clear_dis_outputs, clear_event_generation_outputs, clear_forward_geodesics_outputs, clear_observer_bridge_outputs, clear_observer_image_branches_outputs, clear_powheg_outputs, dashboard_dir, dis_dir, ensure_output_layout, event_generation_dir, forward_geodesics_dir, geant4_dir, geometry_dir, observer_bridge_dir, observer_image_branches_dir, powheg_dir, rel, run_metadata_dir, uhe_source_dir
 from hadros3.pipeline import render_hadros_web
 from hadros3.powheg import generate_powheg_products
 from hadros3.reuse import discover_original_hadros
@@ -131,6 +134,8 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
     bridge_dir = observer_bridge_dir(output_dir)
     branch_dir = observer_image_branches_dir(output_dir)
     powheg_output_dir = powheg_dir(output_dir)
+    event_output_dir = event_generation_dir(output_dir)
+    geant4_output_dir = geant4_dir(output_dir)
     web_dir = dashboard_dir(output_dir)
 
     camera_preview_path = camera_dir / "hadros3_camera_preview.png"
@@ -261,6 +266,32 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
     powheg_particle_table_html_path = powheg_output_dir / "powheg_particle_table.html"
     powheg_particle_content_report_path = powheg_output_dir / "powheg_particle_content_report.json"
     powheg_lhe_event_view_path = powheg_output_dir / "powheg_lhe_event_view.html"
+    event_summary_path = event_output_dir / "event_generation_summary.json"
+    event_validation_path = event_output_dir / "event_generation_validation_report.json"
+    event_manifest_path = event_output_dir / "event_generation_manifest.json"
+    event_hepmc_path = event_output_dir / "event_generation_events.hepmc3"
+    event_events_path = event_output_dir / "event_generation_events_summary.jsonl"
+    event_particles_path = event_output_dir / "event_generation_final_particles.jsonl"
+    event_multiplicity_path = event_output_dir / "event_generation_multiplicity.png"
+    event_energy_path = event_output_dir / "event_generation_energy_spectrum.png"
+    event_species_path = event_output_dir / "event_generation_species.png"
+    event_conservation_path = event_output_dir / "event_generation_conservation.png"
+    event_view_path = event_output_dir / "event_generation_event_view.html"
+    geant4_summary_path = geant4_output_dir / "geant4_summary.json"
+    geant4_validation_path = geant4_output_dir / "geant4_validation_report.json"
+    geant4_manifest_path = geant4_output_dir / "geant4_manifest.json"
+    geant4_environment_path = geant4_output_dir / "geant4_environment_manifest.json"
+    geant4_import_path = geant4_output_dir / "geant4_import_report.json"
+    geant4_events_path = geant4_output_dir / "geant4_events_summary.jsonl"
+    geant4_escaped_path = geant4_output_dir / "geant4_escaped_particles.jsonl"
+    geant4_steps_path = geant4_output_dir / "geant4_steps.jsonl"
+    geant4_sites_path = geant4_output_dir / "geant4_sites.json"
+    geant4_unsupported_path = geant4_output_dir / "geant4_unsupported_particles.jsonl"
+    geant4_energy_balance_path = geant4_output_dir / "geant4_energy_balance.png"
+    geant4_escape_spectrum_path = geant4_output_dir / "geant4_escape_spectrum.png"
+    geant4_domain_audit_path = geant4_output_dir / "geant4_domain_audit.png"
+    geant4_view_path = geant4_output_dir / "geant4_event_view.html"
+    geant4_macro_view_path = geant4_output_dir / "geant4_macro_sites_3d.html"
     html_path = web_dir / "index.html"
 
     camera_summary: dict[str, Any] | None = None
@@ -270,6 +301,10 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
     observer_bridge_summary: dict[str, Any] | None = None
     observer_image_branch_summary: dict[str, Any] | None = None
     powheg_summary: dict[str, Any] | None = None
+    event_generation_summary: dict[str, Any] | None = None
+    event_generation_result_state = "not_run"
+    geant4_summary: dict[str, Any] | None = None
+    geant4_result_state = "not_run"
     if camera_summary_path.exists():
         try:
             camera_summary = json.loads(camera_summary_path.read_text(encoding="utf-8"))
@@ -305,6 +340,43 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             powheg_summary = json.loads(powheg_summary_json_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             powheg_summary = {"status": "invalid_summary", "message": "Could not parse POWHEG summary."}
+    if event_summary_path.exists():
+        try:
+            event_generation_summary = json.loads(event_summary_path.read_text(encoding="utf-8"))
+            event_generation_result_state = "completed_not_running"
+            current_hash = hashlib.sha256(json.dumps(values.get("event_generation", {}), sort_keys=True).encode()).hexdigest()
+            recorded_hash = None
+            if event_manifest_path.exists():
+                recorded_hash = json.loads(event_manifest_path.read_text(encoding="utf-8")).get("configuration_sha256")
+            event_generation_summary = dict(event_generation_summary)
+            event_generation_summary["is_running"] = False
+            event_generation_summary["result_origin"] = "existing_output_on_disk"
+            event_generation_summary["configuration_matches_current"] = bool(recorded_hash and recorded_hash == current_hash)
+            if not event_generation_summary["configuration_matches_current"]:
+                event_generation_summary["original_status"] = event_generation_summary.get("status")
+                event_generation_summary["status"] = "stale"
+                event_generation_summary["message"] = "Previous Event Generation output; current configuration differs. No generator process is running."
+                event_generation_result_state = "stale_not_running"
+        except json.JSONDecodeError:
+            event_generation_summary = {"status": "invalid_summary", "message": "Could not parse Event Generation summary."}
+            event_generation_result_state = "invalid_not_running"
+    if geant4_summary_path.exists():
+        try:
+            geant4_summary = json.loads(geant4_summary_path.read_text(encoding="utf-8"))
+            geant4_result_state = "completed_not_running" if geant4_summary.get("status") == "ok" else "unsupported_domain_not_running"
+            current_hash = hashlib.sha256(json.dumps(values.get("geant4", {}), sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+            recorded_hash = json.loads(geant4_manifest_path.read_text(encoding="utf-8")).get("configuration_sha256") if geant4_manifest_path.exists() else None
+            geant4_summary = dict(geant4_summary)
+            geant4_summary["geant4_process_running"] = False
+            geant4_summary["configuration_matches_current"] = bool(recorded_hash and recorded_hash == current_hash)
+            if not geant4_summary["configuration_matches_current"]:
+                geant4_summary["original_status"] = geant4_summary.get("status")
+                geant4_summary["status"] = "stale"
+                geant4_summary["message"] = "Previous GEANT4 output; current configuration differs. No GEANT4 process is running."
+                geant4_result_state = "stale_not_running"
+        except (json.JSONDecodeError, OSError):
+            geant4_summary = {"status": "invalid_summary", "message": "Could not parse GEANT4 summary."}
+            geant4_result_state = "invalid_not_running"
     bridge_required_products = {
         "observer_bridge_candidates.jsonl": bridge_candidates_path.exists(),
         "observer_bridge_ranked_events.jsonl": bridge_ranked_path.exists(),
@@ -341,12 +413,18 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
         "config": str(config_path) if config_path is not None else None,
         "release": load_release_metadata(ROOT),
         "camera_backends": available_backends(),
+        "event_generation_backend": event_generation_backend_availability(),
+        "geant4_backend": geant4_backend_availability(),
         "camera_summary": camera_summary,
         "source_summary": source_summary,
         "forward_summary": forward_summary,
         "dis_summary": dis_summary,
         "observer_bridge_summary": observer_bridge_summary,
         "powheg_summary": powheg_summary,
+        "event_generation_summary": event_generation_summary,
+        "event_generation_result_state": event_generation_result_state,
+        "geant4_summary": geant4_summary,
+        "geant4_result_state": geant4_result_state,
         "source_status": {
             "configured_status": values.get("uhe_neutrino_source", {}).get("status"),
             "input_dir": rel(source_dir, output_dir),
@@ -625,6 +703,82 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "powheg_lhe_event_view": rel(powheg_lhe_event_view_path, output_dir),
             },
         },
+        "event_generation": {
+            "backend": event_generation_backend_availability(),
+            "input_powheg_lhe_found": powheg_lhe_path.exists(),
+            "output_dir": rel(event_output_dir, output_dir),
+            "summary": event_generation_summary,
+            "result_state": event_generation_result_state,
+            "is_running": False,
+            "products": {
+                "event_generation_summary": event_summary_path.exists(),
+                "event_generation_validation_report": event_validation_path.exists(),
+                "event_generation_manifest": event_manifest_path.exists(),
+                "event_generation_events": event_hepmc_path.exists(),
+                "event_generation_events_summary": event_events_path.exists(),
+                "event_generation_final_particles": event_particles_path.exists(),
+                "event_generation_multiplicity": event_multiplicity_path.exists(),
+                "event_generation_energy_spectrum": event_energy_path.exists(),
+                "event_generation_species": event_species_path.exists(),
+                "event_generation_conservation": event_conservation_path.exists(),
+                "event_generation_event_view": event_view_path.exists(),
+            },
+            "links": {
+                "event_generation_summary": rel(event_summary_path, output_dir),
+                "event_generation_validation_report": rel(event_validation_path, output_dir),
+                "event_generation_manifest": rel(event_manifest_path, output_dir),
+                "event_generation_events": rel(event_hepmc_path, output_dir),
+                "event_generation_events_summary": rel(event_events_path, output_dir),
+                "event_generation_final_particles": rel(event_particles_path, output_dir),
+                "event_generation_multiplicity": rel(event_multiplicity_path, output_dir),
+                "event_generation_energy_spectrum": rel(event_energy_path, output_dir),
+                "event_generation_species": rel(event_species_path, output_dir),
+                "event_generation_conservation": rel(event_conservation_path, output_dir),
+                "event_generation_event_view": rel(event_view_path, output_dir),
+            },
+        },
+        "geant4": {
+            "backend": geant4_backend_availability(),
+            "input_event_generation_found": event_hepmc_path.exists() and event_manifest_path.exists(),
+            "output_dir": rel(geant4_output_dir, output_dir),
+            "summary": geant4_summary,
+            "result_state": geant4_result_state,
+            "is_running": False,
+            "products": {
+                "geant4_summary": geant4_summary_path.exists(),
+                "geant4_validation_report": geant4_validation_path.exists(),
+                "geant4_manifest": geant4_manifest_path.exists(),
+                "geant4_environment_manifest": geant4_environment_path.exists(),
+                "geant4_import_report": geant4_import_path.exists(),
+                "geant4_events_summary": geant4_events_path.exists(),
+                "geant4_escaped_particles": geant4_escaped_path.exists(),
+                "geant4_steps": geant4_steps_path.exists(),
+                "geant4_sites": geant4_sites_path.exists(),
+                "geant4_unsupported_particles": geant4_unsupported_path.exists(),
+                "geant4_energy_balance": geant4_energy_balance_path.exists(),
+                "geant4_escape_spectrum": geant4_escape_spectrum_path.exists(),
+                "geant4_domain_audit": geant4_domain_audit_path.exists(),
+                "geant4_event_view": geant4_view_path.exists(),
+                "geant4_macro_sites_3d": geant4_macro_view_path.exists(),
+            },
+            "links": {
+                "geant4_summary": rel(geant4_summary_path, output_dir),
+                "geant4_validation_report": rel(geant4_validation_path, output_dir),
+                "geant4_manifest": rel(geant4_manifest_path, output_dir),
+                "geant4_environment_manifest": rel(geant4_environment_path, output_dir),
+                "geant4_import_report": rel(geant4_import_path, output_dir),
+                "geant4_events_summary": rel(geant4_events_path, output_dir),
+                "geant4_escaped_particles": rel(geant4_escaped_path, output_dir),
+                "geant4_steps": rel(geant4_steps_path, output_dir),
+                "geant4_sites": rel(geant4_sites_path, output_dir),
+                "geant4_unsupported_particles": rel(geant4_unsupported_path, output_dir),
+                "geant4_energy_balance": rel(geant4_energy_balance_path, output_dir),
+                "geant4_escape_spectrum": rel(geant4_escape_spectrum_path, output_dir),
+                "geant4_domain_audit": rel(geant4_domain_audit_path, output_dir),
+                "geant4_event_view": rel(geant4_view_path, output_dir),
+                "geant4_macro_sites_3d": rel(geant4_macro_view_path, output_dir),
+            },
+        },
         "pipeline_status": [
             {"stage": "Geometry", "status": "done" if geometry_preview_path.exists() else "pending", "tab": "Camera"},
             {"stage": "Camera", "status": "done" if camera_preview_path.exists() else "pending", "tab": "Camera"},
@@ -634,8 +788,8 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             {"stage": "Observer Bridge", "status": "done" if bridge_summary_complete else "pending", "tab": "Observer Bridge"},
             {"stage": "Gravitational Image Analysis", "status": "done" if branch_summary_path.exists() else "pending", "tab": "Gravitational Image Analysis"},
             {"stage": "POWHEG", "status": "done" if powheg_summary_json_path.exists() else "pending", "tab": "POWHEG"},
-            {"stage": "Event Generation", "status": "pending", "tab": "Event Generation"},
-            {"stage": "GEANT4", "status": "pending", "tab": "GEANT4"},
+            {"stage": "Event Generation", "status": "done_not_running" if event_generation_result_state == "completed_not_running" and event_generation_summary and event_generation_summary.get("status") == "ok" else ("stale_not_running" if event_generation_result_state == "stale_not_running" else ("disabled_not_run" if values.get("event_generation", {}).get("mode") == "disabled" else ("ready_to_run_not_running" if powheg_lhe_path.exists() else "not_run"))), "tab": "Event Generation"},
+            {"stage": "GEANT4", "status": ("done_not_running" if geant4_result_state == "completed_not_running" else ("unsupported_domain_not_running" if geant4_result_state == "unsupported_domain_not_running" else ("stale_not_running" if geant4_result_state == "stale_not_running" else ("disabled_not_run" if values.get("geant4", {}).get("mode") == "disabled" else ("ready_to_run_not_running" if event_hepmc_path.exists() else "not_run"))))), "tab": "GEANT4"},
             {"stage": "Photon Transport", "status": "pending", "tab": "Photon Transport"},
             {"stage": "Spectra", "status": "pending", "tab": "Spectra"},
         ],
@@ -766,6 +920,32 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
             "powheg_particle_table_html_exists": powheg_particle_table_html_path.exists(),
             "powheg_particle_content_report_exists": powheg_particle_content_report_path.exists(),
             "powheg_lhe_event_view_exists": powheg_lhe_event_view_path.exists(),
+            "event_generation_summary_exists": event_summary_path.exists(),
+            "event_generation_validation_report_exists": event_validation_path.exists(),
+            "event_generation_manifest_exists": event_manifest_path.exists(),
+            "event_generation_events_exists": event_hepmc_path.exists(),
+            "event_generation_events_summary_exists": event_events_path.exists(),
+            "event_generation_final_particles_exists": event_particles_path.exists(),
+            "event_generation_multiplicity_exists": event_multiplicity_path.exists(),
+            "event_generation_energy_spectrum_exists": event_energy_path.exists(),
+            "event_generation_species_exists": event_species_path.exists(),
+            "event_generation_conservation_exists": event_conservation_path.exists(),
+            "event_generation_event_view_exists": event_view_path.exists(),
+            "geant4_summary_exists": geant4_summary_path.exists(),
+            "geant4_validation_report_exists": geant4_validation_path.exists(),
+            "geant4_manifest_exists": geant4_manifest_path.exists(),
+            "geant4_environment_manifest_exists": geant4_environment_path.exists(),
+            "geant4_import_report_exists": geant4_import_path.exists(),
+            "geant4_events_summary_exists": geant4_events_path.exists(),
+            "geant4_escaped_particles_exists": geant4_escaped_path.exists(),
+            "geant4_steps_exists": geant4_steps_path.exists(),
+            "geant4_sites_exists": geant4_sites_path.exists(),
+            "geant4_unsupported_particles_exists": geant4_unsupported_path.exists(),
+            "geant4_energy_balance_exists": geant4_energy_balance_path.exists(),
+            "geant4_escape_spectrum_exists": geant4_escape_spectrum_path.exists(),
+            "geant4_domain_audit_exists": geant4_domain_audit_path.exists(),
+            "geant4_event_view_exists": geant4_view_path.exists(),
+            "geant4_macro_sites_3d_exists": geant4_macro_view_path.exists(),
             "provenance_exists": provenance_path.exists(),
             "config_exists": config_output_path.exists(),
             "render_summary_exists": render_summary_path.exists(),
@@ -897,6 +1077,32 @@ def dashboard_payload(values: dict[str, dict[str, Any]], config_path: Path | Non
                 "powheg_particle_table_html": rel(powheg_particle_table_html_path, output_dir),
                 "powheg_particle_content_report": rel(powheg_particle_content_report_path, output_dir),
                 "powheg_lhe_event_view": rel(powheg_lhe_event_view_path, output_dir),
+                "event_generation_summary": rel(event_summary_path, output_dir),
+                "event_generation_validation_report": rel(event_validation_path, output_dir),
+                "event_generation_manifest": rel(event_manifest_path, output_dir),
+                "event_generation_events": rel(event_hepmc_path, output_dir),
+                "event_generation_events_summary": rel(event_events_path, output_dir),
+                "event_generation_final_particles": rel(event_particles_path, output_dir),
+                "event_generation_multiplicity": rel(event_multiplicity_path, output_dir),
+                "event_generation_energy_spectrum": rel(event_energy_path, output_dir),
+                "event_generation_species": rel(event_species_path, output_dir),
+                "event_generation_conservation": rel(event_conservation_path, output_dir),
+                "event_generation_event_view": rel(event_view_path, output_dir),
+                "geant4_summary": rel(geant4_summary_path, output_dir),
+                "geant4_validation_report": rel(geant4_validation_path, output_dir),
+                "geant4_manifest": rel(geant4_manifest_path, output_dir),
+                "geant4_environment_manifest": rel(geant4_environment_path, output_dir),
+                "geant4_import_report": rel(geant4_import_path, output_dir),
+                "geant4_events_summary": rel(geant4_events_path, output_dir),
+                "geant4_escaped_particles": rel(geant4_escaped_path, output_dir),
+                "geant4_steps": rel(geant4_steps_path, output_dir),
+                "geant4_sites": rel(geant4_sites_path, output_dir),
+                "geant4_unsupported_particles": rel(geant4_unsupported_path, output_dir),
+                "geant4_energy_balance": rel(geant4_energy_balance_path, output_dir),
+                "geant4_escape_spectrum": rel(geant4_escape_spectrum_path, output_dir),
+                "geant4_domain_audit": rel(geant4_domain_audit_path, output_dir),
+                "geant4_event_view": rel(geant4_view_path, output_dir),
+                "geant4_macro_sites_3d": rel(geant4_macro_view_path, output_dir),
                 "provenance": rel(provenance_path, output_dir),
                 "render_summary": rel(render_summary_path, output_dir),
                 "html_summary": rel(html_path, output_dir),
@@ -1030,6 +1236,7 @@ let forwardPreviewVersion = Date.now();
 let disPreviewVersion = Date.now();
 let observerBridgePreviewVersion = Date.now();
 let powhegPreviewVersion = Date.now();
+let eventGenerationPreviewVersion = Date.now();
 function outPath(key) {{
   return state.outputs.paths && state.outputs.paths[key] ? state.outputs.paths[key] : key;
 }}
@@ -1583,6 +1790,77 @@ async function preparePowheg() {{
     }}
   }}
   finally {{ button.disabled = false; }}
+}}
+async function runEventGeneration() {{
+  const button = document.querySelector("#event-generation-button");
+  button.disabled = true;
+  button.textContent = "Running Event Generation…";
+  try {{
+    const values = collect();
+    const result = await post("/api/event-generation", {{values, action: "run_event_generation"}});
+    if (result.ok && result.data && result.data.event_generation) {{
+      state.values = values;
+      state.event_generation_summary = result.data.event_generation;
+      state.event_generation_result_state = "completed_not_running";
+      eventGenerationPreviewVersion = Date.now();
+      state.event_generation = Object.assign({{}}, state.event_generation || {{}}, {{summary: result.data.event_generation, result_state: "completed_not_running", is_running: false}});
+      Object.assign(state.outputs, {{
+        event_generation_summary_exists: true,
+        event_generation_validation_report_exists: true,
+        event_generation_manifest_exists: true,
+        event_generation_events_exists: Boolean(result.data.event_generation.products && result.data.event_generation.products.event_generation_events),
+        event_generation_events_summary_exists: true,
+        event_generation_final_particles_exists: true,
+        event_generation_multiplicity_exists: result.data.event_generation.event_generation_mode !== "dry_run",
+        event_generation_energy_spectrum_exists: result.data.event_generation.event_generation_mode !== "dry_run",
+        event_generation_species_exists: result.data.event_generation.event_generation_mode !== "dry_run",
+        event_generation_conservation_exists: result.data.event_generation.event_generation_mode !== "dry_run",
+        event_generation_event_view_exists: true,
+      }});
+      activeTab = "Event Generation";
+      render();
+    }}
+  }} finally {{
+    const currentButton = document.querySelector("#event-generation-button");
+    if (currentButton) {{ currentButton.disabled = false; currentButton.textContent = "Run Event Generation"; }}
+  }}
+}}
+async function runGeant4() {{
+  const button = document.querySelector("#geant4-button");
+  button.disabled = true;
+  button.textContent = "Running GEANT4…";
+  try {{
+    const values = collect();
+    const result = await post("/api/geant4", {{values, action: "run_geant4"}});
+    if (result.ok && result.data && result.data.geant4) {{
+      state.values = values;
+      state.geant4_summary = result.data.geant4;
+      state.geant4_result_state = result.data.geant4.status === "unsupported_domain" ? "unsupported_domain_not_running" : "completed_not_running";
+      state.geant4 = Object.assign({{}}, state.geant4 || {{}}, {{summary: result.data.geant4, result_state: state.geant4_result_state, is_running: false}});
+      Object.assign(state.outputs, {{
+        geant4_summary_exists: true,
+        geant4_validation_report_exists: true,
+        geant4_manifest_exists: true,
+        geant4_environment_manifest_exists: true,
+        geant4_import_report_exists: true,
+        geant4_events_summary_exists: Boolean(result.data.geant4.geant4_invoked),
+        geant4_escaped_particles_exists: Boolean(result.data.geant4.geant4_invoked),
+        geant4_steps_exists: Boolean(result.data.geant4.geant4_invoked),
+        geant4_sites_exists: Boolean(result.data.geant4.geant4_invoked),
+        geant4_unsupported_particles_exists: true,
+        geant4_energy_balance_exists: Boolean(result.data.geant4.geant4_invoked),
+        geant4_escape_spectrum_exists: Boolean(result.data.geant4.geant4_invoked),
+        geant4_domain_audit_exists: result.data.geant4.status === "unsupported_domain",
+        geant4_event_view_exists: true,
+        geant4_macro_sites_3d_exists: Boolean(result.data.geant4.geant4_invoked),
+      }});
+      activeTab = "GEANT4";
+      render();
+    }}
+  }} finally {{
+    const currentButton = document.querySelector("#geant4-button");
+    if (currentButton) {{ currentButton.disabled = false; currentButton.textContent = "Run GEANT4"; }}
+  }}
 }}
 async function launchInteractiveCameraPreview() {{
   const button = document.querySelector("#interactive-camera-button");
@@ -2333,6 +2611,87 @@ function renderPowhegPanel() {{
     ${{links}}
   </div>`;
 }}
+function renderEventGenerationPanel() {{
+  const tab = state.schema.find(t => tabLabel(t) === "Event Generation");
+  const summary = state.event_generation_summary || (state.event_generation && state.event_generation.summary) || {{}};
+  const backend = state.event_generation_backend || {{}};
+  const inputReady = Boolean(state.event_generation && state.event_generation.input_powheg_lhe_found);
+  const mode = state.values.event_generation.mode || "disabled";
+  const runnable = backend.available && inputReady && mode !== "disabled";
+  const validation = summary.validation || {{}};
+  const resultState = state.event_generation_result_state || (state.event_generation && state.event_generation.result_state) || "not_run";
+  const statusText = resultState === "stale_not_running"
+    ? "completed previously — configuration changed"
+    : (summary.status === "ok" ? "completed successfully" : "not run");
+  const diagnostics = ["multiplicity", "energy_spectrum", "species", "conservation"].map(name =>
+    state.outputs[`event_generation_${{name}}_exists`] ? `<figure class="diagnostic-plot-card"><figcaption>${{name.replaceAll("_", " ")}}</figcaption><a href="${{outUrl(`event_generation_${{name}}`)}}" target="_blank"><img src="${{outUrl(`event_generation_${{name}}`)}}?v=${{eventGenerationPreviewVersion}}" alt="${{name}}"></a></figure>` : ""
+  ).join("");
+  return `<section><h2>H3-W10 PYTHIA 8 Event Generation</h2>
+    <p class="note">Consumes validated POWHEG LHE. FSR is matched with a SCALUP veto; ISR remains experimental and is disabled by default after the UHE conservation audit.</p>
+    <table class="backend-table"><tbody>
+      <tr><th>Installed backend</th><td>${{backend.available ? "available for a future manual run" : "unavailable"}}</td></tr>
+      <tr><th>PYTHIA</th><td><code>${{backend.pythia_version || "not found"}}</code></td></tr>
+      <tr><th>HepMC3</th><td><code>${{backend.hepmc3_version || "not found"}}</code></td></tr>
+      <tr><th>POWHEG LHE input</th><td>${{inputReady ? "available (does not start generation)" : "missing"}}</td></tr>
+      <tr><th>Execution status</th><td><strong>${{statusText}}</strong></td></tr>
+      <tr><th>Generated events</th><td>${{summary.n_events_generated || 0}}</td></tr>
+      <tr><th>Final particles</th><td>${{summary.n_final_particles || 0}}</td></tr>
+      <tr><th>Max four-momentum residual</th><td><code>${{validation.four_momentum_residual_relative_max ?? "not run"}}</code></td></tr>
+    </tbody></table></section>
+    <section><h2>Configuration</h2>${{renderFields(tab)}}</section>
+    <section><h2>Run</h2><button type="button" id="event-generation-button" class="source-action" ${{runnable ? "" : "disabled"}}>Run Event Generation</button>
+    <p class="note">${{runnable ? "Backend and LHE are ready." : "Select a non-disabled mode and provide a valid real POWHEG LHE."}}</p></section>
+    ${{diagnostics ? `<section><h2>Diagnostics</h2><div class="diagnostic-card-grid">${{diagnostics}}</div></section>` : ""}}
+    ${{state.outputs.event_generation_event_view_exists ? `<p><a href="${{outUrl("event_generation_event_view")}}" target="_blank">Open event viewer</a></p>` : ""}}`;
+}}
+function renderGeant4Panel() {{
+  const tab = state.schema.find(t => tabLabel(t) === "GEANT4");
+  const summary = state.geant4_summary || (state.geant4 && state.geant4.summary) || {{}};
+  const backend = state.geant4_backend || (state.geant4 && state.geant4.backend) || {{}};
+  const inputReady = Boolean(state.geant4 && state.geant4.input_event_generation_found);
+  const mode = state.values.geant4.mode || "disabled";
+  const runnable = backend.available && mode !== "disabled" && (inputReady || mode === "environment_check");
+  const validation = summary.validation || {{}};
+  const stateText = summary.status === "ok" ? "completed — not currently running"
+    : (summary.status === "unsupported_domain" ? "input outside validated physics domain — no transport started"
+    : (summary.status === "stale" ? "previous result is stale — not currently running" : "not run"));
+  const diagnostics = ["energy_balance", "escape_spectrum"].map(name =>
+    state.outputs[`geant4_${{name}}_exists`] ? `<figure class="diagnostic-plot-card"><figcaption>${{name.replaceAll("_", " ")}}</figcaption><a href="${{outUrl(`geant4_${{name}}`)}}" target="_blank"><img src="${{outUrl(`geant4_${{name}}`)}}?v=${{Date.now()}}" alt="${{name}}"></a></figure>` : ""
+  ).join("");
+  const domainViolations = Array.isArray(summary.domain_violations) ? summary.domain_violations : [];
+  const domainRows = domainViolations.slice(0, 12).map(row => `<tr><td>${{Number(row.event_id)}}</td><td>${{Number(row.particle_id)}}</td><td>${{Number(row.pdg_id)}}</td><td><code>${{Number(row.energy_gev).toExponential(6)}}</code></td><td><code>${{Number(row.energy_gev / row.validated_maximum_energy_gev).toFixed(1)}}×</code></td></tr>`).join("");
+  const domainAudit = summary.status === "unsupported_domain" ? `<section class="warning-card"><h2>Domain audit result</h2>
+    <p><strong>The run did produce an audit result, but transport was intentionally not started.</strong> ${{summary.unsupported_energy_particles || 0}} of ${{summary.final_primaries || 0}} final primaries exceed the validated ceiling. The largest input energy is <code>${{Number(summary.maximum_input_energy_gev).toExponential(6)}} GeV</code>.</p>
+    ${{domainRows ? `<table class="backend-table"><thead><tr><th>Event</th><th>Particle</th><th>PDG</th><th>Energy [GeV]</th><th>Above ceiling</th></tr></thead><tbody>${{domainRows}}</tbody></table>${{domainViolations.length > 12 ? `<p>Showing 12 of ${{domainViolations.length}} violations.</p>` : ""}}` : ""}}
+    ${{state.outputs.geant4_domain_audit_exists ? `<p><a href="${{outUrl("geant4_domain_audit")}}" target="_blank"><img src="${{outUrl("geant4_domain_audit")}}?v=${{Date.now()}}" alt="GEANT4 input-domain audit"></a></p>` : ""}}
+    <p><a href="${{outUrl("geant4_import_report")}}" target="_blank">Open the complete HepMC3/domain audit</a></p></section>` : "";
+  return `<section><h2>H3-W11 GEANT4 Local Material Transport</h2>
+    <p class="note">Consumes the validated H3-W10 HepMC3 state in the local matter tetrad. Kerr propagation remains in H3-W12. FTFP_BERT inputs above the configured validated ceiling are refused before BeamOn.</p>
+    <table class="backend-table"><tbody>
+      <tr><th>Backend</th><td>${{backend.available ? "available" : "unavailable"}}</td></tr>
+      <tr><th>Geant4</th><td><code>${{backend.geant4_version || "not found"}}</code></td></tr>
+      <tr><th>HepMC3</th><td><code>${{backend.hepmc3_version || "not found"}}</code></td></tr>
+      <tr><th>H3-W10 input</th><td>${{inputReady ? "available (does not start transport)" : "missing"}}</td></tr>
+      <tr><th>Execution status</th><td><strong>${{stateText}}</strong></td></tr>
+      <tr><th>Execution model</th><td><code>${{summary.execution_model || state.values.geant4.execution_model || "single fixture"}}</code></td></tr>
+      <tr><th>Isolated site jobs / workers</th><td>${{summary.site_jobs || 0}} / ${{summary.site_workers || state.values.geant4.site_workers || 1}}</td></tr>
+      <tr><th>Events transported</th><td>${{summary.events_transported || 0}}</td></tr>
+      <tr><th>Escaping particles</th><td>${{summary.escaped_particles || 0}}</td></tr>
+      <tr><th>Patch material</th><td><code>${{summary.material || state.values.geant4.material}}</code>${{summary.status === "ok" && summary.density_applied_to_material === false ? " — NIST built-in density; local DIS density was not applied" : ""}}</td></tr>
+      <tr><th>Unsupported-energy particles</th><td>${{summary.unsupported_energy_particles || 0}}</td></tr>
+      <tr><th>Max input / validated ceiling [GeV]</th><td><code>${{summary.maximum_input_energy_gev ?? "-"}} / ${{summary.validated_maximum_energy_gev ?? state.values.geant4.validated_maximum_energy_gev}}</code></td></tr>
+      <tr><th>Energy ledger residual</th><td><code>${{validation.max_abs_normalized_unexplained_residual ?? "not transported"}}</code></td></tr>
+      <tr><th>Recorded trajectory steps</th><td>${{summary.recorded_steps || 0}}${{summary.steps_truncated ? " (truncated at configured limit)" : ""}}</td></tr>
+      <tr><th>Macro transport sites</th><td>${{summary.geant4_sites || 0}}</td></tr>
+    </tbody></table></section>
+    ${{state.outputs.geant4_macro_sites_3d_exists ? `<section><h2>Macro system and GEANT4 sites</h2><p class="note">Click a green site to open the corresponding local Geant4 volume in a new window. The local millimetre box is shown as a two-scale inset, not at the BH-system scale.</p><p><a href="${{outUrl("geant4_macro_sites_3d")}}" target="_blank">Open full-size macro 3D view</a></p><iframe class="context-interactive" src="${{outUrl("geant4_macro_sites_3d")}}?v=${{Date.now()}}" title="GEANT4 sites in the HADROS3 macro system"></iframe></section>` : ""}}
+    ${{domainAudit}}
+    <section><h2>Configuration</h2>${{renderFields(tab)}}</section>
+    <section><h2>Run</h2><button type="button" id="geant4-button" class="source-action" ${{runnable ? "" : "disabled"}}>Run GEANT4</button>
+    <p class="note">${{runnable ? "This action explicitly starts H3-W11." : "Select a non-disabled mode; Event Generation input is required except for environment_check."}}</p></section>
+    ${{diagnostics ? `<section><h2>Diagnostics</h2><div class="diagnostic-card-grid">${{diagnostics}}</div></section>` : ""}}
+    ${{state.outputs.geant4_event_view_exists ? `<p><a href="${{outUrl("geant4_event_view")}}" target="_blank">${{summary.status === "unsupported_domain" ? "Open domain-audit details" : "Open GEANT4 event viewer"}}</a></p>` : ""}}`;
+}}
 function renderContextPanel() {{
   const geometryPreviewTabs = new Set(["Camera", "Black Hole", "Torus / Medium", "Funnel / Cone"]);
   if (geometryPreviewTabs.has(activeTab)) {{
@@ -2624,6 +2983,33 @@ function renderOutputsPanel() {{
     ${{out.powheg_lhe_energy_spectrum_exists ? `<img src="${{outUrl("powheg_lhe_energy_spectrum")}}" alt="POWHEG LHE energy spectrum">` : ""}}
     ${{link(out.powheg_lhe_momentum_spectrum_exists, "powheg_lhe_momentum_spectrum", "POWHEG LHE momentum spectrum")}}
     ${{out.powheg_lhe_momentum_spectrum_exists ? `<img src="${{outUrl("powheg_lhe_momentum_spectrum")}}" alt="POWHEG LHE momentum spectrum">` : ""}}
+  `) + group("EventGeneration/", `
+    ${{link(out.event_generation_summary_exists, "event_generation_summary", "Event Generation summary")}}
+    ${{link(out.event_generation_validation_report_exists, "event_generation_validation_report", "Numerical validation")}}
+    ${{link(out.event_generation_manifest_exists, "event_generation_manifest", "Reproducibility manifest")}}
+    ${{link(out.event_generation_events_exists, "event_generation_events", "HepMC3 events")}}
+    ${{link(out.event_generation_events_summary_exists, "event_generation_events_summary", "Event summaries JSONL")}}
+    ${{link(out.event_generation_final_particles_exists, "event_generation_final_particles", "Final particles JSONL")}}
+    ${{link(out.event_generation_event_view_exists, "event_generation_event_view", "Event viewer")}}
+  `) + group("GEANT4/", `
+    ${{link(out.geant4_summary_exists, "geant4_summary", "GEANT4 summary")}}
+    ${{link(out.geant4_validation_report_exists, "geant4_validation_report", "GEANT4 numerical validation")}}
+    ${{link(out.geant4_manifest_exists, "geant4_manifest", "GEANT4 reproducibility manifest")}}
+    ${{link(out.geant4_environment_manifest_exists, "geant4_environment_manifest", "GEANT4 environment and datasets")}}
+    ${{link(out.geant4_import_report_exists, "geant4_import_report", "HepMC3/domain audit")}}
+    ${{link(out.geant4_events_summary_exists, "geant4_events_summary", "Transported event summaries")}}
+    ${{link(out.geant4_escaped_particles_exists, "geant4_escaped_particles", "Escaping particles for H3-W12")}}
+    ${{link(out.geant4_steps_exists, "geant4_steps", "Recorded Geant4 trajectory steps")}}
+    ${{link(out.geant4_sites_exists, "geant4_sites", "Macro-to-local Geant4 site map")}}
+    ${{link(out.geant4_unsupported_particles_exists, "geant4_unsupported_particles", "Unsupported particles")}}
+    ${{link(out.geant4_macro_sites_3d_exists, "geant4_macro_sites_3d", "Macro system with clickable Geant4 sites")}}
+    ${{link(out.geant4_event_view_exists, "geant4_event_view", "GEANT4 event viewer")}}
+    ${{link(out.geant4_energy_balance_exists, "geant4_energy_balance", "Energy ledger")}}
+    ${{out.geant4_energy_balance_exists ? `<img src="${{outUrl("geant4_energy_balance")}}" alt="GEANT4 energy ledger">` : ""}}
+    ${{link(out.geant4_escape_spectrum_exists, "geant4_escape_spectrum", "Escape spectrum")}}
+    ${{out.geant4_escape_spectrum_exists ? `<img src="${{outUrl("geant4_escape_spectrum")}}" alt="GEANT4 escape spectrum">` : ""}}
+    ${{link(out.geant4_domain_audit_exists, "geant4_domain_audit", "Input-domain audit plot")}}
+    ${{out.geant4_domain_audit_exists ? `<img src="${{outUrl("geant4_domain_audit")}}" alt="GEANT4 input-domain audit">` : ""}}
   `) + group("Dashboard/", `
     ${{link(out.html_summary_exists, "html_summary", "Dashboard HTML")}}
   `);
@@ -2742,10 +3128,10 @@ function render() {{
     </div>
   </div>`;
   const nav = `<nav>${{tabs.map(tab => `<button class="tab-button ${{tabLabel(tab) === activeTab ? "active" : ""}}" data-tab="${{tabLabel(tab)}}">${{tabLabel(tab)}}</button>`).join("")}}</nav>`;
-  const customTabs = new Set(["DIS Interaction Sampler", "Observer Bridge", "Gravitational Image Analysis", "POWHEG"]);
+  const customTabs = new Set(["DIS Interaction Sampler", "Observer Bridge", "Gravitational Image Analysis", "POWHEG", "Event Generation", "GEANT4"]);
   const genericFields = customTabs.has(activeTab) ? "" : renderFields(active);
   const panelClass = activeTab === "Gravitational Image Analysis" ? "panel observer-image-branches-panel" : "panel";
-  root.innerHTML = runStrip + nav + `<div class="${{panelClass}}"><p class="note">Geometry/configuration shell only. Expensive event stages are disabled.</p>${{genericFields}}${{activeTab === "Camera" ? renderHadrosCameraPanel() + renderBackendTable() : ""}}${{activeTab === "UHE Source" ? renderSourcePanel() : ""}}${{activeTab === "Forward Geodesics" ? renderForwardPanel() : ""}}${{activeTab === "DIS Interaction Sampler" ? renderDisPanel() : ""}}${{activeTab === "Observer Bridge" ? renderObserverBridgePanel() : ""}}${{activeTab === "Gravitational Image Analysis" ? renderObserverImageBranchesPanel() : ""}}${{activeTab === "POWHEG" ? renderPowhegPanel() : ""}}${{activeTab === "Outputs" ? renderOutputsPanel() : ""}}` +
+  root.innerHTML = runStrip + nav + `<div class="${{panelClass}}">${{genericFields}}${{activeTab === "Camera" ? renderHadrosCameraPanel() + renderBackendTable() : ""}}${{activeTab === "UHE Source" ? renderSourcePanel() : ""}}${{activeTab === "Forward Geodesics" ? renderForwardPanel() : ""}}${{activeTab === "DIS Interaction Sampler" ? renderDisPanel() : ""}}${{activeTab === "Observer Bridge" ? renderObserverBridgePanel() : ""}}${{activeTab === "Gravitational Image Analysis" ? renderObserverImageBranchesPanel() : ""}}${{activeTab === "POWHEG" ? renderPowhegPanel() : ""}}${{activeTab === "Event Generation" ? renderEventGenerationPanel() : ""}}${{activeTab === "GEANT4" ? renderGeant4Panel() : ""}}${{activeTab === "Outputs" ? renderOutputsPanel() : ""}}` +
     `<pre id="log"></pre></div>` +
     renderContextPanel();
   bindHadrosCameraPanel();
@@ -2763,6 +3149,10 @@ function render() {{
   if (observerImageBranchesButton) observerImageBranchesButton.onclick = analyzeObserverImageBranches;
   const powhegButton = document.querySelector("#powheg-button");
   if (powhegButton) powhegButton.onclick = preparePowheg;
+  const eventGenerationButton = document.querySelector("#event-generation-button");
+  if (eventGenerationButton) eventGenerationButton.onclick = runEventGeneration;
+  const geant4Button = document.querySelector("#geant4-button");
+  if (geant4Button) geant4Button.onclick = runGeant4;
   const registerRunButton = document.querySelector("#registerRunButton");
   if (registerRunButton) registerRunButton.onclick = registerRun;
   bindNumberInputs();
@@ -2781,6 +3171,16 @@ function render() {{
   }};
   document.querySelectorAll("[data-section]").forEach(el => el.addEventListener("input", syncValuesAndGeometry));
   document.querySelectorAll("[data-section]").forEach(el => el.addEventListener("change", syncValuesAndGeometry));
+  const eventGenerationMode = document.querySelector('[data-section="event_generation"][data-key="mode"]');
+  if (eventGenerationMode) eventGenerationMode.addEventListener("change", () => {{
+    state.values = collect();
+    render();
+  }});
+  const geant4Mode = document.querySelector('[data-section="geant4"][data-key="mode"]');
+  if (geant4Mode) geant4Mode.addEventListener("change", () => {{
+    state.values = collect();
+    render();
+  }});
   document.querySelectorAll(".tab-button").forEach(btn => btn.addEventListener("click", () => {{
     state.values = collect();
     activeTab = btn.dataset.tab;
@@ -2872,6 +3272,13 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             return
+        if self.path == "/api/geant4/status":
+            payload = json.dumps(state_payload(values, self.config_path).get("geant4", {}), indent=2).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            return
         asset = self._asset_file()
         if asset is not None:
             content_type = mimetypes.guess_type(asset.name)[0] or "application/octet-stream"
@@ -2902,6 +3309,9 @@ class Handler(BaseHTTPRequestHandler):
                 json.dumps(state_payload(values, self.config_path), indent=2),
                 "application/json",
             )
+            return
+        if self.path == "/api/geant4/status":
+            self._send(200, json.dumps(state_payload(values, self.config_path).get("geant4", {}), indent=2), "application/json")
             return
         if self.path == "/api/last-camera":
             info = discover_original_hadros()
@@ -3091,6 +3501,46 @@ class Handler(BaseHTTPRequestHandler):
             summary = {"status": "ok", "powheg": powheg_summary, "render": render_summary}
             self._send(200, json.dumps(summary, indent=2, sort_keys=True) + "\n", "application/json")
             return
+        if self.path == "/api/event-generation":
+            if raw.get("action") != "run_event_generation":
+                self._send(409, json.dumps({"status": "error", "message": "Event Generation requires an explicit Run action; no process was started."}, indent=2, sort_keys=True) + "\n", "application/json")
+                return
+            problems = validate_values(values)
+            if problems:
+                self._send(400, json.dumps({"status": "error", "validation_errors": problems}, indent=2, sort_keys=True) + "\n", "application/json")
+                return
+            output_dir = ROOT / run_output_dir(values)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            ensure_output_layout(output_dir)
+            try:
+                event_summary = generate_event_generation_products(values, run_output_dir=output_dir)
+            except (ValueError, FileNotFoundError, RuntimeError, subprocess.CalledProcessError) as exc:
+                self._send(422, json.dumps({"status": "error", "message": str(exc)}, indent=2, sort_keys=True) + "\n", "application/json")
+                return
+            render_summary = render_hadros_web(values, root=ROOT, event_generation_summary=event_summary)
+            summary = {"status": "ok", "event_generation": event_summary, "render": render_summary}
+            self._send(200, json.dumps(summary, indent=2, sort_keys=True) + "\n", "application/json")
+            return
+        if self.path == "/api/geant4":
+            if raw.get("action") != "run_geant4":
+                self._send(409, json.dumps({"status": "error", "message": "GEANT4 requires an explicit Run action; no process was started."}, indent=2, sort_keys=True) + "\n", "application/json")
+                return
+            problems = validate_values(values)
+            if problems:
+                self._send(400, json.dumps({"status": "error", "validation_errors": problems}, indent=2, sort_keys=True) + "\n", "application/json")
+                return
+            output_dir = ROOT / run_output_dir(values)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            ensure_output_layout(output_dir)
+            try:
+                geant4_summary = generate_geant4_products(values, run_output_dir=output_dir)
+            except (ValueError, FileNotFoundError, RuntimeError, subprocess.CalledProcessError) as exc:
+                self._send(422, json.dumps({"status": "error", "message": str(exc)}, indent=2, sort_keys=True) + "\n", "application/json")
+                return
+            render_summary = render_hadros_web(values, root=ROOT, output_dir=output_dir, geant4_summary=geant4_summary)
+            summary = {"status": "ok", "geant4": geant4_summary, "render": render_summary}
+            self._send(200, json.dumps(summary, indent=2, sort_keys=True) + "\n", "application/json")
+            return
         if self.path == "/api/compare-dis-models":
             problems = validate_values(values)
             if problems:
@@ -3136,6 +3586,15 @@ def main() -> int:
     parser.add_argument("--powheg", action="store_true", help="Prepare H3-W9a POWHEG dry-run jobs through hadros-web orchestration and exit.")
     parser.add_argument("--powheg-real-smoke", action="store_true", help="Run H3-W9b one-candidate local POWHEG real-smoke mode and exit.")
     parser.add_argument("--powheg-real-free", action="store_true", help="Run local POWHEG for the configured candidate and event counts.")
+    parser.add_argument("--event-generation-dry-run", action="store_true", help="Validate the H3-W10 Event Generation inputs/backend.")
+    parser.add_argument("--event-generation-parton-check", action="store_true", help="Validate the exact LHE hard record without PYTHIA showering.")
+    parser.add_argument("--event-generation-real-smoke", action="store_true", help="Run PYTHIA 8/HepMC3 for at most two LHE events.")
+    parser.add_argument("--event-generation-real-free", action="store_true", help="Run configured H3-W10 PYTHIA 8 event generation.")
+    parser.add_argument("--geant4-environment-check", action="store_true", help="Validate Geant4 11.4.2 and all required datasets without transport.")
+    parser.add_argument("--geant4-import-check", action="store_true", help="Audit H3-W10 HepMC3 particles and the H3-W11 physics domain.")
+    parser.add_argument("--geant4-vacuum-smoke", action="store_true", help="Run an explicit H3-W11 vacuum transport smoke.")
+    parser.add_argument("--geant4-material-smoke", action="store_true", help="Run an explicit H3-W11 local-material transport smoke.")
+    parser.add_argument("--geant4-real-free", action="store_true", help="Run configured H3-W11 transport inside its validated physics domain.")
     parser.add_argument("--serve", action="store_true", help="Serve the web control surface.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8877)
@@ -3270,6 +3729,45 @@ def main() -> int:
         powheg_summary = generate_powheg_products(values, run_output_dir=output_dir)
         render_summary = render_hadros_web(values, root=ROOT, output_dir=output_dir, powheg_summary=powheg_summary)
         print(json.dumps({"status": "ok", "powheg": powheg_summary, "render": render_summary}, indent=2, sort_keys=True))
+        return 0
+    event_modes = [
+        (args.event_generation_dry_run, "dry_run"),
+        (args.event_generation_parton_check, "parton_check"),
+        (args.event_generation_real_smoke, "real_smoke"),
+        (args.event_generation_real_free, "real_free"),
+    ]
+    selected_event_modes = [mode for enabled, mode in event_modes if enabled]
+    if selected_event_modes:
+        if len(selected_event_modes) != 1:
+            parser.error("choose exactly one Event Generation mode")
+        output_dir = args.output_dir if args.output_dir is not None else ROOT / run_output_dir(values)
+        if not output_dir.is_absolute():
+            output_dir = ROOT / output_dir
+        ensure_output_layout(output_dir)
+        values["event_generation"]["mode"] = selected_event_modes[0]
+        event_summary = generate_event_generation_products(values, run_output_dir=output_dir)
+        render_summary = render_hadros_web(values, root=ROOT, output_dir=output_dir, event_generation_summary=event_summary)
+        print(json.dumps({"status": "ok", "event_generation": event_summary, "render": render_summary}, indent=2, sort_keys=True))
+        return 0
+    geant4_modes = [
+        (args.geant4_environment_check, "environment_check"),
+        (args.geant4_import_check, "import_check"),
+        (args.geant4_vacuum_smoke, "vacuum_smoke"),
+        (args.geant4_material_smoke, "material_smoke"),
+        (args.geant4_real_free, "real_free"),
+    ]
+    selected_geant4_modes = [mode for enabled, mode in geant4_modes if enabled]
+    if selected_geant4_modes:
+        if len(selected_geant4_modes) != 1:
+            parser.error("choose exactly one GEANT4 mode")
+        output_dir = args.output_dir if args.output_dir is not None else ROOT / run_output_dir(values)
+        if not output_dir.is_absolute():
+            output_dir = ROOT / output_dir
+        ensure_output_layout(output_dir)
+        values["geant4"]["mode"] = selected_geant4_modes[0]
+        geant4_summary = generate_geant4_products(values, run_output_dir=output_dir)
+        render_summary = render_hadros_web(values, root=ROOT, output_dir=output_dir, geant4_summary=geant4_summary)
+        print(json.dumps({"status": "ok", "geant4": geant4_summary, "render": render_summary}, indent=2, sort_keys=True))
         return 0
     summary = render_hadros_web(values, root=ROOT, output_dir=args.output_dir)
     print(json.dumps(summary, indent=2, sort_keys=True))

@@ -14,22 +14,22 @@ from . import __version__
 from .reuse import discover_original_hadros
 
 
-THEORY_VERSION = "1.1"
+THEORY_VERSION = "1.3"
 THEORY_DOCUMENT = "docs/Theory/HADROS3_Physics_Theory.pdf"
 THEORY_SOURCE_DOCUMENT = "docs/Theory/HADROS3_Physics_Theory.tex"
-THEORY_COMPATIBLE_HADROS3_COMMIT = "7251499"
-THEORY_GENERATION_DATE = "2026-06-26"
-THEORY_PIPELINE_VERSION = "H3-W9b"
+THEORY_COMPATIBLE_HADROS3_COMMIT = "8395440"
+THEORY_GENERATION_DATE = "2026-07-13"
+THEORY_PIPELINE_VERSION = "H3-W11"
 DEFAULT_SCIENTIFIC_RELEASE = {
     "software_version": "0.9.0",
-    "physics_version": "1.1",
+    "physics_version": "1.3",
     "pipeline_version": THEORY_PIPELINE_VERSION,
     "theory_version": THEORY_VERSION,
     "theory_document": THEORY_DOCUMENT,
 }
-THEORY_IMPLEMENTATION_STATUS = "implemented_through_H3_W9b_powheg_real_smoke"
-THEORY_IMPLEMENTED_STAGES = ["H3-W5", "H3-W6", "H3-W7", "H3-W8", "H3-W9a", "H3-W9b"]
-THEORY_PLANNED_STAGES = ["H3-W10", "H3-W11", "H3-W12", "H3-W13"]
+THEORY_IMPLEMENTATION_STATUS = "implemented_through_H3_W11_geant4_supported_energy_only_uhe_guarded"
+THEORY_IMPLEMENTED_STAGES = ["H3-W5", "H3-W6", "H3-W7", "H3-W8", "H3-W8b", "H3-W9a", "H3-W9b", "H3-W10", "H3-W11-supported-energy"]
+THEORY_PLANNED_STAGES = ["H3-W11-UHE", "H3-W12", "H3-W13"]
 
 
 def _git_commit(root: Path) -> str | None:
@@ -69,6 +69,8 @@ def build_provenance(
     observer_bridge_summary: dict[str, Any] | None = None,
     observer_image_branch_summary: dict[str, Any] | None = None,
     powheg_summary: dict[str, Any] | None = None,
+    event_generation_summary: dict[str, Any] | None = None,
+    geant4_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     created_utc = datetime.now(timezone.utc).isoformat()
     git_commit = _git_commit(root)
@@ -104,6 +106,33 @@ def build_provenance(
     )
     powheg_real_smoke_active = bool(powheg_summary and powheg_summary.get("powheg_real_smoke_invoked"))
     powheg_real_free_active = bool(powheg_summary and powheg_summary.get("powheg_real_free_invoked"))
+    event_generation_active = bool(event_generation_summary and event_generation_summary.get("status") == "ok")
+    pythia_active = bool(event_generation_summary and event_generation_summary.get("pythia_invoked"))
+    geant4_active = bool(geant4_summary and geant4_summary.get("geant4_invoked"))
+    geant4_audited = bool(geant4_summary and geant4_summary.get("status") in {"ok", "unsupported_domain"})
+    if geant4_audited:
+        hadros_stage = "H3-W0_to_H3-W11_geant4"
+        overall_status = "geant4_transport_complete_supported_domain" if geant4_active else "geant4_uhe_input_blocked_by_physics_domain"
+    elif event_generation_active:
+        hadros_stage, overall_status = "H3-W0_to_H3-W10_event_generation", "event_generation_complete"
+    elif powheg_real_free_active:
+        hadros_stage, overall_status = "H3-W0_to_H3-W9b_powheg_real_free", "powheg_real_free_lhe_generated"
+    elif powheg_real_smoke_active:
+        hadros_stage, overall_status = "H3-W0_to_H3-W9b_powheg_real_smoke", "powheg_real_smoke_lhe_generated"
+    elif powheg_active:
+        hadros_stage, overall_status = "H3-W0_to_H3-W9a_powheg_dry_run", "powheg_jobs_prepared_no_lhe"
+    elif observer_image_branch_active:
+        hadros_stage, overall_status = "H3-W0_to_H3-W8b_observer_image_branch_analysis", "observer_image_branches_analyzed_no_event_generation"
+    elif observer_bridge_active:
+        hadros_stage, overall_status = "H3-W0_to_H3-W8_observer_bridge_scoring", "observer_bridge_scored_no_event_generation"
+    elif dis_active:
+        hadros_stage, overall_status = "H3-W0_to_H3-W7_dis_interaction_sampler", "dis_interactions_sampled_no_observer_bridge"
+    elif forward_active:
+        hadros_stage, overall_status = "H3-W0_to_H3-W6_forward_neutrino_geodesics", "forward_geodesics_propagated_no_interactions"
+    elif source_active:
+        hadros_stage, overall_status = "H3-W0_to_H3-W5_hadros_web_uhe_source_shell", "uhe_source_sampled_no_expensive_events"
+    else:
+        hadros_stage, overall_status = "H3-W0_to_H3-W4_hadros_web_geometry_shell", "geometry_configured_no_expensive_events"
     paint_swatch_disk_diagnostic_mode = bool(camera_preview and camera_preview.get("paint_swatch_disk_diagnostic_mode"))
     paint_swatch_disk_uses_forced_thin_disk = bool(camera_preview and camera_preview.get("paint_swatch_disk_uses_forced_thin_disk"))
     paint_swatch_disk_physical_torus_emission = (
@@ -171,8 +200,8 @@ def build_provenance(
         "summary": dis_summary,
     }
     return {
-        "hadros3_stage": ("H3-W0_to_H3-W9b_powheg_real_free" if powheg_real_free_active else ("H3-W0_to_H3-W9b_powheg_real_smoke" if powheg_real_smoke_active else ("H3-W0_to_H3-W9a_powheg_dry_run" if powheg_active else ("H3-W0_to_H3-W8b_observer_image_branch_analysis" if observer_image_branch_active else ("H3-W0_to_H3-W8_observer_bridge_scoring" if observer_bridge_active else ("H3-W0_to_H3-W7_dis_interaction_sampler" if dis_active else ("H3-W0_to_H3-W6_forward_neutrino_geodesics" if forward_active else ("H3-W0_to_H3-W5_hadros_web_uhe_source_shell" if source_active else "H3-W0_to_H3-W4_hadros_web_geometry_shell")))))))),
-        "status": ("powheg_real_free_lhe_generated" if powheg_real_free_active else ("powheg_real_smoke_lhe_generated" if powheg_real_smoke_active else ("powheg_jobs_prepared_no_lhe" if powheg_active else ("observer_image_branches_analyzed_no_event_generation" if observer_image_branch_active else ("observer_bridge_scored_no_event_generation" if observer_bridge_active else ("dis_interactions_sampled_no_observer_bridge" if dis_active else ("forward_geodesics_propagated_no_interactions" if forward_active else ("uhe_source_sampled_no_expensive_events" if source_active else "geometry_configured_no_expensive_events")))))))),
+        "hadros3_stage": hadros_stage,
+        "status": overall_status,
         "created_utc": created_utc,
         "hadros3_version": __version__,
         "git_commit": git_commit,
@@ -188,8 +217,8 @@ def build_provenance(
         "reused_hadros_components": discover_original_hadros(),
         "disabled_expensive_or_future_stages": {
             "powheg": ("active_H3_W9b_real_free_local_pwhg_main" if powheg_real_free_active else ("active_H3_W9b_real_smoke_local_pwhg_main" if powheg_real_smoke_active else ("active_H3_W9a_dry_run_no_pwhg_main" if powheg_active else "disabled"))),
-            "pythia": "disabled",
-            "geant4": "disabled",
+            "pythia": "active_H3_W10" if pythia_active else "disabled",
+            "geant4": ("active_H3_W11_supported_domain" if geant4_active else ("audited_blocked_uhe_domain" if geant4_audited else "disabled")),
             "forward_neutrino_geodesics": "active_H3_W6" if forward_active else "not_invoked",
             "optical_depth_dis_sampler": "active_H3_W7" if dis_active else "not_invoked",
             "observer_bridge_active_filter": "active_H3_W8_scoring_only" if observer_bridge_active else "not_invoked",
@@ -266,6 +295,10 @@ def build_provenance(
             "visibility_model": observer_bridge_summary.get("visibility_model") if observer_bridge_active else values.get("observer_bridge", {}).get("visibility_model"),
             "redshift_proxy_model": observer_bridge_summary.get("redshift_proxy_model") if observer_bridge_active else values.get("observer_bridge", {}).get("redshift_proxy_model"),
             "line_of_sight_proxy_model": observer_bridge_summary.get("line_of_sight_proxy_model") if observer_bridge_active else values.get("observer_bridge", {}).get("line_of_sight_proxy_model"),
+            "visibility_physics_model": observer_bridge_summary.get("visibility_physics_model", False) if observer_bridge_active else False,
+            "redshift_physics_model": observer_bridge_summary.get("redshift_physics_model", False) if observer_bridge_active else False,
+            "line_of_sight_physics_model": observer_bridge_summary.get("line_of_sight_physics_model", False) if observer_bridge_active else False,
+            "unity_diagnostic_factors_ignore_enable_flags": observer_bridge_summary.get("unity_diagnostic_factors_ignore_enable_flags", True) if observer_bridge_active else True,
             "fov_policy": observer_bridge_summary.get("fov_policy") if observer_bridge_active else values.get("observer_bridge", {}).get("fov_policy"),
             "physics_weight_definition": observer_bridge_summary.get("physics_weight_definition") if observer_bridge_active else "final_pre_event_weight",
             "observer_weight_definition": observer_bridge_summary.get("observer_weight_definition") if observer_bridge_active else "escape_weight_proxy * visibility_proxy * camera_fov_weight * distance_weight * redshift_weight * line_of_sight_weight",
@@ -406,6 +439,9 @@ def build_provenance(
             "fraction_multiple_images": (observer_image_branch_summary or {}).get("fraction_multiple_images"),
             "primary_branch_selection_proxy": (observer_image_branch_summary or {}).get("primary_branch_selection_proxy", True),
             "powheg_forwarding_uses_primary_branch": (observer_image_branch_summary or {}).get("powheg_forwarding_uses_primary_branch", True if observer_image_branch_active else None),
+            "n_candidates_multiplicity_audited": (observer_image_branch_summary or {}).get("n_candidates_multiplicity_audited", 0),
+            "n_synthetic_fallback_branches": (observer_image_branch_summary or {}).get("n_synthetic_fallback_branches", 0),
+            "multiplicity_claims_include_synthetic_fallback": (observer_image_branch_summary or {}).get("multiplicity_claims_include_synthetic_fallback", False),
             "powheg_invoked": powheg_active,
             "pythia_invoked": False,
             "geant4_invoked": False,
@@ -419,6 +455,9 @@ def build_provenance(
             "powheg_backend": powheg_summary.get("powheg_backend") if powheg_active else values.get("powheg", {}).get("powheg_backend"),
             "powheg_process": powheg_summary.get("powheg_process") if powheg_active else values.get("powheg", {}).get("powheg_process"),
             "powheg_run_mode": powheg_summary.get("powheg_run_mode") if powheg_active else values.get("powheg", {}).get("run_mode"),
+            "perturbative_order": powheg_summary.get("perturbative_order") if powheg_active else values.get("powheg", {}).get("perturbative_order", "LO"),
+            "born_only": bool(powheg_summary.get("born_only")) if powheg_active else values.get("powheg", {}).get("perturbative_order", "LO") == "LO",
+            "nlo_real_virtual_enabled": bool(powheg_summary.get("nlo_real_virtual_enabled")) if powheg_active else values.get("powheg", {}).get("perturbative_order", "LO") == "NLO",
             "powheg_candidate_source": powheg_summary.get("powheg_candidate_source") if powheg_active else "ObserverImageBranches/observer_image_primary_branches.jsonl",
             "powheg_n_selected_candidates_input": powheg_summary.get("powheg_n_selected_candidates_input") if powheg_active else 0,
             "powheg_selection_performed_by": powheg_summary.get("powheg_selection_performed_by") if powheg_active else "ObserverImageBranches",
@@ -449,12 +488,21 @@ def build_provenance(
             "n_lhe_particles": powheg_summary.get("n_lhe_particles") if powheg_active else 0,
             "n_final_state_particles": powheg_summary.get("n_final_state_particles") if powheg_active else 0,
             "unique_particle_types": powheg_summary.get("unique_particle_types") if powheg_active else 0,
+            "four_momentum_residual_relative_max": (powheg_summary.get("powheg_physics_summary") or {}).get("four_momentum_residual_relative_max") if powheg_active else None,
+            "four_momentum_conservation_pass": (powheg_summary.get("powheg_physics_summary") or {}).get("four_momentum_conservation_pass") if powheg_active else None,
             "hadronization_invoked": False,
             "pythia_invoked": False,
             "geant4_invoked": False,
             "photon_transport_invoked": False,
             "expensive_event_generation_invoked": False,
             "summary": powheg_summary,
+        },
+        "event_generation": event_generation_summary or {
+            "status": "not_run", "pythia_invoked": False, "hadronization_invoked": False,
+            "geant4_invoked": False, "photon_transport_invoked": False, "spectra_invoked": False,
+        },
+        "geant4": geant4_summary or {
+            "status": "not_run", "geant4_invoked": False, "photon_transport_invoked": False, "spectra_invoked": False,
         },
         "validation": validation,
     }

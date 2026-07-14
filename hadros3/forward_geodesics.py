@@ -549,6 +549,7 @@ def propagate_one(sample: dict[str, Any], config: ForwardGeodesicConfig) -> tupl
             break
         start = state
         integrated_distance = 0.0
+        integrated_affine_step = 0.0
         substeps = 0
         previous_rhs = kerr_geodesic_rhs(state, config.spin_a)
         while integrated_distance < config.initial_step_rg and substeps < 256:
@@ -598,6 +599,7 @@ def propagate_one(sample: dict[str, Any], config: ForwardGeodesicConfig) -> tupl
                 status = "invalid_invariant"
                 break
             integrated_distance += coordinate_path_distance(state, next_state, config.spin_a)
+            integrated_affine_step += h
             max_curvature_indicator = max(
                 max_curvature_indicator,
                 abs(rhs.theta - previous_rhs.theta),
@@ -613,7 +615,17 @@ def propagate_one(sample: dict[str, Any], config: ForwardGeodesicConfig) -> tupl
         if coordinate_path_distance(start, state, config.spin_a) <= 0.0:
             stop_condition = "max_steps"
             break
-        physical_p = physical_momentum_from_state(state, energy_gev)
+        mid_state = KerrGeodesicState(
+            t=0.5 * (start.t + state.t),
+            r=0.5 * (start.r + state.r),
+            theta=0.5 * (start.theta + state.theta),
+            phi=start.phi + 0.5 * math.atan2(math.sin(state.phi - start.phi), math.cos(state.phi - start.phi)),
+            p_t=0.5 * (start.p_t + state.p_t),
+            p_r=0.5 * (start.p_r + state.p_r),
+            p_theta=0.5 * (start.p_theta + state.p_theta),
+            p_phi=0.5 * (start.p_phi + state.p_phi),
+        )
+        physical_p = physical_momentum_from_state(mid_state, energy_gev)
         null_norm = hamiltonian_null_norm(state, config.spin_a)
         energy_error = abs((-state.p_t) - killing_energy0) / max(abs(killing_energy0), 1.0)
         lz_error = abs(state.p_phi - lz0)
@@ -630,6 +642,10 @@ def propagate_one(sample: dict[str, Any], config: ForwardGeodesicConfig) -> tupl
         r_mid = 0.5 * (start.r + state.r)
         theta_mid = 0.5 * (start.theta + state.theta)
         phi_mid = start.phi + 0.5 * math.atan2(math.sin(state.phi - start.phi), math.cos(state.phi - start.phi))
+        zamo_energy_mid_gev = zamo_local_energy_from_covector_gev(
+            config.spin_a, r_mid, theta_mid, physical_p["p_t"], physical_p["p_phi"]
+        )
+        zamo_comoving_length_rg = zamo_energy_mid_gev / max(energy_gev, 1.0e-300) * integrated_affine_step
         segments.append(
             {
                 "event_id": event_id,
@@ -648,8 +664,12 @@ def propagate_one(sample: dict[str, Any], config: ForwardGeodesicConfig) -> tupl
                 "p_r_mid": physical_p["p_r"],
                 "p_theta_mid": physical_p["p_theta"],
                 "p_phi_mid": physical_p["p_phi"],
+                "affine_parameter_step_rg": integrated_affine_step,
+                "momentum_affine_normalization_gev": energy_gev,
+                "comoving_path_length_model": "minus_u_dot_k_dlambda_midpoint",
+                "comoving_path_length_rg_zamo": zamo_comoving_length_rg,
                 "dl_segment_rg": coordinate_path_distance(start, state, config.spin_a),
-                "E_nu_local_gev_mid": zamo_local_energy_from_covector_gev(config.spin_a, r_mid, theta_mid, physical_p["p_t"], physical_p["p_phi"]),
+                "E_nu_local_gev_mid": zamo_energy_mid_gev,
                 "geodesic_status": status,
                 "full_kerr_geodesic": True,
                 "theta_phi_evolution": True,

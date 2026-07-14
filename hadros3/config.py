@@ -308,9 +308,9 @@ def schema() -> list[dict[str, Any]]:
                     options=["geometric_escape_proxy"],
                 ),
                 field("observer_bridge", "escape_proxy_model", "Escape proxy", "geometric_outward_proxy", kind="select", options=["geometric_outward_proxy"]),
-                field("observer_bridge", "visibility_model", "Visibility model", "geometric_proxy", kind="select", options=["geometric_proxy"]),
-                field("observer_bridge", "redshift_proxy_model", "Redshift proxy", "unity_or_metric_proxy", kind="select", options=["unity_or_metric_proxy"]),
-                field("observer_bridge", "line_of_sight_proxy_model", "Line of sight proxy", "geometric_proxy", kind="select", options=["geometric_proxy"]),
+                field("observer_bridge", "visibility_model", "Visibility diagnostic", "unity_diagnostic_not_physics", kind="select", options=["unity_diagnostic_not_physics"]),
+                field("observer_bridge", "redshift_proxy_model", "Redshift diagnostic", "unity_diagnostic_not_physics", kind="select", options=["unity_diagnostic_not_physics"]),
+                field("observer_bridge", "line_of_sight_proxy_model", "Line of sight diagnostic", "unity_diagnostic_not_physics", kind="select", options=["unity_diagnostic_not_physics"]),
                 field("observer_bridge", "fov_policy", "FOV policy", "hard", kind="select", options=["hard", "soft"]),
                 field("observer_bridge", "distance_weight_enabled", "Distance weight", True, kind="checkbox"),
                 field("observer_bridge", "redshift_weight_enabled", "Redshift weight", True, kind="checkbox"),
@@ -406,6 +406,15 @@ def schema() -> list[dict[str, Any]]:
                 field("powheg", "powheg_process", "POWHEG process", "nudis", kind="select", options=["nudis"]),
                 field(
                     "powheg",
+                    "perturbative_order",
+                    "Perturbative order",
+                    "LO",
+                    kind="select",
+                    options=["LO", "NLO"],
+                    help_text="LO is an explicit Born-only smoke/validation mode. NLO keeps POWHEG real and virtual contributions enabled.",
+                ),
+                field(
+                    "powheg",
                     "events_per_candidate",
                     "POWHEG Events per Interaction",
                     1,
@@ -467,15 +476,57 @@ def schema() -> list[dict[str, Any]]:
         {
             "tab": "Event Generation",
             "fields": [
-                field("event_generation", "mode", "Event generation", "placeholder_disabled", kind="select", options=["placeholder_disabled"]),
-                field("event_generation", "planned_model", "Planned model", "POWHEG_PYTHIA_future", kind="select", options=["POWHEG_PYTHIA_future"]),
+                field(
+                    "event_generation",
+                    "mode",
+                    "Run mode",
+                    "disabled",
+                    kind="select",
+                    options=["disabled", "dry_run", "parton_check", "real_smoke", "real_free"],
+                    help_text="Select real_smoke to run PYTHIA manually for at most two LHE events. disabled never starts Event Generation.",
+                ),
+                field("event_generation", "backend", "Backend", "pythia8", kind="select", options=["pythia8"]),
+                field("event_generation", "input_source", "Input", "powheg_lhe", kind="select", options=["powheg_lhe"]),
+                field("event_generation", "shower_mode", "POWHEG matching", "powheg_vetoed", kind="select", options=["powheg_vetoed", "off"]),
+                field("event_generation", "isr_enabled", "Initial-state shower (experimental)", False, kind="checkbox"),
+                field("event_generation", "fsr_enabled", "Final-state shower", True, kind="checkbox"),
+                field("event_generation", "hadronization_enabled", "Hadronization", True, kind="checkbox"),
+                field("event_generation", "decays_enabled", "Decays", True, kind="checkbox"),
+                field("event_generation", "mpi_enabled", "Multiparton interactions", False, kind="checkbox"),
+                field("event_generation", "random_seed", "Base random seed", 48001, kind="number", minimum=1, step=1),
+                field("event_generation", "seed_mode", "Seed policy", "base_plus_request_and_lhe_event", kind="select", options=["base_plus_request_and_lhe_event"]),
+                field("event_generation", "max_requests", "Maximum requests", 1, kind="number", minimum=1, step=1),
+                field("event_generation", "max_events_per_request", "Maximum events per request", 2, kind="number", minimum=1, step=1),
+                field("event_generation", "write_hepmc3", "Write HepMC3", True, kind="checkbox"),
+                field("event_generation", "write_full_event_jsonl", "Write full event JSONL", False, kind="checkbox"),
+                field("event_generation", "write_final_particles_jsonl", "Write final particles JSONL", True, kind="checkbox"),
+                field("event_generation", "failure_policy", "Failure policy", "fail_stage", kind="select", options=["fail_stage"]),
             ],
         },
         {
             "tab": "GEANT4",
             "fields": [
-                field("geant4", "mode", "GEANT4", "placeholder_disabled", kind="select", options=["placeholder_disabled"]),
-                field("geant4", "planned_model", "Planned model", "detector_transport_future", kind="select", options=["detector_transport_future"]),
+                field("geant4", "mode", "Run mode", "disabled", kind="select", options=["disabled", "environment_check", "import_check", "vacuum_smoke", "material_smoke", "real_free"], help_text="GEANT4 starts only after an explicit Run action. UHE particles beyond the validated domain are refused."),
+                field("geant4", "backend", "Backend", "geant4", kind="select", options=["geant4"]),
+                field("geant4", "input_source", "Input", "event_generation_hepmc3", kind="select", options=["event_generation_hepmc3"]),
+                field("geant4", "geometry_model", "Geometry", "local_homogeneous_patch_v1", kind="select", options=["local_homogeneous_patch_v1"]),
+                field("geant4", "material", "Material", "HADROS3_H_HE", kind="select", options=["HADROS3_H_HE", "G4_WATER", "G4_Pb", "G4_Galactic"]),
+                field("geant4", "density_source", "Density source", "dis_vertex_local", kind="select", options=["dis_vertex_local", "configured_fixture"]),
+                field("geant4", "execution_model", "Execution model", "per_site_subprocess", kind="select", options=["per_site_subprocess"], help_text="Each physical DIS site receives an isolated local material volume and Geant4 process."),
+                field("geant4", "site_workers", "Parallel site workers", 4, kind="number", minimum=1, step=1),
+                field("geant4", "density_g_cm3", "Local density [g/cm3]", 1.0, kind="number", minimum=1e-30),
+                field("geant4", "hydrogen_mass_fraction", "Hydrogen mass fraction", 0.75, kind="number", minimum=0.0),
+                field("geant4", "patch_half_size_mm", "Patch half-size [mm]", 10.0, kind="number", minimum=1e-9),
+                field("geant4", "world_margin_mm", "Vacuum margin [mm]", 10.0, kind="number", minimum=1e-9),
+                field("geant4", "physics_list", "Physics list", "FTFP_BERT", kind="select", options=["FTFP_BERT"]),
+                field("geant4", "physics_domain_policy", "Outside-domain policy", "fail_stage", kind="select", options=["fail_stage"]),
+                field("geant4", "validated_maximum_energy_gev", "Validated maximum energy [GeV]", 1.0e5, kind="number", minimum=1.0),
+                field("geant4", "production_cut_mm", "Production cut [mm]", 0.1, kind="number", minimum=1e-9),
+                field("geant4", "random_seed", "Random seed", 59001, kind="number", minimum=1, step=1),
+                field("geant4", "max_events", "Maximum events", 2, kind="number", minimum=1, step=1),
+                field("geant4", "max_recorded_steps", "Maximum recorded steps", 50000, kind="number", minimum=1, step=1, visibility="EXPERT"),
+                field("geant4", "threads", "Threads", 1, kind="number", minimum=1, step=1),
+                field("geant4", "optical_physics_enabled", "Optical physics", False, kind="checkbox"),
             ],
         },
         {
@@ -621,6 +672,8 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
     bridge = values.get("observer_bridge", {})
     branches = values.get("observer_image_branches", {})
     powheg = values.get("powheg", {})
+    event_generation = values.get("event_generation", {})
+    geant4 = values.get("geant4", {})
 
     spin = float(bh["spin_a"])
     if not (-0.999 <= spin <= 0.999):
@@ -730,12 +783,12 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
         problems.append("observer_bridge.secondary_particle_proxy_model must be geometric_escape_proxy in H3-W8")
     if str(bridge.get("escape_proxy_model", "geometric_outward_proxy")) != "geometric_outward_proxy":
         problems.append("observer_bridge.escape_proxy_model must be geometric_outward_proxy in H3-W8")
-    if str(bridge.get("visibility_model", "geometric_proxy")) != "geometric_proxy":
-        problems.append("observer_bridge.visibility_model must be geometric_proxy in H3-W8")
-    if str(bridge.get("redshift_proxy_model", "unity_or_metric_proxy")) != "unity_or_metric_proxy":
-        problems.append("observer_bridge.redshift_proxy_model must be unity_or_metric_proxy in H3-W8")
-    if str(bridge.get("line_of_sight_proxy_model", "geometric_proxy")) != "geometric_proxy":
-        problems.append("observer_bridge.line_of_sight_proxy_model must be geometric_proxy in H3-W8")
+    if str(bridge.get("visibility_model", "unity_diagnostic_not_physics")) != "unity_diagnostic_not_physics":
+        problems.append("observer_bridge.visibility_model must be unity_diagnostic_not_physics in H3-W8")
+    if str(bridge.get("redshift_proxy_model", "unity_diagnostic_not_physics")) != "unity_diagnostic_not_physics":
+        problems.append("observer_bridge.redshift_proxy_model must be unity_diagnostic_not_physics in H3-W8")
+    if str(bridge.get("line_of_sight_proxy_model", "unity_diagnostic_not_physics")) != "unity_diagnostic_not_physics":
+        problems.append("observer_bridge.line_of_sight_proxy_model must be unity_diagnostic_not_physics in H3-W8")
     if str(bridge.get("fov_policy", "hard")) not in {"hard", "soft"}:
         problems.append("observer_bridge.fov_policy must be hard or soft")
     if int(float(bridge.get("max_ranked_events", 0))) <= 0:
@@ -784,6 +837,8 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
         problems.append("powheg.powheg_backend must be local_powheg in H3-W9a")
     if str(powheg.get("powheg_process", "nudis")) != "nudis":
         problems.append("powheg.powheg_process must be nudis in H3-W9a")
+    if str(powheg.get("perturbative_order", "LO")) not in {"LO", "NLO"}:
+        problems.append("powheg.perturbative_order must be LO or NLO")
     if "max_powheg_events" in powheg and int(float(powheg.get("max_powheg_events", 50))) <= 0:
         problems.append("powheg.max_powheg_events must be positive")
     if int(float(powheg.get("events_per_candidate", 1))) <= 0:
@@ -798,6 +853,52 @@ def validate_values(values: dict[str, dict[str, Any]]) -> list[str]:
         problems.append("powheg.min_final_observation_score must be non-negative")
     if str(powheg.get("run_mode", "dry_run")) not in {"dry_run", "real_smoke", "real_free"}:
         problems.append("powheg.run_mode must be dry_run, real_smoke, or real_free")
+    if str(event_generation.get("mode", "disabled")) not in {"disabled", "dry_run", "parton_check", "real_smoke", "real_free"}:
+        problems.append("event_generation.mode is unsupported")
+    if str(event_generation.get("backend", "pythia8")) != "pythia8":
+        problems.append("event_generation.backend must be pythia8")
+    if str(event_generation.get("input_source", "powheg_lhe")) != "powheg_lhe":
+        problems.append("event_generation.input_source must be powheg_lhe")
+    if str(event_generation.get("shower_mode", "powheg_vetoed")) not in {"powheg_vetoed", "off"}:
+        problems.append("event_generation.shower_mode must be powheg_vetoed or off")
+    if str(event_generation.get("seed_mode", "base_plus_request_and_lhe_event")) != "base_plus_request_and_lhe_event":
+        problems.append("event_generation.seed_mode must be base_plus_request_and_lhe_event")
+    if str(event_generation.get("failure_policy", "fail_stage")) != "fail_stage":
+        problems.append("event_generation.failure_policy must be fail_stage")
+    for key in ("max_requests", "max_events_per_request", "random_seed"):
+        try:
+            if int(float(event_generation.get(key, 0))) <= 0:
+                problems.append(f"event_generation.{key} must be a positive integer")
+        except (TypeError, ValueError):
+            problems.append(f"event_generation.{key} must be a positive integer")
+    if str(geant4.get("mode", "disabled")) not in {"disabled", "environment_check", "import_check", "vacuum_smoke", "material_smoke", "real_free"}:
+        problems.append("geant4.mode is unsupported")
+    if str(geant4.get("backend", "geant4")) != "geant4":
+        problems.append("geant4.backend must be geant4")
+    if str(geant4.get("input_source", "event_generation_hepmc3")) != "event_generation_hepmc3":
+        problems.append("geant4.input_source must be event_generation_hepmc3")
+    if str(geant4.get("physics_list", "FTFP_BERT")) != "FTFP_BERT":
+        problems.append("geant4.physics_list must be FTFP_BERT in H3-W11 v1")
+    if str(geant4.get("physics_domain_policy", "fail_stage")) != "fail_stage":
+        problems.append("geant4.physics_domain_policy must be fail_stage")
+    if str(geant4.get("density_source", "dis_vertex_local")) not in {"dis_vertex_local", "configured_fixture"}:
+        problems.append("geant4.density_source is unsupported")
+    if str(geant4.get("execution_model", "per_site_subprocess")) != "per_site_subprocess":
+        problems.append("geant4.execution_model must be per_site_subprocess")
+    if bool(geant4.get("optical_physics_enabled", False)):
+        problems.append("geant4 optical physics is not supported in H3-W11 v1")
+    for key in ("density_g_cm3", "patch_half_size_mm", "world_margin_mm", "production_cut_mm", "validated_maximum_energy_gev"):
+        if float(geant4.get(key, 0.0)) <= 0.0:
+            problems.append(f"geant4.{key} must be positive")
+    if float(geant4.get("validated_maximum_energy_gev", 1.0e5)) > 1.0e5:
+        problems.append("geant4.validated_maximum_energy_gev cannot exceed the validated H3-W11 v1 ceiling of 100000 GeV")
+    if not (0.0 <= float(geant4.get("hydrogen_mass_fraction", 0.75)) <= 1.0):
+        problems.append("geant4.hydrogen_mass_fraction must lie in [0,1]")
+    for key in ("random_seed", "max_events", "max_recorded_steps", "threads", "site_workers"):
+        if int(float(geant4.get(key, 0))) <= 0:
+            problems.append(f"geant4.{key} must be a positive integer")
+    if int(float(geant4.get("threads", 1))) != 1:
+        problems.append("geant4.threads must remain 1 until MT equivalence is validated")
     return problems
 
 

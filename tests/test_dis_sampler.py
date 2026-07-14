@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import json
 import math
+import random
 from pathlib import Path
 
 import pytest
 
 from hadros3.config import defaults
-from hadros3.dis_sampler import SigmaNuNProvider, analytic_torus_density_g_cm3, constant_density_tau, generate_dis_interaction_products, generate_gbw_iim_comparison, interaction_probability
+from hadros3.dis_sampler import SigmaNuNProvider, analytic_torus_density_g_cm3, constant_density_tau, generate_dis_interaction_products, generate_gbw_iim_comparison, interaction_probability, invariant_comoving_path_length_rg, sample_density_weighted_unit_interval, uniform_capped_bernoulli_selection
 from hadros3.forward_geodesics import generate_forward_geodesic_products
 from hadros3.medium_renderer import MediumRenderer
 from hadros3.uhe_source import generate_uhe_source_products
@@ -69,6 +70,23 @@ def test_constant_density_tau_matches_analytic_case() -> None:
     assert 0.0 < interaction_probability(0.5) < 1.0
 
 
+def test_covariant_path_length_minkowski_limit_and_affine_rescaling() -> None:
+    energy = 7.5e8
+    normalization = 7.5e8
+    affine_step = 3.25
+    expected_length = 3.25
+    length = invariant_comoving_path_length_rg(energy, normalization, affine_step)
+    assert math.isclose(length, expected_length, rel_tol=1.0e-12)
+
+    scale = 37.0
+    rescaled = invariant_comoving_path_length_rg(
+        energy * scale,
+        normalization,
+        affine_step / scale,
+    )
+    assert math.isclose(rescaled, length, rel_tol=1.0e-12)
+
+
 def test_sigma_provider_reads_original_hadros_tables() -> None:
     gbw = SigmaNuNProvider("GBW")
     iim = SigmaNuNProvider("IIM")
@@ -107,6 +125,9 @@ def test_dis_sampler_consumes_source_and_forward_outputs(tmp_path: Path) -> None
     summary = generate_dis_interaction_products(values, run_output_dir=tmp_path)
 
     assert summary["optical_depth_dis_sampler_invoked"] is True
+    assert summary["optical_depth_path_length_model"] == "covariant_minus_u_dot_k_dlambda_midpoint"
+    assert summary["optical_depth_uses_coordinate_spatial_distance"] is False
+    assert summary["optical_depth_affine_rescaling_invariant"] is True
     assert summary["observer_bridge_active_filter_invoked"] is False
     assert summary["expensive_event_generation_invoked"] is False
     assert summary["powheg_invoked"] is False
@@ -231,6 +252,8 @@ def test_cpp_dis_sampler_backend_matches_python_contract(tmp_path: Path) -> None
     assert summary["backend_executable"] == "bin/hadros3_dis_sampler"
     assert summary["backend_kind"] == "ported_hadros_cpp_dis_optical_depth_sampler"
     assert summary["cpp_backend_used"] is True
+    assert summary["optical_depth_path_length_model"] == "covariant_minus_u_dot_k_dlambda_midpoint"
+    assert summary["optical_depth_uses_coordinate_spatial_distance"] is False
     assert summary["python_prototype_used"] is False
     assert summary["cuda_backend_used"] is False
     assert summary["uses_hadros_original_runtime_path"] is False
@@ -294,3 +317,48 @@ def test_interaction_probability_bounds() -> None:
         probability = interaction_probability(tau)
         assert math.isfinite(probability)
         assert 0.0 <= probability <= 1.0
+
+
+def test_max_interactions_cap_is_order_independent_uniform_and_reproducible() -> None:
+    identifiers = [f"event-{index:02d}" for index in range(20)]
+    probabilities = [1.0] * len(identifiers)
+    baseline = uniform_capped_bernoulli_selection(probabilities, identifiers, max_selected=5, seed=731)
+    assert baseline == uniform_capped_bernoulli_selection(probabilities, identifiers, max_selected=5, seed=731)
+
+    permutation = [7, 1, 19, 3, 12, 0, 5, 18, 2, 9, 4, 16, 11, 8, 14, 6, 17, 10, 15, 13]
+    permuted_ids = [identifiers[index] for index in permutation]
+    permuted = uniform_capped_bernoulli_selection(probabilities, permuted_ids, max_selected=5, seed=731)
+    selected_original = {identifier for identifier, selected in zip(identifiers, baseline) if selected}
+    selected_permuted = {identifier for identifier, selected in zip(permuted_ids, permuted) if selected}
+    assert selected_original == selected_permuted
+
+    trials = 4000
+    counts = [0] * len(identifiers)
+    for seed in range(trials):
+        selected = uniform_capped_bernoulli_selection(probabilities, identifiers, max_selected=5, seed=seed)
+        for index, flag in enumerate(selected):
+            counts[index] += int(flag)
+    expected = trials * 5.0 / len(identifiers)
+    sigma = math.sqrt(trials * 0.25 * 0.75)
+    assert max(abs(count - expected) for count in counts) < 5.0 * sigma
+
+
+def test_intrasegment_optical_depth_cdf_constant_and_linear_profiles() -> None:
+    sample_size = 5000
+    uniform_rng = random.Random(12031)
+    uniform = [sample_density_weighted_unit_interval(lambda _: 3.0, uniform_rng) for _ in range(sample_size)]
+    assert all(value is not None and 0.0 <= value <= 1.0 for value in uniform)
+    ordered = sorted(float(value) for value in uniform if value is not None)
+    ks_distance = max(
+        max((index + 1) / sample_size - value, value - index / sample_size)
+        for index, value in enumerate(ordered)
+    )
+    ks_p_lower_bound = 2.0 * math.exp(-2.0 * sample_size * ks_distance * ks_distance)
+    assert ks_p_lower_bound > 0.01
+
+    linear_rng = random.Random(8821)
+    linear = [sample_density_weighted_unit_interval(lambda u: 2.0 * u, linear_rng) for _ in range(sample_size)]
+    linear_mean = sum(float(value) for value in linear if value is not None) / sample_size
+    theoretical_mean = 2.0 / 3.0
+    standard_error = math.sqrt((1.0 / 18.0) / sample_size)
+    assert abs(linear_mean - theoretical_mean) < 5.0 * standard_error

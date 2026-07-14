@@ -15,6 +15,10 @@ DIS_DIR = "DIS"
 OBSERVER_BRIDGE_DIR = "ObserverBridge"
 OBSERVER_IMAGE_BRANCHES_DIR = "ObserverImageBranches"
 POWHEG_DIR = "POWHEG"
+EVENT_GENERATION_DIR = "EventGeneration"
+GEANT4_DIR = "GEANT4"
+PHOTON_TRANSPORT_DIR = "PhotonTransport"
+SPECTRA_DIR = "Spectra"
 DASHBOARD_DIR = "Dashboard"
 
 
@@ -54,6 +58,22 @@ def powheg_dir(run_output: Path) -> Path:
     return run_output / POWHEG_DIR
 
 
+def event_generation_dir(run_output: Path) -> Path:
+    return run_output / EVENT_GENERATION_DIR
+
+
+def geant4_dir(run_output: Path) -> Path:
+    return run_output / GEANT4_DIR
+
+
+def photon_transport_dir(run_output: Path) -> Path:
+    return run_output / PHOTON_TRANSPORT_DIR
+
+
+def spectra_dir(run_output: Path) -> Path:
+    return run_output / SPECTRA_DIR
+
+
 def clear_forward_geodesics_outputs(run_output: Path) -> None:
     path = forward_geodesics_dir(run_output)
     if path.exists():
@@ -80,6 +100,28 @@ def clear_powheg_outputs(run_output: Path) -> None:
     if path.exists():
         shutil.rmtree(path)
     path.mkdir(parents=True, exist_ok=True)
+    # POWHEG is the official parent of Event Generation; regenerated LHE
+    # invalidates all shower/hadronization products.
+    clear_event_generation_outputs(run_output)
+
+
+def clear_event_generation_outputs(run_output: Path) -> None:
+    path = event_generation_dir(run_output)
+    if path.exists():
+        shutil.rmtree(path)
+    path.mkdir(parents=True, exist_ok=True)
+    clear_geant4_outputs(run_output)
+
+
+def clear_geant4_outputs(run_output: Path) -> None:
+    path = geant4_dir(run_output)
+    if path.exists():
+        shutil.rmtree(path)
+    path.mkdir(parents=True, exist_ok=True)
+    for downstream in (photon_transport_dir(run_output), spectra_dir(run_output)):
+        if downstream.exists():
+            shutil.rmtree(downstream)
+        downstream.mkdir(parents=True, exist_ok=True)
 
 
 def clear_observer_image_branches_outputs(run_output: Path) -> None:
@@ -146,6 +188,25 @@ def ensure_output_layout(run_output: Path) -> None:
             "geodesic_density_map.png",
             "forward_geodesics_diagnostics_report.json",
         ],
+        GEANT4_DIR: [
+            "geant4_summary.json",
+            "geant4_summary.csv",
+            "geant4_manifest.json",
+            "geant4_environment_manifest.json",
+            "geant4_validation_report.json",
+            "geant4_import_report.json",
+            "geant4_events_summary.jsonl",
+            "geant4_escaped_particles.jsonl",
+            "geant4_steps.jsonl",
+            "geant4_sites.json",
+            "geant4_unsupported_particles.jsonl",
+            "geant4_energy_balance.png",
+            "geant4_escape_spectrum.png",
+            "geant4_event_view.html",
+            "geant4_macro_sites_3d.html",
+        ],
+        PHOTON_TRANSPORT_DIR: [],
+        SPECTRA_DIR: [],
         DIS_DIR: [
             "dis_path_optical_depths.jsonl",
             "dis_interaction_candidates.jsonl",
@@ -233,6 +294,22 @@ def ensure_output_layout(run_output: Path) -> None:
             "powheg_card_preview.png",
             "powheg_energy_distribution.png",
             "powheg_job_summary.png",
+        ],
+        EVENT_GENERATION_DIR: [
+            "event_generation_manifest.json",
+            "event_generation_jobs.jsonl",
+            "event_generation_summary.json",
+            "event_generation_summary.csv",
+            "event_generation_validation_report.json",
+            "event_generation_events.hepmc3",
+            "event_generation_events_summary.jsonl",
+            "event_generation_final_particles.jsonl",
+            "event_generation_particle_content.json",
+            "event_generation_multiplicity.png",
+            "event_generation_energy_spectrum.png",
+            "event_generation_species.png",
+            "event_generation_conservation.png",
+            "event_generation_event_view.html",
         ],
         DASHBOARD_DIR: [
             "index.html",

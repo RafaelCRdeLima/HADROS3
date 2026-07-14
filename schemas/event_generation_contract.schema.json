@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hadros3.local/schemas/event-generation-contract-1.0.json",
+  "title": "HADROS3 H3-W10 Event Generation contracts",
+  "$defs": {
+    "job": {
+      "type": "object",
+      "required": ["powheg_request_id", "lhe_path", "lhe_sha256", "seed", "expected_events", "status"],
+      "properties": {
+        "powheg_request_id": {"type": "string", "minLength": 1},
+        "lhe_path": {"type": "string", "minLength": 1},
+        "lhe_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "seed": {"type": "integer", "minimum": 1, "maximum": 900000000},
+        "expected_events": {"type": "integer", "minimum": 1},
+        "status": {"enum": ["ready", "ok"]}
+      }
+    },
+    "event": {
+      "type": "object",
+      "required": ["powheg_request_id", "lhe_event_index", "event_generation_event_id", "xwgtup", "scalup_gev", "generator_frame", "status"],
+      "properties": {
+        "event_generation_event_id": {"type": "string", "pattern": "^.+:[1-9][0-9]*$"},
+        "lhe_event_index": {"type": "integer", "minimum": 1},
+        "xwgtup": {"type": "number"},
+        "scalup_gev": {"type": "number", "minimum": 0},
+        "physics_weight": {"type": ["number", "null"]},
+        "observer_weight": {"type": ["number", "null"]},
+        "final_observation_score": {"type": ["number", "null"]},
+        "generator_frame": {"const": "local_matter_tetrad"},
+        "status": {"const": "ok"}
+      }
+    },
+    "particle": {
+      "type": "object",
+      "required": ["event_generation_event_id", "particle_index", "pdg_id", "status", "px_gev", "py_gev", "pz_gev", "energy_gev", "mass_gev", "generator_frame", "momentum_unit", "length_unit"],
+      "properties": {
+        "particle_index": {"type": "integer", "minimum": 0},
+        "pdg_id": {"type": "integer"},
+        "momentum_unit": {"const": "GeV"},
+        "length_unit": {"const": "mm"},
+        "generator_frame": {"const": "local_matter_tetrad"}
+      }
+    },
+    "manifest": {
+      "type": "object",
+      "required": ["stage", "backend", "generator_frame", "momentum_unit", "length_unit", "configuration_sha256", "configuration", "dependencies", "jobs", "matching_policy"],
+      "properties": {
+        "stage": {"const": "H3-W10"},
+        "backend": {"const": "pythia8"},
+        "configuration_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "jobs": {"type": "array", "items": {"$ref": "#/$defs/job"}}
+      }
+    }
+  }
+}

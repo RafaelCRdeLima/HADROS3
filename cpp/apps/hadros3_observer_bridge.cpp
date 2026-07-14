@@ -26,9 +26,9 @@ struct Config {
   std::string bridge_mode = "scoring_only";
   std::string secondary_particle_proxy_model = "geometric_escape_proxy";
   std::string escape_proxy_model = "geometric_outward_proxy";
-  std::string visibility_model = "geometric_proxy";
-  std::string redshift_proxy_model = "unity_or_metric_proxy";
-  std::string line_of_sight_proxy_model = "geometric_proxy";
+  std::string visibility_model = "unity_diagnostic_not_physics";
+  std::string redshift_proxy_model = "unity_diagnostic_not_physics";
+  std::string line_of_sight_proxy_model = "unity_diagnostic_not_physics";
   std::string fov_policy = "hard";
   bool distance_weight_enabled = true;
   bool redshift_weight_enabled = true;
@@ -272,9 +272,9 @@ static Candidate candidate_from_line(const std::string& line, const Config& c) {
   out.escape_probability_proxy = out.escape_direction_proxy;
   out.escape_weight_proxy = out.escape_probability_proxy;
   out.visibility_proxy = 1.0;
-  out.line_of_sight_proxy = c.line_of_sight_check_enabled ? 1.0 : 1.0;
+  out.line_of_sight_proxy = 1.0;
   out.line_of_sight_weight = out.line_of_sight_proxy;
-  out.line_of_sight_status = c.line_of_sight_check_enabled ? "geometric_proxy_unblocked" : "geometric_proxy_disabled";
+  out.line_of_sight_status = c.line_of_sight_check_enabled ? "unity_diagnostic_enabled_not_evaluated" : "unity_diagnostic_disabled_not_evaluated";
   out.visibility_flag = out.visibility_proxy > 0.0;
   out.redshift_proxy = 1.0;
   out.redshift_weight = c.redshift_weight_enabled ? out.redshift_proxy : 1.0;
@@ -324,6 +324,10 @@ static void write_candidate(std::ostream& out, const Candidate& c, const Config&
       << ",\"observer_weight\":" << c.observer_weight
       << ",\"physics_weight\":" << c.physics_weight
       << ",\"proxy_physics_risk\":true"
+      << ",\"visibility_physics_model\":false"
+      << ",\"redshift_physics_model\":false"
+      << ",\"line_of_sight_physics_model\":false"
+      << ",\"unity_diagnostic_factors_ignore_enable_flags\":true"
       << ",\"redshift_proxy\":" << c.redshift_proxy
       << ",\"redshift_proxy_model\":" << quote(cfg.redshift_proxy_model)
       << ",\"redshift_weight\":" << c.redshift_weight
@@ -441,6 +445,10 @@ int main(int argc, char** argv) {
           << ",\"observer_bridge_summary\":" << quote(csv_path.string())
           << ",\"observer_bridge_summary_json\":" << quote(summary_path.string()) << "}"
           << ",\"proxy_physics_risk\":true"
+          << ",\"visibility_physics_model\":false"
+          << ",\"redshift_physics_model\":false"
+          << ",\"line_of_sight_physics_model\":false"
+          << ",\"unity_diagnostic_factors_ignore_enable_flags\":true"
           << ",\"pythia_invoked\":false"
           << ",\"redshift_proxy_model\":" << quote(cfg.redshift_proxy_model)
           << ",\"redshift_proxy_physics_risk\":true"

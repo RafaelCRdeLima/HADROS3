@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
 import math
+import subprocess
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -13,6 +15,7 @@ from hadros3.observer_bridge import (
     _camera_basis_diagnostic,
     _camera_plane_to_overlay_image_pixel,
     _camera_preview_local_direction_for_pixel,
+    _cluster_matching_rays,
     _interactive_rays,
     _kerr_pixel_match_candidates,
     _map_kerr_match_to_overlay_pixel,
@@ -95,7 +98,7 @@ def _write_camera_preview(run_dir: Path) -> Path:
     return camera_preview_path
 
 
-def test_camera_overlay_uses_identity_camera_preview_pixel_transform() -> None:
+def test_camera_overlay_flips_camera_preview_pixels_for_north_up() -> None:
     width = 1024
     height = 576
     matched_pixel_x = 321.25
@@ -104,9 +107,9 @@ def test_camera_overlay_uses_identity_camera_preview_pixel_transform() -> None:
     image_x, image_y = _camera_plane_to_overlay_image_pixel(matched_pixel_x, matched_pixel_y, width, height)
 
     assert image_x == matched_pixel_x
-    assert image_y == matched_pixel_y
-    assert _camera_plane_to_overlay_image_pixel(-10.0, -20.0, width, height) == (0.0, 0.0)
-    assert _camera_plane_to_overlay_image_pixel(width + 10.0, height + 20.0, width, height) == (width - 1.0, height - 1.0)
+    assert image_y == height - 1.0 - matched_pixel_y
+    assert _camera_plane_to_overlay_image_pixel(-10.0, -20.0, width, height) == (0.0, height - 1.0)
+    assert _camera_plane_to_overlay_image_pixel(width + 10.0, height + 20.0, width, height) == (width - 1.0, 0.0)
 
 
 def test_map_kerr_match_to_overlay_pixel_conventions() -> None:
@@ -231,10 +234,13 @@ def test_observer_inclination_uses_boyer_lindquist_theta_hemisphere(tmp_path: Pa
     assert payload["camera_preview_observer_position"][2] > 0.0
     assert payload["kerr_pixel_match_observer_position"][2] > 0.0
     assert payload["hemisphere_consistent"] is True
-    assert payload["camera_preview_png_top_direction"] == "+e_theta"
-    assert payload["camera_preview_png_bottom_direction"] == "-e_theta"
-    assert payload["interactive_previous_screen_up_convention"] == "-e_theta"
-    assert payload["interactive_screen_up_convention"] == "+e_theta"
+    assert payload["camera_preview_png_raw_top_direction"] == "+e_theta"
+    assert payload["camera_preview_png_raw_bottom_direction"] == "-e_theta"
+    assert payload["camera_preview_png_top_direction"] == "-e_theta"
+    assert payload["camera_preview_png_bottom_direction"] == "+e_theta"
+    assert payload["observer_overview_display_orientation"] == "north_up"
+    assert payload["interactive_previous_screen_up_convention"] == "+e_theta (south-up)"
+    assert payload["interactive_screen_up_convention"] == "-e_theta (north-up)"
     assert payload["interactive_matches_camera_preview"] is True
     assert payload["basis_dot_products"]["previous_up_dot"] < 0.0
     assert payload["basis_dot_products"]["up_dot"] > 0.0
@@ -294,6 +300,10 @@ def test_observer_bridge_scores_all_dis_interactions_without_modifying_dis(tmp_p
     assert summary["photon_transport_invoked"] is False
     assert summary["uses_hadros_original_runtime_path"] is False
     assert summary["proxy_physics_risk"] is True
+    assert summary["visibility_physics_model"] is False
+    assert summary["redshift_physics_model"] is False
+    assert summary["line_of_sight_physics_model"] is False
+    assert summary["unity_diagnostic_factors_ignore_enable_flags"] is True
     assert summary["physics_weight_definition"] == "final_pre_event_weight"
     assert summary["final_observation_score_definition"] == "physics_weight * observer_weight"
 
@@ -359,7 +369,8 @@ def test_observer_bridge_scores_all_dis_interactions_without_modifying_dis(tmp_p
     assert summary["observer_bridge_overlay_background_audit_generated"] is True
     assert summary["observer_bridge_background_comparison_generated"] is True
     assert summary["background_hash_match"] is True
-    assert summary["background_transform_applied"] == "none"
+    assert summary["background_transform_applied"] == "flip_y_for_north_up"
+    assert summary["background_orientation"] == "north_up"
     assert summary["candidate_overlay_projection_model"] == "kerr_geodesic_pixel_match"
     assert summary["candidate_overlay_kerr_lensed"] is True
     assert summary["candidate_overlay_not_ray_traced"] is False
@@ -368,7 +379,7 @@ def test_observer_bridge_scores_all_dis_interactions_without_modifying_dis(tmp_p
     assert summary["kerr_pixel_match_coordinate_convention"] == "camera_preview_pixel_grid"
     assert summary["camera_preview_pixel_convention"] == "ppm_top_left_rows"
     assert summary["overlay_image_coordinate_convention"] == "top_left_image"
-    assert summary["overlay_image_coordinate_transform"] == "identity_x_y"
+    assert summary["overlay_image_coordinate_transform"] == "flip_y_for_north_up"
     assert summary["matching_ray_basis_transform"] == "cuda_preview_local_tetrad"
     assert summary["inclination_convention"] == "theta_0_north_pi_over_2_equator"
     assert summary["camera_preview_observer_hemisphere"] == "equatorial"
@@ -389,7 +400,7 @@ def test_observer_bridge_scores_all_dis_interactions_without_modifying_dis(tmp_p
     assert summary["orientation_marker_selected_basis_transform"] is None
     assert summary["orientation_marker_mean_pixel_error"] is None
     assert summary["candidate_overlay_pixel_y_convention"] == "image_top_left"
-    assert summary["candidate_overlay_y_axis_flipped_for_image"] is False
+    assert summary["candidate_overlay_y_axis_flipped_for_image"] is True
     assert summary["overlay_orientation_validated"] is True
     assert summary["kerr_geodesic_backend"] == "python_kerr_rk4_diagnostic"
     assert summary["kerr_pixel_match_resolution"] == "9x5"
@@ -438,7 +449,7 @@ def test_observer_bridge_scores_all_dis_interactions_without_modifying_dis(tmp_p
     assert report["kerr_pixel_match_coordinate_convention"] == "camera_preview_pixel_grid"
     assert report["camera_preview_pixel_convention"] == "ppm_top_left_rows"
     assert report["overlay_image_coordinate_convention"] == "top_left_image"
-    assert report["overlay_image_coordinate_transform"] == "identity_x_y"
+    assert report["overlay_image_coordinate_transform"] == "flip_y_for_north_up"
     assert report["matching_ray_basis_transform"] == "cuda_preview_local_tetrad"
     assert report["inclination_convention"] == "theta_0_north_pi_over_2_equator"
     assert report["camera_preview_observer_hemisphere"] == "equatorial"
@@ -457,7 +468,7 @@ def test_observer_bridge_scores_all_dis_interactions_without_modifying_dis(tmp_p
     assert report["orientation_marker_selected_hypothesis"] is None
     assert report["orientation_marker_mean_pixel_error"] is None
     assert report["candidate_overlay_pixel_y_convention"] == "image_top_left"
-    assert report["candidate_overlay_y_axis_flipped_for_image"] is False
+    assert report["candidate_overlay_y_axis_flipped_for_image"] is True
     assert report["overlay_orientation_validated"] is True
     assert report["kerr_pixel_match_n_candidates"] == 3
     assert report["observer_bridge_kerr_interactive_view_generated"] is True
@@ -491,14 +502,28 @@ def test_observer_bridge_scores_all_dis_interactions_without_modifying_dis(tmp_p
     assert "dot(q,basis.right)" in html
     assert "dot(q,basis.up)" in html
     assert "dot(q,basis.forward)" in html
-    assert '"screen_up_convention": "+e_theta"' in html
-    assert '"camera_preview_png_top_direction": "+e_theta"' in html
+    assert '"screen_up_convention": "-e_theta (north-up)"' in html
+    assert '"camera_preview_png_top_direction": "-e_theta after north-up display flip"' in html
 
     candidates = [json.loads(line) for line in (bridge_dir / "observer_bridge_candidates.jsonl").read_text(encoding="utf-8").splitlines()]
     assert len(candidates) == 3
     assert all(candidate["physics_weight"] >= 0.0 for candidate in candidates)
     assert all(candidate["observer_weight"] >= 0.0 for candidate in candidates)
     assert all(candidate["final_observation_score"] >= 0.0 for candidate in candidates)
+    for candidate in candidates:
+        expected_observer_weight = (
+            candidate["escape_weight_proxy"]
+            * candidate["visibility_proxy"]
+            * candidate["camera_fov_weight"]
+            * candidate["distance_weight"]
+            * candidate["redshift_weight"]
+            * candidate["line_of_sight_weight"]
+        )
+        assert math.isclose(candidate["observer_weight"], expected_observer_weight, rel_tol=1.0e-12, abs_tol=1.0e-15)
+        assert math.isclose(candidate["final_observation_score"], candidate["physics_weight"] * candidate["observer_weight"], rel_tol=1.0e-12, abs_tol=1.0e-15)
+        assert candidate["visibility_physics_model"] is False
+        assert candidate["redshift_physics_model"] is False
+        assert candidate["line_of_sight_physics_model"] is False
     inside = {candidate["event_id"]: candidate for candidate in candidates}
     assert inside["event-inside-low"]["camera_fov_flag"] is True
     assert inside["event-inside-high"]["camera_fov_flag"] is True
@@ -519,6 +544,45 @@ def test_observer_bridge_scores_all_dis_interactions_without_modifying_dis(tmp_p
     assert selection_summary["n_candidates_ranked"] == 3
     assert selection_summary["n_candidates_selected"] == 3
     assert selection_summary["selection_policy"] == "top_n"
+
+
+def test_observer_unity_diagnostics_do_not_change_weights_when_flags_toggle(tmp_path: Path) -> None:
+    values = defaults()
+    values["observer_bridge"].update({"redshift_weight_enabled": False, "line_of_sight_check_enabled": True})
+    _write_dis_inputs(tmp_path)
+    metadata = tmp_path / "RunMetadata"
+    metadata.mkdir(parents=True)
+    config_path = metadata / "hadros3_config.json"
+
+    def run_backend() -> list[dict[str, object]]:
+        config_path.write_text(json.dumps({"hadros3_values": values}, sort_keys=True), encoding="utf-8")
+        subprocess.run(["bin/hadros3_observer_bridge", "--run-output", str(tmp_path)], check=True)
+        return [
+            json.loads(line)
+            for line in (tmp_path / "ObserverBridge" / "observer_bridge_candidates.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+
+    first = run_backend()
+    values["observer_bridge"].update({"redshift_weight_enabled": True, "line_of_sight_check_enabled": False})
+    second = run_backend()
+
+    assert [row["observer_weight"] for row in first] == [row["observer_weight"] for row in second]
+    assert [row["final_observation_score"] for row in first] == [row["final_observation_score"] for row in second]
+    assert all(row["redshift_weight"] == 1.0 and row["line_of_sight_weight"] == 1.0 for row in first + second)
+
+
+def test_multi_image_clustering_is_permutation_invariant_and_transitive() -> None:
+    matches = [
+        {"ray_index": 10, "pixel_x": 0.0, "pixel_y": 0.0, "closest_approach_rg": 0.4},
+        {"ray_index": 11, "pixel_x": 0.9, "pixel_y": 0.0, "closest_approach_rg": 0.3},
+        {"ray_index": 12, "pixel_x": 1.8, "pixel_y": 0.0, "closest_approach_rg": 0.2},
+        {"ray_index": 20, "pixel_x": 5.0, "pixel_y": 0.0, "closest_approach_rg": 0.1},
+    ]
+    expected = ((20,), (10, 11, 12))
+    for permutation in itertools.permutations(matches):
+        clusters = _cluster_matching_rays(list(permutation), pixel_link_radius=1.0)
+        assert tuple(tuple(cluster["ray_indices"]) for cluster in clusters) == expected
+    assert math.dist((matches[0]["pixel_x"], matches[0]["pixel_y"]), (matches[2]["pixel_x"], matches[2]["pixel_y"])) > 1.0
 
 
 def test_observer_bridge_downstream_selection_policies(tmp_path: Path) -> None:
@@ -645,7 +709,7 @@ def test_observer_bridge_provenance_is_scoring_only(tmp_path: Path) -> None:
     assert provenance["observer_bridge"]["observer_bridge_overlay_background_audit_generated"] is True
     assert provenance["observer_bridge"]["observer_bridge_background_comparison_generated"] is True
     assert provenance["observer_bridge"]["background_hash_match"] is True
-    assert provenance["observer_bridge"]["background_transform_applied"] == "none"
+    assert provenance["observer_bridge"]["background_transform_applied"] == "flip_y_for_north_up"
     assert provenance["observer_bridge"]["candidate_overlay_projection_model"] == "kerr_geodesic_pixel_match"
     assert provenance["observer_bridge"]["candidate_overlay_kerr_lensed"] is True
     assert provenance["observer_bridge"]["candidate_overlay_not_ray_traced"] is False
@@ -654,7 +718,7 @@ def test_observer_bridge_provenance_is_scoring_only(tmp_path: Path) -> None:
     assert provenance["observer_bridge"]["kerr_pixel_match_coordinate_convention"] == "camera_preview_pixel_grid"
     assert provenance["observer_bridge"]["camera_preview_pixel_convention"] == "ppm_top_left_rows"
     assert provenance["observer_bridge"]["overlay_image_coordinate_convention"] == "top_left_image"
-    assert provenance["observer_bridge"]["overlay_image_coordinate_transform"] == "identity_x_y"
+    assert provenance["observer_bridge"]["overlay_image_coordinate_transform"] == "flip_y_for_north_up"
     assert provenance["observer_bridge"]["matching_ray_basis_transform"] == "cuda_preview_local_tetrad"
     assert provenance["observer_bridge"]["inclination_convention"] == "theta_0_north_pi_over_2_equator"
     assert provenance["observer_bridge"]["camera_preview_observer_hemisphere"] == "equatorial"
@@ -673,7 +737,7 @@ def test_observer_bridge_provenance_is_scoring_only(tmp_path: Path) -> None:
     assert provenance["observer_bridge"]["orientation_marker_selected_hypothesis"] is None
     assert provenance["observer_bridge"]["orientation_marker_mean_pixel_error"] is None
     assert provenance["observer_bridge"]["candidate_overlay_pixel_y_convention"] == "image_top_left"
-    assert provenance["observer_bridge"]["candidate_overlay_y_axis_flipped_for_image"] is False
+    assert provenance["observer_bridge"]["candidate_overlay_y_axis_flipped_for_image"] is True
     assert provenance["observer_bridge"]["overlay_orientation_validated"] is True
     assert provenance["observer_bridge"]["kerr_pixel_match_n_candidates"] == 3
     assert provenance["observer_bridge"]["kerr_pixel_match_n_matched"] >= 1
@@ -719,7 +783,8 @@ def test_observer_bridge_camera_overlay_uses_camera_preview_when_available(tmp_p
     assert summary["camera_preview_sha256"] == camera_sha
     assert summary["overlay_background_sha256"] == camera_sha
     assert summary["background_hash_match"] is True
-    assert summary["background_transform_applied"] == "none"
+    assert summary["background_transform_applied"] == "flip_y_for_north_up"
+    assert summary["background_orientation"] == "north_up"
     assert summary["background_is_stale"] is False
     assert summary["candidate_overlay_projection_model"] == "kerr_geodesic_pixel_match"
     assert summary["candidate_overlay_not_ray_traced"] is False

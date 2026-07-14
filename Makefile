@@ -11,7 +11,7 @@ NVCCFLAGS ?= -O3 -std=c++17
 CPP_INCLUDES := -Icpp/include
 KERR_PORT_SRC := cpp/src/kerr/kerr_metric.cpp cpp/src/kerr/kerr_geodesic.cpp cpp/src/cascade/kerr_local_tetrad.cpp cpp/src/cascade/packet_kerr_null_propagator.cpp
 
-.PHONY: help install-dev test cpp hadros3-forward-geodesics hadros3-dis-sampler hadros3-observer-bridge hadros3-powheg-driver hadros3-geodesic-preview-cuda powheg-fetch powheg-build powheg-smoke powheg powheg-real-smoke powheg-real-free hadros-web render-hadros-web render-camera-preview launch-camera-preview sample-uhe-source propagate-forward-geodesics sample-dis-interactions observer-bridge observer-image-branches serve-hadros-web release-software release-physics release-pipeline theory check validate clean
+.PHONY: help install-dev test cpp hadros3-forward-geodesics hadros3-dis-sampler hadros3-observer-bridge hadros3-powheg-driver hadros3-event-generator hadros3-geant4-transport geant4-build geant4-environment-check geant4-import-check geant4-vacuum-smoke geant4-material-smoke geant4-real-free geant4-validate hadros3-geodesic-preview-cuda powheg-fetch powheg-build powheg-smoke powheg powheg-real-smoke powheg-real-free event-generation-dry-run event-generation-parton-check event-generation-real-smoke event-generation-real-free hadros-web render-hadros-web render-camera-preview launch-camera-preview sample-uhe-source propagate-forward-geodesics sample-dis-interactions observer-bridge observer-image-branches serve-hadros-web release-software release-physics release-pipeline theory check validate clean
 
 help:
 	@echo "HADROS3 commands:"
@@ -33,13 +33,20 @@ help:
 	@echo "  make powheg           Prepare H3-W9a POWHEG dry-run jobs through hadros-web"
 	@echo "  make powheg-real-smoke Run H3-W9b one-candidate local POWHEG LHE smoke mode"
 	@echo "  make powheg-real-free Run H3-W9b local POWHEG with configured candidate/event counts"
+	@echo "  make hadros3-event-generator Build the H3-W10 PYTHIA 8/HepMC3 backend"
+	@echo "  make event-generation-real-smoke Run H3-W10 on at most two LHE events"
+	@echo "  make geant4-build      Build the H3-W11 Geant4/HepMC3 backend"
+	@echo "  make geant4-import-check Audit H3-W10 input and the supported physics domain"
+	@echo "  make geant4-vacuum-smoke Run an explicit H3-W11 vacuum smoke"
+	@echo "  make geant4-material-smoke Run an explicit H3-W11 local-material smoke"
+	@echo "  make geant4-validate   Run focused H3-W11 numerical tests"
 	@echo "  make propagate-forward-geodesics Generate H3-W6 forward geodesics through hadros-web"
 	@echo "  make sample-dis-interactions Generate H3-W7 DIS interaction samples through hadros-web"
 	@echo "  make observer-bridge   Generate H3-W8 Observer Bridge scoring products through hadros-web"
 	@echo "  make observer-image-branches Generate H3-W8b Observer Image Branch Analysis products"
 	@echo "  make release-software  Increment software_version and rebuild the Theory PDF"
 	@echo "  make release-physics   Increment physics_version/theory_version and rebuild the Theory PDF"
-	@echo "  make release-pipeline PIPELINE=H3-W9b Update pipeline_version and rebuild the Theory PDF"
+	@echo "  make release-pipeline PIPELINE=H3-W10 Update pipeline_version and rebuild the Theory PDF"
 	@echo "  make theory            Rebuild docs/Theory/HADROS3_Physics_Theory.pdf"
 	@echo "  make serve-hadros-web  Alias for make hadros-web"
 	@echo "  make check             Run syntax checks and the Python test suite"
@@ -58,7 +65,7 @@ install-dev:
 test:
 	$(PYTHON) -m pytest tests
 
-cpp: bin/hadros3_forward_geodesics bin/hadros3_dis_sampler bin/hadros3_observer_bridge bin/hadros3_powheg_driver
+cpp: bin/hadros3_forward_geodesics bin/hadros3_dis_sampler bin/hadros3_observer_bridge bin/hadros3_powheg_driver bin/hadros3_event_generator bin/hadros3_geant4_transport
 
 hadros3-forward-geodesics: bin/hadros3_forward_geodesics
 
@@ -67,6 +74,10 @@ hadros3-dis-sampler: bin/hadros3_dis_sampler
 hadros3-observer-bridge: bin/hadros3_observer_bridge
 
 hadros3-powheg-driver: bin/hadros3_powheg_driver
+
+hadros3-event-generator: bin/hadros3_event_generator
+
+hadros3-geant4-transport geant4-build: bin/hadros3_geant4_transport
 
 hadros3-geodesic-preview-cuda:
 	@mkdir -p bin
@@ -99,6 +110,22 @@ bin/hadros3_powheg_driver: cpp/apps/hadros3_powheg_driver.cpp
 	@mkdir -p bin
 	$(CXX) $(CXXFLAGS) $(CPP_INCLUDES) cpp/apps/hadros3_powheg_driver.cpp -o $@
 
+PYTHIA8_PREFIX ?= $(HOME)/micromamba/envs/dis
+PYTHIA8_CXX ?= $(PYTHIA8_PREFIX)/bin/x86_64-conda-linux-gnu-c++
+
+bin/hadros3_event_generator: cpp/apps/hadros3_event_generator.cpp
+	@mkdir -p bin
+	$(PYTHIA8_CXX) $(CXXFLAGS) -I$(PYTHIA8_PREFIX)/include $< -L$(PYTHIA8_PREFIX)/lib -Wl,-rpath,$(PYTHIA8_PREFIX)/lib -lpythia8 -lHepMC3 -lz -ldl -pthread -o $@
+
+GEANT4_PREFIX ?= $(HOME)/micromamba/envs/dis
+GEANT4_CMAKE ?= $(GEANT4_PREFIX)/bin/cmake
+
+bin/hadros3_geant4_transport: cpp/apps/hadros3_geant4_transport.cpp cpp/geant4/CMakeLists.txt
+	$(GEANT4_CMAKE) -S cpp/geant4 -B build/geant4 -G Ninja -DCMAKE_PREFIX_PATH=$(GEANT4_PREFIX) -DCMAKE_BUILD_TYPE=Release
+	$(GEANT4_CMAKE) --build build/geant4 --parallel 2
+	@mkdir -p bin
+	cp build/geant4/hadros3_geant4_transport $@
+
 powheg-fetch:
 	$(PYTHON) scripts/powheg/bootstrap_powheg.py fetch
 
@@ -116,6 +143,36 @@ powheg-real-smoke:
 
 powheg-real-free:
 	$(PYTHON) hadros_web.py --powheg-real-free
+
+event-generation-dry-run: bin/hadros3_event_generator
+	$(PYTHON) hadros_web.py --event-generation-dry-run
+
+event-generation-parton-check: bin/hadros3_event_generator
+	$(PYTHON) hadros_web.py --event-generation-parton-check
+
+event-generation-real-smoke: bin/hadros3_event_generator
+	$(PYTHON) hadros_web.py --event-generation-real-smoke
+
+event-generation-real-free: bin/hadros3_event_generator
+	$(PYTHON) hadros_web.py --event-generation-real-free
+
+geant4-environment-check: bin/hadros3_geant4_transport
+	$(PYTHON) hadros_web.py --geant4-environment-check
+
+geant4-import-check: bin/hadros3_geant4_transport
+	$(PYTHON) hadros_web.py --geant4-import-check
+
+geant4-vacuum-smoke: bin/hadros3_geant4_transport
+	$(PYTHON) hadros_web.py --geant4-vacuum-smoke
+
+geant4-material-smoke: bin/hadros3_geant4_transport
+	$(PYTHON) hadros_web.py --geant4-material-smoke
+
+geant4-real-free: bin/hadros3_geant4_transport
+	$(PYTHON) hadros_web.py --geant4-real-free
+
+geant4-validate: bin/hadros3_geant4_transport
+	$(PYTHON) -m pytest tests/test_geant4_transport.py -v
 
 hadros-web:
 	$(PYTHON) hadros_web.py --serve --host $(HOST) --port $(PORT)
@@ -156,7 +213,7 @@ release-physics:
 	$(MAKE) theory
 
 release-pipeline:
-	@if [ -z "$(PIPELINE)" ]; then echo "PIPELINE is required, for example: make release-pipeline PIPELINE=H3-W9b"; exit 2; fi
+	@if [ -z "$(PIPELINE)" ]; then echo "PIPELINE is required, for example: make release-pipeline PIPELINE=H3-W10"; exit 2; fi
 	$(PYTHON) scripts/release/update_version.py --pipeline $(PIPELINE)
 	$(MAKE) theory
 

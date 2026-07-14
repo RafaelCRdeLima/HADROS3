@@ -345,7 +345,7 @@ int main(int argc, char** argv)
         }
 
         const GeodesicState start = state;
-        geodesic.step_adaptive(state);
+        const double affine_step = geodesic.step_adaptive(state);
         state = normalize_poles(state);
         if (!std::isfinite(state.r) || !std::isfinite(state.theta) || !std::isfinite(state.phi)) {
           stop = "invalid_invariant";
@@ -398,7 +398,12 @@ int main(int argc, char** argv)
             0.5 * (start.pphi + state.pphi),
         };
 
-        segments << "{\"E_nu_local_gev_mid\":" << zamo_energy_gev(metric, mid, sample.energy_gev)
+        const double zamo_energy_mid_gev = zamo_energy_gev(metric, mid, sample.energy_gev);
+        const double zamo_comoving_length_rg = zamo_energy_mid_gev / std::max(sample.energy_gev, 1.0e-300) * affine_step;
+        segments << "{\"E_nu_local_gev_mid\":" << zamo_energy_mid_gev
+                 << ",\"affine_parameter_step_rg\":" << affine_step
+                 << ",\"comoving_path_length_model\":\"minus_u_dot_k_dlambda_midpoint\""
+                 << ",\"comoving_path_length_rg_zamo\":" << zamo_comoving_length_rg
                  << ",\"dl_segment_rg\":" << dl
                  << ",\"event_id\":" << quote(sample.event_id)
                  << ",\"full_kerr_geodesic\":true,\"geodesic_backend\":\"cpp_hadros_original_port\",\"geodesic_status\":" << quote(status)
@@ -406,6 +411,7 @@ int main(int argc, char** argv)
                  << ",\"p_r_mid\":" << mid.pr * sample.energy_gev
                  << ",\"p_t_mid\":" << mid.pt * sample.energy_gev
                  << ",\"p_theta_mid\":" << mid.ptheta * sample.energy_gev
+                 << ",\"momentum_affine_normalization_gev\":" << sample.energy_gev
                  << ",\"phi_end_rad\":" << state.phi
                  << ",\"phi_mid_rad\":" << phimid
                  << ",\"phi_start_rad\":" << start.phi

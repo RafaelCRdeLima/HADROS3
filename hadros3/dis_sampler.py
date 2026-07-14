@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import math
 import random
@@ -13,7 +14,7 @@ import tempfile
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .config import validate_values
 from .forward_geodesics import kerr_covariant_metric_components
@@ -124,6 +125,43 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
     return records
 
 
+def _stable_uniform(seed: int, identifier: str, stream: str) -> float:
+    digest = hashlib.sha256(f"{seed}\0{stream}\0{identifier}".encode("utf-8")).digest()
+    integer = int.from_bytes(digest[:8], "big") >> 11
+    return integer / float(1 << 53)
+
+
+def uniform_capped_bernoulli_selection(
+    probabilities: list[float],
+    identifiers: list[str],
+    *,
+    max_selected: int,
+    seed: int,
+) -> list[bool]:
+    """Draw every Bernoulli, then uniformly cap the preliminary successes.
+
+    Hash-derived independent streams make the result a function of physical
+    identity rather than input position, while remaining exactly reproducible.
+    """
+
+    if len(probabilities) != len(identifiers):
+        raise ValueError("probabilities and identifiers must have equal length")
+    if len(set(identifiers)) != len(identifiers):
+        raise ValueError("identifiers must be unique for order-independent sampling")
+    preliminary = [
+        probability > 0.0 and _stable_uniform(seed, identifier, "bernoulli") < probability
+        for probability, identifier in zip(probabilities, identifiers)
+    ]
+    successes = [
+        (_stable_uniform(seed, identifier, "cap_priority"), identifier, index)
+        for index, (identifier, success) in enumerate(zip(identifiers, preliminary))
+        if success
+    ]
+    successes.sort()
+    selected_indices = {entry[2] for entry in successes[:max(0, max_selected)]}
+    return [index in selected_indices for index in range(len(probabilities))]
+
+
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -173,6 +211,42 @@ def constant_density_tau(n_baryon_cm3: float, sigma_cm2: float, length_cm: float
     return n_baryon_cm3 * sigma_cm2 * length_cm
 
 
+def invariant_comoving_path_length_rg(
+    local_energy_gev: float,
+    momentum_affine_normalization_gev: float,
+    affine_parameter_step_rg: float,
+) -> float:
+    """Return ``-(u.k) dλ`` in r_g for the segment momentum convention.
+
+    The geodesic integrator evolves a dimensionless covector normalized by the
+    emitted energy, while serialized momenta are in GeV. Dividing the measured
+    local energy by that same normalization restores ``-u.k`` in integrator
+    units. The product is invariant under reciprocal rescalings of momentum and
+    affine parameter.
+    """
+    if not all(math.isfinite(value) for value in (local_energy_gev, momentum_affine_normalization_gev, affine_parameter_step_rg)):
+        raise ValueError("non-finite covariant path-length input")
+    if local_energy_gev < 0.0 or momentum_affine_normalization_gev <= 0.0 or affine_parameter_step_rg < 0.0:
+        raise ValueError("invalid covariant path-length input")
+    return (local_energy_gev / momentum_affine_normalization_gev) * affine_parameter_step_rg
+
+
+def segment_comoving_path_length_rg(
+    segment: dict[str, Any], spin_a: float, medium_velocity_model: str
+) -> tuple[float, float, bool]:
+    """Return local energy, matter-frame path length, and static fallback flag."""
+    e_local, fallback = zamo_or_static_local_energy_gev(segment, spin_a, medium_velocity_model)
+    try:
+        affine_step = float(segment["affine_parameter_step_rg"])
+        normalization = float(segment["momentum_affine_normalization_gev"])
+    except KeyError as exc:
+        raise ValueError(
+            "forward segment lacks affine metadata required for covariant optical depth; regenerate ForwardGeodesics"
+        ) from exc
+    length_rg = invariant_comoving_path_length_rg(e_local, normalization, affine_step)
+    return e_local, length_rg, fallback
+
+
 def _source_by_id(source_samples: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
     return {int(sample["source_sample_id"]): sample for sample in source_samples}
 
@@ -191,21 +265,67 @@ def _linear_angle(phi0: float, phi1: float, s: float) -> float:
     return phi0 + s * delta
 
 
+def sample_density_weighted_unit_interval(
+    density_at_u: Callable[[float], float],
+    rng: random.Random,
+    *,
+    subdivisions: int = 128,
+) -> float | None:
+    """Sample a one-dimensional density using trapezoidal CDF quadrature."""
+
+    if subdivisions < 2:
+        raise ValueError("subdivisions must be at least 2")
+    densities = [max(0.0, float(density_at_u(index / subdivisions))) for index in range(subdivisions + 1)]
+    cell_areas = [0.5 * (densities[index] + densities[index + 1]) for index in range(subdivisions)]
+    total = sum(cell_areas)
+    if not math.isfinite(total) or total <= 0.0:
+        return None
+    target = rng.random() * total
+    cumulative = 0.0
+    cell = subdivisions - 1
+    for index, area in enumerate(cell_areas):
+        if target <= cumulative + area:
+            cell = index
+            break
+        cumulative += area
+    local_target = min(max(target - cumulative, 0.0), cell_areas[cell])
+    left_density = densities[cell]
+    slope = densities[cell + 1] - left_density
+    low, high = 0.0, 1.0
+    for _ in range(48):
+        midpoint = 0.5 * (low + high)
+        area_to_midpoint = left_density * midpoint + 0.5 * slope * midpoint * midpoint
+        if area_to_midpoint < local_target:
+            low = midpoint
+        else:
+            high = midpoint
+    return (cell + 0.5 * (low + high)) / subdivisions
+
+
 def sample_interaction_point_in_medium(
     segment: dict[str, Any],
     values: dict[str, dict[str, Any]],
     *,
     density_floor_g_cm3: float,
     rng: random.Random,
-    max_attempts: int = 32,
+    max_attempts: int = 16,
 ) -> dict[str, Any]:
-    best = {"rho": 0.0, "r": float(segment["r_mid_rg"]), "theta": float(segment["theta_mid_rad"]), "phi": float(segment["phi_mid_rad"])}
-    for attempt in range(1, max_attempts + 1):
-        s = rng.random()
+    def point_at(s: float) -> tuple[float, float, float, float]:
         r = float(segment["r_start_rg"]) + s * (float(segment["r_end_rg"]) - float(segment["r_start_rg"]))
         theta = float(segment["theta_start_rad"]) + s * (float(segment["theta_end_rad"]) - float(segment["theta_start_rad"]))
         phi = _linear_angle(float(segment["phi_start_rad"]), float(segment["phi_end_rad"]), s)
         rho = analytic_torus_density_g_cm3(r, theta, values, density_floor_g_cm3=density_floor_g_cm3)
+        return r, theta, phi, rho
+
+    def density_at(s: float) -> float:
+        return point_at(s)[3]
+
+    best = {"rho": 0.0, "r": float(segment["r_mid_rg"]), "theta": float(segment["theta_mid_rad"]), "phi": float(segment["phi_mid_rad"])}
+    for attempt in range(1, max_attempts + 1):
+        s = sample_density_weighted_unit_interval(density_at, rng, subdivisions=128)
+        if s is None:
+            break
+        r, theta, phi, rho = point_at(s)
         if rho > float(best["rho"]):
             best = {"rho": rho, "r": r, "theta": theta, "phi": phi}
         if rho > 0.0:
@@ -216,7 +336,7 @@ def sample_interaction_point_in_medium(
                 "rho": rho,
                 "inside": True,
                 "attempts": attempt,
-                "method": "rejection_with_midpoint_fallback",
+                "method": "optical_depth_cdf_trapezoid_128",
             }
     midpoint_rho = analytic_torus_density_g_cm3(
         float(segment["r_mid_rg"]),
@@ -232,7 +352,7 @@ def sample_interaction_point_in_medium(
             "rho": midpoint_rho,
             "inside": True,
             "attempts": max_attempts,
-            "method": "rejection_with_midpoint_fallback_midpoint",
+            "method": "optical_depth_cdf_trapezoid_128_midpoint_fallback",
         }
     return {
         "r": float(best["r"]),
@@ -241,7 +361,7 @@ def sample_interaction_point_in_medium(
         "rho": float(best["rho"]),
         "inside": float(best["rho"]) > 0.0,
         "attempts": max_attempts,
-        "method": "rejection_with_highest_density_fallback",
+        "method": "optical_depth_cdf_trapezoid_128_highest_density_fallback",
     }
 
 
@@ -607,12 +727,12 @@ def _segment_diagnostics(values: dict[str, dict[str, Any]], segments: list[dict[
             density_floor_g_cm3=config.density_floor_g_cm3,
         )
         n_baryon = rho / M_BARYON_G
-        e_local, _ = zamo_or_static_local_energy_gev(segment, config.spin_a, config.medium_velocity_model)
+        e_local, comoving_length_rg, _ = segment_comoving_path_length_rg(segment, config.spin_a, config.medium_velocity_model)
         try:
             sigma = provider.sigma_cm2(e_local)
         except ValueError:
             sigma = 0.0
-        d_tau = max(0.0, n_baryon * sigma * float(segment["dl_segment_rg"]) * r_g_cm)
+        d_tau = max(0.0, n_baryon * sigma * comoving_length_rg * r_g_cm)
         x0, _, z0 = _xyz(float(segment["r_start_rg"]), float(segment["theta_start_rad"]), float(segment["phi_start_rad"]))
         x1, _, z1 = _xyz(float(segment["r_end_rg"]), float(segment["theta_end_rad"]), float(segment["phi_end_rad"]))
         xm, ym, zm = _xyz(float(segment["r_mid_rg"]), float(segment["theta_mid_rad"]), float(segment["phi_mid_rad"]))
@@ -628,6 +748,7 @@ def _segment_diagnostics(values: dict[str, dict[str, Any]], segments: list[dict[
                 "rho_g_cm3": rho,
                 "E_nu_local_gev": e_local,
                 "sigma_nuN_cm2": sigma,
+                "comoving_path_length_rg": comoving_length_rg,
                 "d_tau": d_tau,
             }
         )
@@ -1157,10 +1278,10 @@ def _generate_dis_interaction_products_python(values: dict[str, dict[str, Any]],
     output_dir = dis_dir(run_output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     r_g_cm = rg_to_cm(config.mass_msun)
-    rng = random.Random(config.random_seed)
     path_records: list[dict[str, Any]] = []
     candidates: list[dict[str, Any]] = []
     accepted: list[dict[str, Any]] = []
+    potential_interactions: dict[int, dict[str, Any]] = {}
     tau_values: list[float] = []
     max_density = 0.0
     max_sigma = 0.0
@@ -1189,14 +1310,16 @@ def _generate_dis_interaction_products_python(values: dict[str, dict[str, Any]],
                 density_floor_g_cm3=config.density_floor_g_cm3,
             )
             n_baryon = rho / M_BARYON_G
-            e_local, fallback = zamo_or_static_local_energy_gev(segment, config.spin_a, config.medium_velocity_model)
+            e_local, comoving_length_rg, fallback = segment_comoving_path_length_rg(
+                segment, config.spin_a, config.medium_velocity_model
+            )
             try:
                 sigma = provider.sigma_cm2(e_local)
                 oob = False
             except ValueError:
                 sigma = 0.0
                 oob = True
-            d_tau = n_baryon * sigma * float(segment["dl_segment_rg"]) * r_g_cm
+            d_tau = n_baryon * sigma * comoving_length_rg * r_g_cm
             d_tau = max(0.0, d_tau)
             tau_total += d_tau
             path_oob = path_oob or oob
@@ -1212,6 +1335,7 @@ def _generate_dis_interaction_products_python(values: dict[str, dict[str, Any]],
                     "n_baryon_cm3": n_baryon,
                     "E_nu_local_gev": e_local,
                     "sigma_nuN_cm2": sigma,
+                    "comoving_path_length_rg": comoving_length_rg,
                     "d_tau_nuN": d_tau,
                     "oob_sigma_table": oob,
                 }
@@ -1220,7 +1344,6 @@ def _generate_dis_interaction_products_python(values: dict[str, dict[str, Any]],
         if tau_total > 0.0:
             cdf_total = sum(float(entry["d_tau_nuN"]) for entry in segment_tau_records)
             cdf_normalized = cdf_normalized and abs(cdf_total / tau_total - 1.0) <= 1.0e-10
-        accepted_flag = bool(tau_total > 0.0 and len(accepted) < config.max_interactions and rng.random() < probability)
         source = source_map.get(source_sample_id, {})
         source_weight = float(source.get("source_weight", 1.0))
         direction_weight = float(source.get("direction_weight", 1.0))
@@ -1253,14 +1376,20 @@ def _generate_dis_interaction_products_python(values: dict[str, dict[str, Any]],
         max_d_tau = max(max_d_tau, path_max_d_tau)
         candidate = {
             **record,
-            "interaction_accepted": accepted_flag,
-            "interaction_weight": interaction_weight if accepted_flag else 0.0,
+            "interaction_accepted": False,
+            "interaction_weight": 0.0,
             "source_weight": source_weight,
             "direction_weight": direction_weight,
             "expected_interaction_weight": expected_interaction_weight,
         }
         if segment_tau_records and tau_total > 0.0:
-            draw = rng.random() * tau_total
+            event_rng = random.Random(
+                int.from_bytes(
+                    hashlib.sha256(f"{config.random_seed}\0point\0{event_id}".encode("utf-8")).digest()[:8],
+                    "big",
+                )
+            )
+            draw = event_rng.random() * tau_total
             cumulative = 0.0
             chosen = segment_tau_records[-1]
             for entry in segment_tau_records:
@@ -1273,7 +1402,7 @@ def _generate_dis_interaction_products_python(values: dict[str, dict[str, Any]],
                 segment,
                 values,
                 density_floor_g_cm3=config.density_floor_g_cm3,
-                rng=rng,
+                rng=event_rng,
             )
             candidate.update(
                 {
@@ -1284,6 +1413,7 @@ def _generate_dis_interaction_products_python(values: dict[str, dict[str, Any]],
                     "candidate_rho_g_cm3": point["rho"],
                     "candidate_n_baryon_cm3": chosen["n_baryon_cm3"],
                     "candidate_sigma_nuN_cm2": chosen["sigma_nuN_cm2"],
+                    "candidate_comoving_path_length_rg": chosen["comoving_path_length_rg"],
                     "candidate_d_tau_segment": chosen["d_tau_nuN"],
                     "interaction_point_density_checked": True,
                     "interaction_point_rho_g_cm3": point["rho"],
@@ -1292,14 +1422,7 @@ def _generate_dis_interaction_products_python(values: dict[str, dict[str, Any]],
                     "interaction_point_sampling_attempts": point["attempts"],
                 }
             )
-            if accepted_flag:
-                if bool(point["inside"]):
-                    interaction_points_inside += 1
-                else:
-                    interaction_points_outside += 1
-                accepted.append(
-                    {
-                        "interaction_id": f"H3DIS-{len(accepted):06d}",
+            potential_interactions[len(candidates)] = {
                         "event_id": event_id,
                         "source_sample_id": source_sample_id,
                         "interaction_r_rg": point["r"],
@@ -1309,6 +1432,7 @@ def _generate_dis_interaction_products_python(values: dict[str, dict[str, Any]],
                         "interaction_rho_g_cm3": point["rho"],
                         "interaction_n_baryon_cm3": chosen["n_baryon_cm3"],
                         "interaction_sigma_nuN_cm2": chosen["sigma_nuN_cm2"],
+                        "interaction_comoving_path_length_rg": chosen["comoving_path_length_rg"],
                         "interaction_d_tau_segment": chosen["d_tau_nuN"],
                         "interaction_point_density_checked": True,
                         "interaction_point_rho_g_cm3": point["rho"],
@@ -1325,8 +1449,26 @@ def _generate_dis_interaction_products_python(values: dict[str, dict[str, Any]],
                         "dis_model": config.dis_model,
                         "medium_model": config.medium_model,
                     }
-                )
         candidates.append(candidate)
+    selected_flags = uniform_capped_bernoulli_selection(
+        [float(candidate["interaction_probability"]) for candidate in candidates],
+        [str(candidate["event_id"]) for candidate in candidates],
+        max_selected=config.max_interactions,
+        seed=config.random_seed,
+    )
+    selected_indices = [index for index, selected in enumerate(selected_flags) if selected]
+    selected_indices.sort(key=lambda index: (str(candidates[index]["event_id"]), index))
+    for accepted_index, candidate_index in enumerate(selected_indices):
+        candidate = candidates[candidate_index]
+        candidate["interaction_accepted"] = True
+        candidate["interaction_weight"] = 1.0
+        interaction = potential_interactions[candidate_index]
+        interaction["interaction_id"] = f"H3DIS-{accepted_index:06d}"
+        accepted.append(interaction)
+        if bool(interaction["interaction_point_inside_medium"]):
+            interaction_points_inside += 1
+        else:
+            interaction_points_outside += 1
     tau_min = min(tau_values) if tau_values else 0.0
     tau_max = max(tau_values) if tau_values else 0.0
     tau_mean = sum(tau_values) / len(tau_values) if tau_values else 0.0
@@ -1351,6 +1493,9 @@ def _generate_dis_interaction_products_python(values: dict[str, dict[str, Any]],
         "python_prototype_used": True,
         "uses_hadros_original_runtime_path": False,
         "optical_depth_dis_sampler_invoked": True,
+        "optical_depth_path_length_model": "covariant_minus_u_dot_k_dlambda_midpoint",
+        "optical_depth_uses_coordinate_spatial_distance": False,
+        "optical_depth_affine_rescaling_invariant": True,
         "dis_model": config.dis_model,
         "medium_model": config.medium_model,
         "medium_velocity_model": config.medium_velocity_model,
@@ -1367,7 +1512,10 @@ def _generate_dis_interaction_products_python(values: dict[str, dict[str, Any]],
         "sigma_energy_min_gev": provider.energy_min_gev,
         "sigma_energy_max_gev": provider.energy_max_gev,
         "interaction_sampling_mode": config.interaction_sampling_mode,
-        "interaction_point_sampling_method": "rejection_with_midpoint_fallback",
+        "max_interactions_cap_model": "all_bernoulli_then_uniform_hash_priority_subsample",
+        "max_interactions_order_dependent": False,
+        "interaction_point_sampling_method": "optical_depth_cdf_trapezoid_128",
+        "interaction_point_cdf_subdivisions": 128,
         "interaction_points_total": len(accepted),
         "interaction_points_inside_medium": interaction_points_inside,
         "interaction_points_outside_medium": interaction_points_outside,

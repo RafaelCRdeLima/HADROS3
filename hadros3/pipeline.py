@@ -8,7 +8,7 @@ from typing import Any
 
 from .camera_preview import render_camera_preview
 from .config import flatten_for_legacy_camera, run_output_dir, validate_values
-from .paths import camera_preview_dir, dashboard_dir, dis_dir, ensure_output_layout, forward_geodesics_dir, geometry_dir, observer_bridge_dir, observer_image_branches_dir, powheg_dir, run_metadata_dir, uhe_source_dir
+from .paths import camera_preview_dir, dashboard_dir, dis_dir, ensure_output_layout, event_generation_dir, forward_geodesics_dir, geant4_dir, geometry_dir, observer_bridge_dir, observer_image_branches_dir, powheg_dir, run_metadata_dir, uhe_source_dir
 from .provenance import build_provenance, write_json
 from .render import draw_geometry_preview, draw_system_schematic, write_html_summary
 
@@ -24,6 +24,8 @@ def render_hadros_web(
     observer_bridge_summary: dict[str, Any] | None = None,
     observer_image_branch_summary: dict[str, Any] | None = None,
     powheg_summary: dict[str, Any] | None = None,
+    event_generation_summary: dict[str, Any] | None = None,
+    geant4_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     problems = validate_values(values)
     if problems:
@@ -44,6 +46,8 @@ def render_hadros_web(
     bridge_dir = observer_bridge_dir(run_output)
     image_branch_dir = observer_image_branches_dir(run_output)
     powheg_output_dir = powheg_dir(run_output)
+    event_output_dir = event_generation_dir(run_output)
+    geant4_output_dir = geant4_dir(run_output)
     if source_summary is None:
         existing_source_summary = source_dir / "uhe_neutrino_source_summary.json"
         if existing_source_summary.exists():
@@ -86,6 +90,20 @@ def render_hadros_web(
                 powheg_summary = json.loads(existing_powheg_summary.read_text(encoding="utf-8"))
             except json.JSONDecodeError:
                 powheg_summary = None
+    if event_generation_summary is None:
+        existing_event_summary = event_output_dir / "event_generation_summary.json"
+        if existing_event_summary.exists():
+            try:
+                event_generation_summary = json.loads(existing_event_summary.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                event_generation_summary = None
+    if geant4_summary is None:
+        existing_geant4_summary = geant4_output_dir / "geant4_summary.json"
+        if existing_geant4_summary.exists():
+            try:
+                geant4_summary = json.loads(existing_geant4_summary.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                geant4_summary = None
 
     config_path = metadata_dir / "hadros3_config.json"
     provenance_path = metadata_dir / "hadros3_pipeline_provenance.json"
@@ -113,6 +131,12 @@ def render_hadros_web(
     if powheg_summary:
         for key, value in powheg_summary.get("products", {}).items():
             products[key] = str(value)
+    if event_generation_summary:
+        for key, value in event_generation_summary.get("products", {}).items():
+            products[key] = str(value)
+    if geant4_summary:
+        for key, value in geant4_summary.get("products", {}).items():
+            products[key] = str(value)
     if bool(values["outputs"]["write_config"]):
         config_payload = {
             "hadros3_values": values,
@@ -134,7 +158,10 @@ def render_hadros_web(
     validation = {
         "configuration_valid": True,
         "validation_errors": [],
-        "expensive_event_generation_invoked": False,
+        "expensive_event_generation_invoked": bool(event_generation_summary and event_generation_summary.get("expensive_event_generation_invoked")),
+        "event_generation_invoked": bool(event_generation_summary),
+        "pythia_invoked": bool(event_generation_summary and event_generation_summary.get("pythia_invoked")),
+        "geant4_invoked": bool(geant4_summary and geant4_summary.get("geant4_invoked")),
         "optical_depth_dis_sampler_invoked": bool(dis_summary),
         "observer_bridge_invoked": bool(observer_bridge_summary),
         "observer_image_branch_analysis_invoked": bool(observer_image_branch_summary),
@@ -158,6 +185,8 @@ def render_hadros_web(
             observer_bridge_summary=observer_bridge_summary,
             observer_image_branch_summary=observer_image_branch_summary,
             powheg_summary=powheg_summary,
+            event_generation_summary=event_generation_summary,
+            geant4_summary=geant4_summary,
         )
         write_json(provenance_path, provenance)
         products["provenance"] = str(provenance_path)

@@ -14,6 +14,10 @@ def _write_jsonl(path: Path, rows: list[dict[str, object]]) -> None:
     path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
 
 
+def _read_jsonl_for_test(path: Path) -> list[dict[str, object]]:
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
 def _candidate(candidate_id: str, rank: int, score: float) -> dict[str, object]:
     return {
         "candidate_id": candidate_id,
@@ -108,6 +112,8 @@ def test_observer_image_branch_analysis_selects_primary_by_branch_score(tmp_path
     assert double_primary["primary_branch_id"] == "double:branch-02"
     assert double_primary["primary_branch_selection_model"] == "argmax_branch_score"
     assert double_primary["primary_branch_selection_proxy"] is True
+    assert double_primary["multiplicity_audited"] is True
+    assert double_primary["branch_is_synthetic_fallback"] is False
 
     for filename in [
         "observer_image_branch_summary.json",
@@ -184,3 +190,50 @@ def test_observer_image_branch_analysis_selects_primary_by_branch_score(tmp_path
     assert audit["observer_branch_view_camera_z"] > 0
     assert audit["medium_renderer_z_convention"] == "z = r cos(theta)"
     assert audit["all_views_hemisphere_consistent"] is True
+
+
+def test_synthetic_single_branch_is_not_a_multiplicity_audit_and_explicit_zero_stays_zero(tmp_path: Path) -> None:
+    bridge_dir = tmp_path / "ObserverBridge"
+    rows = [_candidate("fallback", 1, 0.8), _candidate("audited-zero", 2, 0.7)]
+    _write_jsonl(bridge_dir / "observer_bridge_selected_candidates.jsonl", rows)
+    _write_jsonl(bridge_dir / "observer_bridge_ranked_events.jsonl", rows)
+    _write_jsonl(
+        bridge_dir / "observer_candidate_kerr_pixel_map.jsonl",
+        [
+            {"candidate_id": "fallback", "matched_pixel_x": 10.0, "matched_pixel_y": 20.0, "closest_approach_rg": 0.5},
+            {"candidate_id": "audited-zero", "matched_pixel_x": 30.0, "matched_pixel_y": 40.0, "closest_approach_rg": 0.4},
+        ],
+    )
+    _write_jsonl(
+        bridge_dir / "candidate_multi_image_audit.jsonl",
+        [{"candidate_id": "audited-zero", "image_clusters": [], "all_matching_rays": []}],
+    )
+
+    summary = generate_observer_image_branch_products(defaults(), run_output_dir=tmp_path)
+    primary_rows = {
+        row["candidate_id"]: row
+        for row in _read_jsonl_for_test(tmp_path / "ObserverImageBranches" / "observer_image_primary_branches.jsonl")
+    }
+    branch_rows = _read_jsonl_for_test(tmp_path / "ObserverImageBranches" / "observer_image_branches.jsonl")
+
+    assert primary_rows["fallback"]["number_of_image_branches"] == 1
+    assert primary_rows["fallback"]["multiplicity_audited"] is False
+    assert primary_rows["fallback"]["branch_is_synthetic_fallback"] is True
+    assert primary_rows["audited-zero"]["number_of_image_branches"] == 0
+    assert primary_rows["audited-zero"]["multiplicity_audited"] is True
+    assert primary_rows["audited-zero"]["branch_is_synthetic_fallback"] is False
+    assert "primary_branch_id" not in primary_rows["audited-zero"]
+    assert len(branch_rows) == 1 and branch_rows[0]["branch_is_synthetic_fallback"] is True
+    assert summary["n_candidates_multiplicity_audited"] == 1
+    assert summary["n_synthetic_fallback_branches"] == 1
+    assert summary["multiplicity_claims_include_synthetic_fallback"] is False
+
+    provenance = build_provenance(
+        root=Path.cwd(),
+        values=defaults(),
+        products={},
+        validation={"expensive_event_generation_invoked": False},
+        observer_image_branch_summary=summary,
+    )
+    assert provenance["observer_image_branches"]["n_synthetic_fallback_branches"] == 1
+    assert provenance["observer_image_branches"]["multiplicity_claims_include_synthetic_fallback"] is False

@@ -185,7 +185,7 @@ void KerrGeodesic::step_rk4(
         (k1.pphi + 2.0*k2.pphi + 2.0*k3.pphi + k4.pphi) / 6.0;
 }
 
-void KerrGeodesic::step_adaptive(GeodesicState& y) const
+double KerrGeodesic::step_adaptive(GeodesicState& y) const
 {
     auto add_scaled =
         [](const GeodesicState& y0,
@@ -305,7 +305,7 @@ void KerrGeodesic::step_adaptive(GeodesicState& y) const
 
         if (err < tolerance_ || h <= h_min) {
             y = y5;
-            return;
+            return h;
         }
 
         const double safety = 0.8;
@@ -320,4 +320,5 @@ void KerrGeodesic::step_adaptive(GeodesicState& y) const
     }
 
     step_rk4(y);
+    return h_;
 }

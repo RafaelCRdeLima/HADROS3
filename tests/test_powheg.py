@@ -3,14 +3,18 @@ from __future__ import annotations
 import hashlib
 import csv
 import json
+import math
+import os
 from pathlib import Path
 
 import pytest
 
 from hadros3.config import defaults
 from hadros3 import powheg as powheg_module
-from hadros3.powheg import generate_powheg_products, parse_lhe_particles
+from hadros3.powheg import generate_powheg_products, lhe_weight_statistics, parse_lhe_init, parse_lhe_particles
+from hadros3.powheg_kinematics import NUCLEON_MASS_GEV, qmax_for_energy_gev
 from hadros3.provenance import build_provenance
+from scripts.powheg.bootstrap_powheg import SMOKE_ENERGY_GEV, apply_hadros3_dis_compatibility_patches, smoke_card
 
 
 def test_cpp_powheg_driver_fallbacks_match_dashboard_defaults() -> None:
@@ -84,6 +88,58 @@ def _requests(run_dir: Path) -> list[dict[str, object]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
+def _card_value(card: str, key: str) -> str:
+    for line in card.splitlines():
+        fields = line.split()
+        if fields and fields[0] == key:
+            return fields[1]
+    raise AssertionError(f"missing {key} in card")
+
+
+def test_powheg_qmax_fixed_target_limit_and_card_consistency(tmp_path: Path) -> None:
+    expected = math.sqrt(2.0 * NUCLEON_MASS_GEV * 1.0e9)
+    assert math.isclose(qmax_for_energy_gev(1.0e9), expected, rel_tol=1.0e-12)
+
+    for exponent in range(3, 15):
+        energy = 10.0**exponent
+        assert qmax_for_energy_gev(energy) <= math.sqrt(2.0 * NUCLEON_MASS_GEV * energy)
+
+    _write_selected_candidates(
+        tmp_path,
+        rows=[
+            {
+                "interaction_id": "int-qmax",
+                "event_id": "evt-qmax",
+                "interaction_E_nu_local_gev": SMOKE_ENERGY_GEV,
+                "final_observation_score": 1.0,
+                "selected_for_downstream": True,
+                "selection_rank": 1,
+            }
+        ],
+    )
+    values = defaults()
+    values["powheg"]["run_mode"] = "dry_run"
+    generate_powheg_products(values, run_output_dir=tmp_path)
+    generated = (tmp_path / _requests(tmp_path)[0]["powheg_input_path"]).read_text(encoding="utf-8")
+
+    assert _card_value(generated, "Qmax") == _card_value(smoke_card(), "Qmax")
+
+
+def test_powheg_massless_lhe_patch_is_reproducible_and_idempotent(tmp_path: Path) -> None:
+    born = tmp_path / "DIS" / "Born.f"
+    born.parent.mkdir(parents=True)
+    born.write_text('      subroutine finalize_lh\n      call lhefinitemasses\n      end\n', encoding="utf-8")
+
+    patches = apply_hadros3_dis_compatibility_patches(tmp_path)
+    first = born.read_text(encoding="utf-8")
+    apply_hadros3_dis_compatibility_patches(tmp_path)
+
+    assert patches == ["DIS/Born.f: skip finite-mass LHE reshuffling when masslesslhe=1"]
+    assert first == born.read_text(encoding="utf-8")
+    assert first.count('if(powheginput("#masslesslhe") == 1d0) return') == 1
+    assert first.index("masslesslhe") < first.index("call lhefinitemasses")
+
+
 def test_powheg_dry_run_generates_ranked_cards_without_lhe_or_observer_modification(tmp_path: Path) -> None:
     selected_path = _write_selected_candidates(tmp_path)
     before = _sha256(selected_path)
@@ -115,6 +171,9 @@ def test_powheg_dry_run_generates_ranked_cards_without_lhe_or_observer_modificat
     assert summary["powheg_selection_performed_by"] == "ObserverImageBranches"
     assert summary["powheg_selection_policy"] == "top_n"
     assert summary["backend_language"] == "C++17"
+    assert summary["perturbative_order"] == "LO"
+    assert summary["born_only"] is True
+    assert summary["nlo_real_virtual_enabled"] is False
     assert requests[0]["interaction_id"] == "int-high"
     assert requests[1]["interaction_id"] == "int-mid"
     assert requests[0]["powheg_request_id"] == "H3PWHG-000001"
@@ -131,12 +190,15 @@ def test_powheg_dry_run_generates_ranked_cards_without_lhe_or_observer_modificat
     assert "numevts 3" in card
     assert "ebeam1 4.0000000000D+09" in card
     assert "ebeam2 0.938272d0" in card
+    assert "fixed_target 1" in card
+    assert "masslesslhe 1" in card
     assert "lhans1" in card
     assert "lhans2" in card
     assert "Qmax" in card
     assert "iseed 1001" in card
     assert "channel_type 3" in card
     assert "vtype 2" in card
+    assert "LOevents 1" in card
     assert not list((tmp_path / "POWHEG").rglob("*.lhe"))
     assert not (tmp_path / "POWHEG" / "powheg_lhe_particles.jsonl").exists()
     validation = json.loads((tmp_path / "POWHEG" / "powheg_validation_report.json").read_text(encoding="utf-8"))
@@ -146,6 +208,8 @@ def test_powheg_dry_run_generates_ranked_cards_without_lhe_or_observer_modificat
     assert validation["pwhg_main_executed"] is False
     assert validation["powheg_lhe_generated"] is False
     assert validation["lhe_parser_invoked"] is False
+    assert validation["perturbative_order"] == "LO"
+    assert validation["born_only"] is True
     for filename in [
         "powheg_summary.json",
         "powheg_summary.csv",
@@ -155,6 +219,82 @@ def test_powheg_dry_run_generates_ranked_cards_without_lhe_or_observer_modificat
         "powheg_job_summary.png",
     ]:
         assert (tmp_path / "POWHEG" / filename).exists()
+
+
+def test_powheg_nlo_card_cannot_be_mislabeled_born_only(tmp_path: Path) -> None:
+    _write_selected_candidates(tmp_path)
+    values = defaults()
+    values["powheg"].update({"run_mode": "dry_run", "perturbative_order": "NLO"})
+
+    summary = generate_powheg_products(values, run_output_dir=tmp_path)
+    requests = _requests(tmp_path)
+    card = (tmp_path / requests[0]["powheg_input_path"]).read_text(encoding="utf-8")
+    validation = json.loads((tmp_path / "POWHEG" / "powheg_validation_report.json").read_text(encoding="utf-8"))
+
+    assert summary["perturbative_order"] == "NLO"
+    assert summary["born_only"] is False
+    assert summary["nlo_real_virtual_enabled"] is True
+    assert requests[0]["perturbative_order"] == "NLO"
+    assert requests[0]["born_only"] is False
+    assert "LOevents 1" not in card
+    assert "real and virtual contributions remain active" in card
+    assert validation["perturbative_order"] == "NLO"
+    assert validation["born_only"] is False
+
+
+def test_powheg_cc_selector_and_vtype_metadata_are_unambiguous(tmp_path: Path) -> None:
+    _write_selected_candidates(tmp_path)
+    values = defaults()
+    values["powheg"]["run_mode"] = "dry_run"
+
+    summary = generate_powheg_products(values, run_output_dir=tmp_path)
+    request = _requests(tmp_path)[0]
+    card = (tmp_path / request["powheg_input_path"]).read_text(encoding="utf-8")
+    theory = Path("docs/Theory/HADROS3_Physics_Theory.tex").read_text(encoding="utf-8")
+
+    assert _card_value(card, "channel_type") == "3"
+    assert summary["cc_process_selector"] == request["cc_process_selector"] == "channel_type=3"
+    assert summary["incoming_lepton_pdg_id"] == request["incoming_lepton_pdg_id"] == 12
+    assert summary["vtype_physics_role"] == request["vtype_physics_role"] == "neutral_current_gamma_Z_content_not_CC_flavor"
+    assert "specific CC flavor configuration" not in theory
+    assert "does not select the CC lepton" in theory
+
+
+@pytest.mark.skipif(os.environ.get("HADROS3_RUN_REAL_NLO_TEST") != "1", reason="opt-in real POWHEG NLO integration test")
+def test_powheg_real_nlo_smoke_produces_valid_lhe_without_born_only(tmp_path: Path) -> None:
+    if not powheg_module.POWHEG_BINARY.exists():
+        pytest.skip("local POWHEG pwhg_main is not built")
+    _write_selected_candidates(tmp_path)
+    values = defaults()
+    values["powheg"].update(
+        {
+            "run_mode": "real_smoke",
+            "perturbative_order": "NLO",
+            "events_per_candidate": 1,
+            "random_seed": 34100,
+        }
+    )
+
+    summary = generate_powheg_products(values, run_output_dir=tmp_path)
+    requests = _requests(tmp_path)
+    card = (tmp_path / requests[0]["powheg_input_path"]).read_text(encoding="utf-8")
+    validation = json.loads((tmp_path / "POWHEG" / "powheg_validation_report.json").read_text(encoding="utf-8"))
+
+    assert "LOevents 1" not in card
+    assert summary["perturbative_order"] == "NLO"
+    assert summary["born_only"] is False
+    assert summary["nlo_real_virtual_enabled"] is True
+    assert summary["powheg_lhe_generated"] is True
+    assert summary["n_lhe_events"] >= 1
+    assert summary["powheg_physics_summary"]["four_momentum_residual_relative_max"] <= 5.0e-8
+    assert summary["powheg_physics_summary"]["four_momentum_conservation_pass"] is True
+    assert summary["n_final_state_particles"] >= 3
+    assert 21 in summary["unique_pdg_ids"]
+    log_text = Path(validation["powheg_log_path"]).read_text(encoding="utf-8")
+    assert "real processes: CC" in log_text
+    assert "LOevents             absent" in log_text
+    assert validation["perturbative_order"] == "NLO"
+    assert validation["lhe_valid"] is True
 
 
 def test_powheg_uses_selected_candidates_without_applying_own_ranking(tmp_path: Path) -> None:
@@ -277,6 +417,33 @@ def test_lhe_parser_extracts_particle_kinematics(tmp_path: Path) -> None:
     assert events[0]["outgoing_particles_display"] == ["e⁻", "u"]
 
 
+def test_lhe_init_and_signed_weight_normalization_are_exact_and_duplication_invariant(tmp_path: Path) -> None:
+    text = """<LesHouchesEvents version="3.0">
+<init>
+ 12 2212 1.0D+09 9.38272D-01 -1 -1 -1 -1 -4 2
+ 2.5D+00 1.0D-01 4.0D+00 10001
+ 1.5D+00 2.0D-01 3.0D+00 10002
+</init>
+</LesHouchesEvents>
+"""
+    metadata = parse_lhe_init(text)
+    assert metadata["valid"] is True
+    assert metadata["idwtup"] == -4
+    assert metadata["nprup"] == 2
+    assert metadata["processes"][0] == {"xsecup_pb": 2.5, "xerrup_pb": 0.1, "xmaxup_pb": 4.0, "lprup": 10001}
+    assert metadata["processes"][1] == {"xsecup_pb": 1.5, "xerrup_pb": 0.2, "xmaxup_pb": 3.0, "lprup": 10002}
+    assert metadata["xsecup_total_pb"] == 4.0
+    assert metadata["xerrup_quadrature_pb"] == pytest.approx(math.sqrt(0.05), rel=1.0e-15)
+
+    weights = [3.0, -1.0, 2.0, 0.0]
+    stats = lhe_weight_statistics(weights, idwtup=-4, xsecup_total_pb=4.0)
+    duplicated = lhe_weight_statistics(weights * 7, idwtup=-4, xsecup_total_pb=4.0)
+    assert stats["event_cross_section_estimator_pb"] == 1.0
+    assert duplicated["event_cross_section_estimator_pb"] == stats["event_cross_section_estimator_pb"]
+    assert stats["event_weight_standard_error"] == pytest.approx(math.sqrt(10.0 / 3.0 / 4.0), rel=1.0e-15)
+    assert stats["raw_weight_sum_is_cross_section"] is False
+
+
 def test_powheg_real_smoke_fails_clearly_without_local_pwhg_main(tmp_path: Path, monkeypatch) -> None:
     _write_selected_candidates(tmp_path)
     values = defaults()
@@ -322,6 +489,8 @@ LHE
 
     assert _sha256(selected_path) == before
     assert summary["powheg_run_mode"] == "real_smoke"
+    assert summary["perturbative_order"] == "LO"
+    assert summary["born_only"] is True
     assert summary["powheg_dry_run_invoked"] is False
     assert summary["powheg_real_smoke_invoked"] is True
     assert summary["powheg_real_free_invoked"] is False
@@ -450,6 +619,9 @@ LHE
     assert provenance["status"] == "powheg_real_smoke_lhe_generated"
     assert provenance["disabled_expensive_or_future_stages"]["powheg"] == "active_H3_W9b_real_smoke_local_pwhg_main"
     assert provenance["powheg"]["powheg_invoked"] is True
+    assert provenance["powheg"]["perturbative_order"] == "LO"
+    assert provenance["powheg"]["born_only"] is True
+    assert provenance["powheg"]["nlo_real_virtual_enabled"] is False
     assert provenance["powheg"]["powheg_real_free_invoked"] is False
     assert provenance["powheg"]["real_smoke_safety_clamp"] is True
     assert provenance["powheg"]["pwhg_main_executed"] is True

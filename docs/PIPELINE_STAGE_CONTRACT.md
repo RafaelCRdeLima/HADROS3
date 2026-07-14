@@ -9,25 +9,45 @@ The contract pattern is:
 inputs -> run() -> outputs -> diagnostics -> provenance
 ```
 
-It applies to future stages such as:
+It applies to implemented and future stages such as:
 
 ```text
-H3-W9 Event Generation
-H3-W10 GEANT4
-H3-W11 Photon Transport
-H3-W12 Spectra
+H3-W10 Event Generation (PYTHIA 8 + HepMC3)
+H3-W11 GEANT4
+H3-W12 Photon Transport
+H3-W13 Spectra
 ```
 
-The existing implemented stages remain as they are:
+The implemented stages include:
 
 ```text
 H3-W5 UHE Source
 H3-W6 Forward Geodesics
 H3-W7 DIS Interaction Sampler
 H3-W8 Observer Bridge
+H3-W8b Observer Image Branch Analysis
+H3-W9a/b POWHEG
+H3-W10 Event Generation
+H3-W11 GEANT4 for the declared supported-energy domain
 ```
 
 They should not be refactored merely to match this document.
+
+## H3-W11 GEANT4 specialization
+
+H3-W11 consumes `EventGeneration/event_generation_events.hepmc3` plus its
+manifest/event sidecars and the originating H3-W7 density metadata. It writes
+only to `GEANT4/`. The implemented geometry is a homogeneous Cartesian patch in
+the local matter tetrad; global Kerr propagation belongs to H3-W12.
+
+The default physics-domain policy is blocking. A primary above `100000 GeV` or
+an unsupported PDG produces `unsupported_domain` before `BeamOn`, with
+`geant4_invoked=false`. Such an audit is a valid safety result, not a completed
+transport result. Increasing the ceiling without a new validated physics model
+violates the stage contract.
+
+Opening the dashboard or requesting GET state never starts H3-W11. Execution
+requires the explicit `run_geant4` POST action or one of the GEANT4 CLI targets.
 
 ## Required Contract
 
@@ -402,10 +422,10 @@ Where possible, tests should use temporary directories and small fixtures.
 This contract should guide the implementation of:
 
 ```text
-H3-W9 Event Generation
-H3-W10 GEANT4
-H3-W11 Photon Transport
-H3-W12 Spectra
+H3-W10 Event Generation (PYTHIA 8 + HepMC3)
+H3-W11 GEANT4
+H3-W12 Photon Transport
+H3-W13 Spectra
 ```
 
 It is intended to prevent accidental coupling between stages, silent mutation of

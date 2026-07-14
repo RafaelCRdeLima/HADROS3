@@ -19,6 +19,7 @@ struct Config {
   int random_seed = 12345;
   std::string seed_mode = "base_plus_candidate_rank";
   std::string run_mode = "dry_run";
+  std::string perturbative_order = "LO";
 };
 
 struct Candidate {
@@ -148,10 +149,14 @@ static Config load_config(const fs::path& path) {
   c.random_seed = static_cast<int>(json_number(powheg, "random_seed", c.random_seed));
   c.seed_mode = json_string(powheg, "powheg_seed_mode", c.seed_mode);
   c.run_mode = json_string(powheg, "run_mode", c.run_mode);
+  c.perturbative_order = json_string(powheg, "perturbative_order", c.perturbative_order);
   if (c.backend != "local_powheg") throw std::runtime_error("powheg_backend must be local_powheg");
   if (c.process != "nudis") throw std::runtime_error("powheg_process must be nudis");
   if (c.run_mode != "dry_run" && c.run_mode != "real_smoke" && c.run_mode != "real_free") {
     throw std::runtime_error("POWHEG run_mode must be dry_run, real_smoke, or real_free");
+  }
+  if (c.perturbative_order != "LO" && c.perturbative_order != "NLO") {
+    throw std::runtime_error("POWHEG perturbative_order must be LO or NLO");
   }
   if (c.run_mode == "real_smoke") {
     c.events_per_candidate = std::min(c.events_per_candidate, 2);
@@ -205,6 +210,7 @@ static std::string powheg_card(const Candidate& c, const Config& cfg, int seed) 
   const double qmax = qmax_for_energy(c.energy_gev);
   std::ostringstream out;
   out << "! HADROS3 POWHEG DIS card.\n";
+  out << "! perturbative_order=" << cfg.perturbative_order << "\n";
   if (cfg.run_mode == "real_smoke") {
     out << "! H3-W9b real smoke mode: pwhg_main executes locally for this card.\n";
   } else if (cfg.run_mode == "real_free") {
@@ -214,12 +220,19 @@ static std::string powheg_card(const Candidate& c, const Config& cfg, int seed) 
   }
   out << "! interaction_id=" << c.interaction_id << " event_id=" << c.event_id << "\n";
   out << "! final_observation_score=" << std::setprecision(17) << c.final_score << "\n";
-  out << "LOevents 1\n";
+  if (cfg.perturbative_order == "LO") {
+    out << "! Born-only validation/smoke configuration; real and virtual contributions are disabled.\n";
+    out << "LOevents 1\n";
+  } else {
+    out << "! NLO configuration; LOevents is intentionally absent so real and virtual contributions remain active.\n";
+  }
   out << "numevts " << cfg.events_per_candidate << "\n";
   out << "ih1 12\n";
   out << "ih2 1\n";
   out << "ebeam1 " << fortran_double(c.energy_gev) << "\n";
   out << "ebeam2 0.938272d0\n";
+  out << "fixed_target 1\n";
+  out << "masslesslhe 1\n";
   out << "bornktmin 0d0\n";
   out << "bornsuppfact 0d0\n";
   out << "Qmin 10d0\n";
@@ -283,6 +296,12 @@ static void write_requests(const fs::path& path, const std::vector<Request>& req
         << "\"selection_reason\":" << quote(r.candidate.selection_reason) << ","
         << "\"powheg_input_path\":" << quote(rel_to(r.card_path, run_output)) << ","
         << "\"powheg_seed\":" << r.seed << ","
+        << "\"perturbative_order\":" << quote(cfg.perturbative_order) << ","
+        << "\"born_only\":" << (cfg.perturbative_order == "LO" ? "true" : "false") << ","
+        << "\"cc_process_selector\":\"channel_type=3\","
+        << "\"incoming_lepton_pdg_id\":12,"
+        << "\"vtype_card_value\":2,"
+        << "\"vtype_physics_role\":\"neutral_current_gamma_Z_content_not_CC_flavor\","
         << "\"powheg_status\":" << quote(status) << ","
         << "\"powheg_invoked\":false"
         << "}\n";
@@ -325,6 +344,13 @@ static void write_summary_json(const fs::path& path, const Config& cfg, int inpu
       << "  \"powheg_backend\": " << quote(cfg.backend) << ",\n"
       << "  \"powheg_process\": " << quote(cfg.process) << ",\n"
       << "  \"powheg_run_mode\": " << quote(cfg.run_mode) << ",\n"
+      << "  \"perturbative_order\": " << quote(cfg.perturbative_order) << ",\n"
+      << "  \"born_only\": " << (cfg.perturbative_order == "LO" ? "true" : "false") << ",\n"
+      << "  \"nlo_real_virtual_enabled\": " << (cfg.perturbative_order == "NLO" ? "true" : "false") << ",\n"
+      << "  \"cc_process_selector\": \"channel_type=3\",\n"
+      << "  \"incoming_lepton_pdg_id\": 12,\n"
+      << "  \"vtype_card_value\": 2,\n"
+      << "  \"vtype_physics_role\": \"neutral_current_gamma_Z_content_not_CC_flavor\",\n"
       << "  \"powheg_dry_run_invoked\": " << ((real_smoke || real_free) ? "false" : "true") << ",\n"
       << "  \"powheg_real_smoke_invoked\": " << (real_smoke ? "true" : "false") << ",\n"
       << "  \"powheg_real_free_invoked\": " << (real_free ? "true" : "false") << ",\n"

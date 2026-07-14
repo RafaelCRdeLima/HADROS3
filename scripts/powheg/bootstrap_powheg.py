@@ -13,8 +13,13 @@ import time
 from pathlib import Path
 from typing import Any
 
-
 ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from hadros3.powheg_kinematics import NUCLEON_MASS_GEV, fortran_double, qmax_for_energy_gev
+
+
 POWHEG_URL = "https://gitlab.com/POWHEG-BOX/RES/POWHEG-BOX-RES.git"
 POWHEG_COMMIT = "1a31cef9bc594e7f59ac94485a107512030dd1b1"
 POWHEG_DIS_URL = "https://gitlab.com/POWHEG-BOX/RES/User-Processes/DIS.git"
@@ -27,7 +32,6 @@ DEFAULT_LOCAL_SOURCE = ROOT.parent / "HADROS-CASCADE" / "external_cache" / "POWH
 SMOKE_DIR = ROOT / "tmp" / "powheg_smoke"
 SMOKE_EVENTS = 2
 SMOKE_ENERGY_GEV = 1.0e9
-NUCLEON_MASS_GEV = 0.938272
 
 
 def run(cmd: list[str], *, cwd: Path | None = None, env: dict[str, str] | None = None, log: Path | None = None) -> None:
@@ -55,6 +59,21 @@ def copy_tree(source: Path, target: Path) -> None:
         "*.log",
     )
     shutil.copytree(source, target, symlinks=True, ignore=ignored)
+
+
+def apply_hadros3_dis_compatibility_patches(source: Path) -> list[str]:
+    """Apply small, auditable adapter patches to the disposable build staging tree."""
+
+    born_path = source / "DIS" / "Born.f"
+    text = born_path.read_text(encoding="utf-8")
+    guard = '      if(powheginput("#masslesslhe") == 1d0) return\n'
+    if guard not in text:
+        needle = "      call lhefinitemasses\n"
+        if needle not in text:
+            raise RuntimeError(f"cannot locate finalize_lh mass reshuffler call in {born_path}")
+        text = text.replace(needle, guard + needle, 1)
+        born_path.write_text(text, encoding="utf-8")
+    return ["DIS/Born.f: skip finite-mass LHE reshuffling when masslesslhe=1"]
 
 
 def git_output(args: list[str], cwd: Path) -> str:
@@ -166,6 +185,7 @@ def build(args: argparse.Namespace) -> None:
     build_root.mkdir(parents=True, exist_ok=True)
     print(f"[powheg-build] Staging source in {staging}")
     copy_tree(POWHEG_SOURCE, staging)
+    compatibility_patches = apply_hadros3_dis_compatibility_patches(staging)
 
     cmd = ["make", "DEBUG=", f"LHAPDF_CONFIG={lhapdf_config}", "pwhg_main"]
     log = POWHEG_ROOT / "build" / "powheg_build.log"
@@ -188,6 +208,7 @@ def build(args: argparse.Namespace) -> None:
         "build_log": str(log),
         "lhapdf_config": lhapdf_config,
         "make_command": " ".join(cmd),
+        "hadros3_compatibility_patches": compatibility_patches,
         "pwhg_main": str(POWHEG_BINARY),
         "runtime_self_contained_within_hadros3": True,
         "runtime_uses_hadros_or_hadros_cascade_paths": False,
@@ -218,6 +239,7 @@ def lhapdf_env(lhapdf_config: str) -> dict[str, str]:
 
 
 def smoke_card() -> str:
+    qmax_fortran = fortran_double(qmax_for_energy_gev(SMOKE_ENERGY_GEV))
     return f"""! HADROS3 POWHEG DIS smoke card.
 ! H3-W9 bootstrap only: no ObserverBridge coupling, PYTHIA, GEANT4, photon transport, or spectra.
 LOevents 1
@@ -226,10 +248,12 @@ ih1 12
 ih2 1
 ebeam1 {SMOKE_ENERGY_GEV:.10E}
 ebeam2 {NUCLEON_MASS_GEV:.6f}d0
+fixed_target 1
+masslesslhe 1
 bornktmin 0d0
 bornsuppfact 0d0
 Qmin 10d0
-Qmax 6.1262451796D+04
+Qmax {qmax_fortran}
 xmin 0d0
 xmax 1d0
 ymin 0d0

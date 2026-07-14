@@ -154,10 +154,16 @@ def test_forward_geodesic_segments_are_finite_and_auditable(tmp_path: Path) -> N
             "p_theta_mid",
             "p_phi_mid",
             "dl_segment_rg",
+            "affine_parameter_step_rg",
+            "momentum_affine_normalization_gev",
+            "comoving_path_length_rg_zamo",
             "E_nu_local_gev_mid",
         ]:
             assert math.isfinite(segment[key])
         assert segment["dl_segment_rg"] > 0.0
+        assert segment["affine_parameter_step_rg"] > 0.0
+        assert segment["momentum_affine_normalization_gev"] > 0.0
+        assert segment["comoving_path_length_rg_zamo"] > 0.0
         assert segment["E_nu_local_gev_mid"] > 0.0
         assert segment["geodesic_status"] in {"propagated_forward_no_interaction", "invalid_invariant"}
     assert any(abs(segment["theta_end_rad"] - segment["theta_start_rad"]) > 0.0 for segment in segments)

@@ -114,6 +114,8 @@ def _single_branch_from_pixel_map(row: dict[str, Any]) -> list[dict[str, Any]]:
         "pixels": [[x, y]],
         "ray_indices": [int(row.get("matched_ray_index", 0))],
         "closest_approach_rg": approach,
+        "multiplicity_audited": False,
+        "branch_is_synthetic_fallback": True,
         "best_ray": {
             "ray_index": int(row.get("matched_ray_index", 0)),
             "pixel_x": x,
@@ -146,7 +148,8 @@ def _branch_rows_for_candidate(
     minimum_branch_rays: int,
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     clusters = list((audit_row or {}).get("image_clusters") or [])
-    audit_explicitly_found_zero_clusters = audit_row is not None and "image_clusters" in audit_row and not clusters
+    multiplicity_audited = audit_row is not None and "image_clusters" in audit_row
+    audit_explicitly_found_zero_clusters = multiplicity_audited and not clusters
     if not clusters and pixel_row is not None and not audit_explicitly_found_zero_clusters:
         clusters = _single_branch_from_pixel_map(pixel_row)
 
@@ -195,6 +198,8 @@ def _branch_rows_for_candidate(
             "branch_scoring_model": "ray_count_closeness_compactness_proxy",
             "primary_branch_selection_model": "argmax_branch_score",
             "primary_branch_selection_proxy": True,
+            "multiplicity_audited": multiplicity_audited,
+            "branch_is_synthetic_fallback": bool(cluster.get("branch_is_synthetic_fallback", False)),
             "current_overlay_pixel": (audit_row or {}).get("current_overlay_pixel"),
             "current_overlay_closest_approach_rg": (audit_row or {}).get("current_overlay_closest_approach_rg"),
             "current_algorithm": (audit_row or {}).get("current_algorithm", "closest Kerr ray"),
@@ -208,7 +213,13 @@ def _branch_rows_for_candidate(
     return branches, primary
 
 
-def _primary_row(candidate: dict[str, Any], primary: dict[str, Any] | None, branches: list[dict[str, Any]]) -> dict[str, Any]:
+def _primary_row(
+    candidate: dict[str, Any],
+    primary: dict[str, Any] | None,
+    branches: list[dict[str, Any]],
+    *,
+    multiplicity_audited: bool,
+) -> dict[str, Any]:
     row = dict(candidate)
     candidate_id = _candidate_key(candidate)
     row["candidate_id"] = candidate_id
@@ -218,6 +229,8 @@ def _primary_row(candidate: dict[str, Any], primary: dict[str, Any] | None, bran
     row["branch_scoring_model"] = "ray_count_closeness_compactness_proxy"
     row["primary_branch_selection_model"] = "argmax_branch_score"
     row["primary_branch_selection_proxy"] = True
+    row["multiplicity_audited"] = multiplicity_audited
+    row["branch_is_synthetic_fallback"] = bool(primary and primary.get("branch_is_synthetic_fallback", False))
     if primary:
         row.update({
             "primary_branch_id": primary["branch_id"],
@@ -975,7 +988,15 @@ def generate_observer_image_branch_products(values: dict[str, dict[str, Any]], *
             minimum_branch_rays=minimum_branch_rays,
         )
         all_branches.extend(branches)
-        primary_rows.append(_primary_row(merged, primary, branches))
+        audit_row = audit.get(candidate_id)
+        primary_rows.append(
+            _primary_row(
+                merged,
+                primary,
+                branches,
+                multiplicity_audited=audit_row is not None and "image_clusters" in audit_row,
+            )
+        )
 
     counts = [int(row.get("number_of_image_branches", 0)) for row in primary_rows]
     n_candidates = len(primary_rows)
@@ -1011,6 +1032,9 @@ def generate_observer_image_branch_products(values: dict[str, dict[str, Any]], *
         "branch_selection_model": "argmax_branch_score",
         "primary_branch_selection_proxy": True,
         "powheg_forwarding_uses_primary_branch": True,
+        "n_candidates_multiplicity_audited": sum(1 for row in primary_rows if row["multiplicity_audited"]),
+        "n_synthetic_fallback_branches": sum(1 for row in all_branches if row["branch_is_synthetic_fallback"]),
+        "multiplicity_claims_include_synthetic_fallback": False,
     }
 
     branches_path = output_dir / "observer_image_branches.jsonl"

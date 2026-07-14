@@ -9,6 +9,7 @@
 #include <limits>
 #include <map>
 #include <random>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -47,6 +48,8 @@ struct Segment {
   double rm = 0.0, thm = 0.0, phm = 0.0;
   double pt = 0.0, pr = 0.0, pth = 0.0, pph = 0.0;
   double dl = 0.0;
+  double affine_step = 0.0;
+  double momentum_normalization_gev = 0.0;
 };
 
 struct Source {
@@ -207,6 +210,11 @@ static std::vector<Segment> load_segments(const fs::path &path) {
     s.pth = json_number(line, "p_theta_mid", 0.0);
     s.pph = json_number(line, "p_phi_mid", 0.0);
     s.dl = json_number(line, "dl_segment_rg", 0.0);
+    s.affine_step = json_number(line, "affine_parameter_step_rg", -1.0);
+    s.momentum_normalization_gev = json_number(line, "momentum_affine_normalization_gev", -1.0);
+    if (!(s.affine_step >= 0.0) || !(s.momentum_normalization_gev > 0.0)) {
+      throw std::runtime_error("forward segment lacks affine metadata required for covariant optical depth; regenerate ForwardGeodesics");
+    }
     records.push_back(s);
   }
   std::sort(records.begin(), records.end(), [](const Segment &a, const Segment &b) {
@@ -268,7 +276,7 @@ struct InteractionPoint {
   double rho = 0.0;
   bool inside = false;
   int attempts = 0;
-  std::string method = "rejection_with_midpoint_fallback";
+  std::string method = "optical_depth_cdf_trapezoid_128";
 };
 
 static double local_energy(const Segment &s, const Config &c, bool &static_fallback) {
@@ -290,29 +298,82 @@ static double local_energy(const Segment &s, const Config &c, bool &static_fallb
 
 static double probability(double tau) { return std::max(0.0, std::min(1.0, -std::expm1(-std::max(0.0, tau)))); }
 
+static double stable_uniform(unsigned long long seed, const std::string &identifier, const std::string &stream) {
+  unsigned long long hash = 1469598103934665603ULL;
+  auto mix_byte = [&](unsigned char byte) {
+    hash ^= static_cast<unsigned long long>(byte);
+    hash *= 1099511628211ULL;
+  };
+  for (int shift = 0; shift < 64; shift += 8) mix_byte(static_cast<unsigned char>((seed >> shift) & 0xffULL));
+  for (unsigned char byte : stream) mix_byte(byte);
+  mix_byte(0);
+  for (unsigned char byte : identifier) mix_byte(byte);
+  return static_cast<double>(hash >> 11) / static_cast<double>(1ULL << 53);
+}
+
+static double invariant_comoving_path_length_rg(const Segment &s, double local_energy_gev) {
+  if (!std::isfinite(local_energy_gev) || !std::isfinite(s.affine_step)
+      || !std::isfinite(s.momentum_normalization_gev) || local_energy_gev < 0.0
+      || s.affine_step < 0.0 || s.momentum_normalization_gev <= 0.0) {
+    throw std::runtime_error("invalid covariant path-length input");
+  }
+  return local_energy_gev / s.momentum_normalization_gev * s.affine_step;
+}
+
 static double interp_angle(double a0, double a1, double u) {
   const double delta = std::atan2(std::sin(a1 - a0), std::cos(a1 - a0));
   return a0 + u * delta;
 }
 
 static InteractionPoint sample_interaction_point(const Segment &s, const Config &config, std::mt19937_64 &rng, std::uniform_real_distribution<double> &uni) {
-  constexpr int max_attempts = 32;
+  constexpr int subdivisions = 128;
+  constexpr int max_attempts = 16;
+  std::vector<double> densities(subdivisions + 1, 0.0);
+  std::vector<double> cell_areas(subdivisions, 0.0);
+  double total_area = 0.0;
+  for (int index = 0; index <= subdivisions; ++index) {
+    const double u = static_cast<double>(index) / subdivisions;
+    const double rr = s.r0 + u * (s.r1 - s.r0);
+    const double th = s.th0 + u * (s.th1 - s.th0);
+    densities[index] = std::max(0.0, density(rr, th, config));
+  }
+  for (int index = 0; index < subdivisions; ++index) {
+    cell_areas[index] = 0.5 * (densities[index] + densities[index + 1]);
+    total_area += cell_areas[index];
+  }
   InteractionPoint best;
   for (int attempt = 1; attempt <= max_attempts; ++attempt) {
-    const double u = uni(rng);
+    if (!(total_area > 0.0)) break;
+    const double target = uni(rng) * total_area;
+    double cumulative = 0.0;
+    int cell = subdivisions - 1;
+    for (int index = 0; index < subdivisions; ++index) {
+      if (target <= cumulative + cell_areas[index]) { cell = index; break; }
+      cumulative += cell_areas[index];
+    }
+    const double local_target = std::max(0.0, std::min(cell_areas[cell], target - cumulative));
+    const double left_density = densities[cell];
+    const double slope = densities[cell + 1] - left_density;
+    double low = 0.0, high = 1.0;
+    for (int iteration = 0; iteration < 48; ++iteration) {
+      const double midpoint = 0.5 * (low + high);
+      const double area_to_midpoint = left_density * midpoint + 0.5 * slope * midpoint * midpoint;
+      if (area_to_midpoint < local_target) low = midpoint; else high = midpoint;
+    }
+    const double u = (cell + 0.5 * (low + high)) / subdivisions;
     const double rr = s.r0 + u * (s.r1 - s.r0);
     const double th = s.th0 + u * (s.th1 - s.th0);
     const double ph = interp_angle(s.ph0, s.ph1, u);
     const double rho = density(rr, th, config);
-    if (rho > best.rho) best = {rr, th, ph, rho, rho > 0.0, attempt, "rejection_with_midpoint_fallback"};
-    if (rho > 0.0) return {rr, th, ph, rho, true, attempt, "rejection_with_midpoint_fallback"};
+    if (rho > best.rho) best = {rr, th, ph, rho, rho > 0.0, attempt, "optical_depth_cdf_trapezoid_128"};
+    if (rho > 0.0) return {rr, th, ph, rho, true, attempt, "optical_depth_cdf_trapezoid_128"};
   }
   const double midpoint_rho = density(s.rm, s.thm, config);
   if (midpoint_rho > 0.0) {
-    return {s.rm, s.thm, s.phm, midpoint_rho, true, max_attempts, "rejection_with_midpoint_fallback_midpoint"};
+    return {s.rm, s.thm, s.phm, midpoint_rho, true, max_attempts, "optical_depth_cdf_trapezoid_128_midpoint_fallback"};
   }
   best.attempts = max_attempts;
-  best.method = "rejection_with_highest_density_fallback";
+  best.method = "optical_depth_cdf_trapezoid_128_highest_density_fallback";
   best.inside = best.rho > 0.0;
   return best;
 }
@@ -348,6 +409,34 @@ int main(int argc, char **argv) {
     std::mt19937_64 rng(config.random_seed);
     std::uniform_real_distribution<double> uni(0.0, 1.0);
     const double rgcm = rg_to_cm(config.mass_msun);
+    std::set<std::string> unique_event_ids;
+    std::vector<std::pair<double, std::string>> preliminary_accepts;
+    for (const PathRecord &path_record : path_records) {
+      if (!unique_event_ids.insert(path_record.event_id).second) {
+        throw std::runtime_error("event_id values must be unique for order-independent max_interactions sampling");
+      }
+      double pre_tau = 0.0;
+      for (const Segment &s : by_event[path_record.event_id]) {
+        const double rho = density(s.rm, s.thm, config);
+        bool fallback = false;
+        const double energy = local_energy(s, config, fallback);
+        double sigma = 0.0;
+        try {
+          sigma = sigma_cm2(table, energy);
+        } catch (...) {
+          sigma = 0.0;
+        }
+        pre_tau += std::max(0.0, (rho / M_BARYON_G) * sigma * invariant_comoving_path_length_rg(s, energy) * rgcm);
+      }
+      const double pre_probability = probability(pre_tau);
+      if (pre_tau > 0.0 && stable_uniform(config.random_seed, path_record.event_id, "bernoulli") < pre_probability) {
+        preliminary_accepts.push_back({stable_uniform(config.random_seed, path_record.event_id, "cap_priority"), path_record.event_id});
+      }
+    }
+    std::sort(preliminary_accepts.begin(), preliminary_accepts.end());
+    std::set<std::string> selected_event_ids;
+    const std::size_t capped_count = std::min(preliminary_accepts.size(), static_cast<std::size_t>(std::max(0, config.max_interactions)));
+    for (std::size_t index = 0; index < capped_count; ++index) selected_event_ids.insert(preliminary_accepts[index].second);
     std::vector<double> tau_values;
     int accepted_count = 0, n_oob = 0, n_static_fallback = 0, n_segments_used = 0;
     int interaction_points_inside = 0, interaction_points_outside = 0;
@@ -360,7 +449,7 @@ int main(int argc, char **argv) {
       int source_id = event_segments.empty() ? path_record.source_sample_id : event_segments.front().source_sample_id;
       double tau = 0.0, path_max_rho = 0.0, path_max_sigma = 0.0, path_max_dtau = 0.0;
       bool path_oob = false;
-      struct TauSeg { Segment s; double rho, nb, e, sig, dtau; };
+      struct TauSeg { Segment s; double rho, nb, e, sig, comoving_length, dtau; };
       std::vector<TauSeg> tau_segments;
       for (const Segment &s : event_segments) {
         const double rho = density(s.rm, s.thm, config);
@@ -374,7 +463,8 @@ int main(int argc, char **argv) {
         } catch (...) {
           oob = true;
         }
-        const double dtau = std::max(0.0, nb * sig * s.dl * rgcm);
+        const double comoving_length = invariant_comoving_path_length_rg(s, e);
+        const double dtau = std::max(0.0, nb * sig * comoving_length * rgcm);
         tau += dtau;
         path_oob = path_oob || oob;
         n_oob += oob ? 1 : 0;
@@ -382,7 +472,7 @@ int main(int argc, char **argv) {
         path_max_rho = std::max(path_max_rho, rho);
         path_max_sigma = std::max(path_max_sigma, sig);
         path_max_dtau = std::max(path_max_dtau, dtau);
-        tau_segments.push_back({s, rho, nb, e, sig, dtau});
+        tau_segments.push_back({s, rho, nb, e, sig, comoving_length, dtau});
       }
       const double prob = probability(tau);
       if (tau > 0.0) {
@@ -390,7 +480,7 @@ int main(int argc, char **argv) {
         for (const auto &entry : tau_segments) cdf_total += entry.dtau;
         cdf_normalized = cdf_normalized && std::abs(cdf_total / tau - 1.0) <= 1.0e-10;
       }
-      const bool accept_flag = tau > 0.0 && accepted_count < config.max_interactions && uni(rng) < prob;
+      const bool accept_flag = selected_event_ids.count(event_id) != 0;
       const auto src_it = source_by_id.find(source_id);
       const double source_weight = src_it == source_by_id.end() ? 1.0 : src_it->second.source_weight;
       const double direction_weight = src_it == source_by_id.end() ? 1.0 : src_it->second.direction_weight;
@@ -421,7 +511,8 @@ int main(int argc, char **argv) {
           if (draw <= cumulative) { chosen = entry; break; }
         }
         const InteractionPoint point = sample_interaction_point(chosen.s, config, rng, uni);
-        candidates << ",\"candidate_E_nu_local_gev\":" << chosen.e << ",\"candidate_d_tau_segment\":" << chosen.dtau
+        candidates << ",\"candidate_E_nu_local_gev\":" << chosen.e << ",\"candidate_comoving_path_length_rg\":" << chosen.comoving_length
+                   << ",\"candidate_d_tau_segment\":" << chosen.dtau
                    << ",\"candidate_n_baryon_cm3\":" << chosen.nb << ",\"candidate_phi_rad\":" << point.phi
                    << ",\"candidate_r_rg\":" << point.r << ",\"candidate_rho_g_cm3\":" << point.rho
                    << ",\"candidate_sigma_nuN_cm2\":" << chosen.sig << ",\"candidate_theta_rad\":" << point.theta
@@ -435,6 +526,7 @@ int main(int argc, char **argv) {
                    << ",\"event_id\":" << q(event_id) << ",\"expected_interaction_weight\":" << expected_weight
                    << ",\"final_pre_event_weight\":" << source_weight * direction_weight
                    << ",\"interaction_E_nu_local_gev\":" << chosen.e
+                   << ",\"interaction_comoving_path_length_rg\":" << chosen.comoving_length
                    << ",\"interaction_d_tau_segment\":" << chosen.dtau
                    << ",\"interaction_id\":" << q("H3DIS-" + [&](){ std::ostringstream os; os << std::setw(6) << std::setfill('0') << accepted_count; return os.str(); }())
                    << ",\"interaction_n_baryon_cm3\":" << chosen.nb
@@ -483,7 +575,10 @@ int main(int argc, char **argv) {
             << ",\"cpp_backend_used\":true,\"cuda_backend_used\":false,\"density_model\":\"analytic_torus_density_v1\",\"dis_backend\":\"cpp_hadros_original_port\""
             << ",\"dis_model\":" << q(config.dis_model) << ",\"expensive_event_generation_invoked\":false,\"geant4_invoked\":false"
             << ",\"interaction_sampling_mode\":" << q(config.interaction_sampling_mode)
-            << ",\"interaction_point_sampling_method\":\"rejection_with_midpoint_fallback\""
+            << ",\"max_interactions_cap_model\":\"all_bernoulli_then_uniform_hash_priority_subsample\""
+            << ",\"max_interactions_order_dependent\":false"
+            << ",\"interaction_point_sampling_method\":\"optical_depth_cdf_trapezoid_128\""
+            << ",\"interaction_point_cdf_subdivisions\":128"
             << ",\"interaction_points_inside_medium\":" << interaction_points_inside
             << ",\"interaction_points_outside_medium\":" << interaction_points_outside
             << ",\"interaction_points_outside_medium_fraction\":" << (accepted_count == 0 ? 0.0 : static_cast<double>(interaction_points_outside) / accepted_count)
@@ -494,6 +589,8 @@ int main(int argc, char **argv) {
             << ",\"n_oob_sigma_table_segments\":" << n_oob << ",\"n_paths_processed\":" << path_records.size()
             << ",\"n_segments_processed\":" << n_segments_used << ",\"n_static_to_zamo_fallback_segments\":" << n_static_fallback
             << ",\"observer_bridge_active_filter_invoked\":false,\"optical_depth_dis_sampler_invoked\":true,\"powheg_invoked\":false"
+            << ",\"optical_depth_path_length_model\":\"covariant_minus_u_dot_k_dlambda_midpoint\""
+            << ",\"optical_depth_uses_coordinate_spatial_distance\":false,\"optical_depth_affine_rescaling_invariant\":true"
             << ",\"products\":{\"dis_accepted_interactions\":" << q((out_dir / "dis_accepted_interactions.jsonl").string())
             << ",\"dis_interaction_candidates\":" << q((out_dir / "dis_interaction_candidates.jsonl").string())
             << ",\"dis_optical_depth_report\":" << q(report_json.string())
@@ -522,7 +619,10 @@ int main(int argc, char **argv) {
            << ",\"density_model_has_hard_radial_cut\":true,\"density_model_theta_is_hard_cut\":false"
            << ",\"density_model_theta_profile\":\"gaussian\""
            << ",\"interaction_sampling_mode\":" << q(config.interaction_sampling_mode)
-           << ",\"interaction_point_sampling_method\":\"rejection_with_midpoint_fallback\""
+           << ",\"max_interactions_cap_model\":\"all_bernoulli_then_uniform_hash_priority_subsample\""
+           << ",\"max_interactions_order_dependent\":false"
+           << ",\"interaction_point_sampling_method\":\"optical_depth_cdf_trapezoid_128\""
+           << ",\"interaction_point_cdf_subdivisions\":128"
            << ",\"interaction_points_inside_medium\":" << interaction_points_inside
            << ",\"interaction_points_outside_medium\":" << interaction_points_outside
            << ",\"interaction_points_outside_medium_fraction\":" << (accepted_count == 0 ? 0.0 : static_cast<double>(interaction_points_outside) / accepted_count)

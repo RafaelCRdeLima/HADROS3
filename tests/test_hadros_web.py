@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from hadros3.config import defaults, parse_latex_number, schema, validate_values
+from hadros3.config import defaults, parse_latex_number, run_output_dir, schema, validate_values
 from hadros3.pipeline import render_hadros_web
 from hadros_web import (
     dashboard_payload,
@@ -109,6 +110,14 @@ def test_downstream_selection_lives_in_observer_bridge_and_powheg_consumes_it() 
     assert "only the first primary image branch is executed" in html
     assert "Real free mode may be computationally expensive." in html
     assert "Run POWHEG Real Free" in html
+    assert "H3-W10 PYTHIA 8 Event Generation" in html
+    assert "/api/event-generation" in html
+    assert "event-generation-button" in html
+    assert 'action: "run_event_generation"' in html
+    assert "completed successfully" in html
+    assert "EVENT GENERATION IS NOT RUNNING" not in html
+    assert "Select real_smoke to run PYTHIA manually for at most two LHE events." in html
+    assert "eventGenerationMode.addEventListener" in html
     assert "Max POWHEG jobs" not in html
     assert "Events per candidate" not in html
     assert "Interaction Candidates to Simulate" not in powheg_panel
@@ -183,7 +192,7 @@ def test_render_hadros_web_writes_first_stage_products(tmp_path: Path) -> None:
     assert provenance["theory_version"] == version_payload["theory_version"]
     assert provenance["theory_commit"]
     assert provenance["theory_generation_date"]
-    assert provenance["scientific_theory"]["theory_pipeline_version"] == "H3-W9b"
+    assert provenance["scientific_theory"]["theory_pipeline_version"] == "H3-W11"
     for key in ["software_version", "physics_version", "pipeline_version", "theory_version"]:
         assert key in version_payload
         assert key in provenance["scientific_release"]
@@ -193,6 +202,44 @@ def test_render_hadros_web_writes_first_stage_products(tmp_path: Path) -> None:
     assert provenance["scientific_release"]["theory_version"] == version_payload["theory_version"]
     assert provenance["scientific_release"]["theory_document"] == version_payload["theory_document"]
     assert provenance["scientific_release"]["git_commit"]
+
+
+def test_existing_event_generation_output_is_never_reported_as_running(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("hadros_web.ROOT", tmp_path)
+    values = defaults()
+    run_dir = tmp_path / run_output_dir(values)
+    event_dir = run_dir / "EventGeneration"
+    event_dir.mkdir(parents=True)
+    (event_dir / "event_generation_summary.json").write_text(
+        json.dumps({"status": "ok", "n_events_generated": 2, "pythia_invoked": True}) + "\n",
+        encoding="utf-8",
+    )
+    stale_cfg = dict(values["event_generation"])
+    stale_cfg["mode"] = "real_smoke"
+    stale_hash = hashlib.sha256(json.dumps(stale_cfg, sort_keys=True).encode()).hexdigest()
+    (event_dir / "event_generation_manifest.json").write_text(
+        json.dumps({"configuration_sha256": stale_hash}) + "\n",
+        encoding="utf-8",
+    )
+
+    payload = dashboard_payload(values, Path("presets/hadros_web/default_config.json"))
+
+    assert payload["event_generation_result_state"] == "stale_not_running"
+    assert payload["event_generation"]["is_running"] is False
+    assert payload["event_generation_summary"]["status"] == "stale"
+    assert payload["event_generation_summary"]["is_running"] is False
+    assert next(row for row in payload["pipeline_status"] if row["stage"] == "Event Generation")["status"] == "stale_not_running"
+
+
+def test_disabled_event_generation_is_explicitly_not_run(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("hadros_web.ROOT", tmp_path)
+    values = defaults()
+    payload = dashboard_payload(values, Path("presets/hadros_web/default_config.json"))
+    event_stage = next(row for row in payload["pipeline_status"] if row["stage"] == "Event Generation")
+    assert values["event_generation"]["mode"] == "disabled"
+    assert payload["event_generation_result_state"] == "not_run"
+    assert payload["event_generation"]["is_running"] is False
+    assert event_stage["status"] == "disabled_not_run"
 
 
 def test_forward_geodesics_dashboard_integration_is_separate_from_uhe_source(tmp_path: Path, monkeypatch) -> None:

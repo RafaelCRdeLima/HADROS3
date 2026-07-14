@@ -57,8 +57,11 @@ public:
     /**
      * @brief Advance the geodesic state with adaptive step control.
      * @param y State updated in place.
+     * @return Accepted affine-parameter step. This is the actual reduced step
+     * used by the adaptive controller, not necessarily the configured trial
+     * step.
      */
-    void step_adaptive(
+    double step_adaptive(
         GeodesicState& y
     ) const;
 

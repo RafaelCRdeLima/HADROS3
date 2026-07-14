@@ -226,6 +226,82 @@ def _parse_lhe_float(value: str) -> float:
     return float(value.replace("D", "E").replace("d", "e"))
 
 
+def parse_lhe_init(lhe_text: str) -> dict[str, Any]:
+    """Parse the LHE initialization block and per-process cross sections."""
+    start = lhe_text.find("<init>")
+    end = lhe_text.find("</init>", start + 1)
+    if start < 0 or end < 0:
+        return {"present": False, "processes": []}
+    lines = [
+        line.strip()
+        for line in lhe_text[start + len("<init>") : end].splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    if not lines:
+        return {"present": True, "valid": False, "processes": []}
+    header = lines[0].split()
+    if len(header) < 10:
+        return {"present": True, "valid": False, "processes": []}
+    try:
+        nprup = int(float(header[9]))
+        payload: dict[str, Any] = {
+            "present": True,
+            "valid": True,
+            "idbmup": [int(float(header[0])), int(float(header[1]))],
+            "ebmup_gev": [_parse_lhe_float(header[2]), _parse_lhe_float(header[3])],
+            "pdfgup": [int(float(header[4])), int(float(header[5]))],
+            "pdfsup": [int(float(header[6])), int(float(header[7]))],
+            "idwtup": int(float(header[8])),
+            "nprup": nprup,
+            "processes": [],
+        }
+        for line in lines[1 : 1 + nprup]:
+            parts = line.split()
+            if len(parts) < 4:
+                continue
+            payload["processes"].append(
+                {
+                    "xsecup_pb": _parse_lhe_float(parts[0]),
+                    "xerrup_pb": _parse_lhe_float(parts[1]),
+                    "xmaxup_pb": _parse_lhe_float(parts[2]),
+                    "lprup": int(float(parts[3])),
+                }
+            )
+        payload["xsecup_total_pb"] = sum(float(row["xsecup_pb"]) for row in payload["processes"])
+        payload["xerrup_quadrature_pb"] = math.sqrt(sum(float(row["xerrup_pb"]) ** 2 for row in payload["processes"]))
+        return payload
+    except (ValueError, OverflowError):
+        return {"present": True, "valid": False, "processes": []}
+
+
+def lhe_weight_statistics(weights: list[float], *, idwtup: int | None, xsecup_total_pb: float | None) -> dict[str, Any]:
+    """Return normalization-safe LHE weight statistics.
+
+    For IDWTUP=+/-4 the cross-section estimator carried by weighted events is
+    the sample mean, not the raw sum. The init-block XSECUP remains the generator
+    cross-section declaration and is reported independently.
+    """
+    n = len(weights)
+    mean = sum(weights) / n if n else 0.0
+    if n > 1:
+        variance = sum((value - mean) ** 2 for value in weights) / (n - 1)
+        standard_error = math.sqrt(variance / n)
+    else:
+        standard_error = 0.0
+    event_estimator = mean if idwtup in {-4, 4} and n else None
+    return {
+        "idwtup": idwtup,
+        "n_weighted_events": n,
+        "event_weight_sum": sum(weights),
+        "event_weight_mean": mean,
+        "event_weight_standard_error": standard_error,
+        "event_cross_section_estimator_pb": event_estimator,
+        "init_cross_section_pb": xsecup_total_pb,
+        "raw_weight_sum_is_cross_section": False,
+        "normalization_rule": "mean_XWGTUP_for_IDWTUP_plus_or_minus_4" if idwtup in {-4, 4} else "use_init_XSECUP_or_generator_specific_IDWTUP_rule",
+    }
+
+
 def _eta(px: float, py: float, pz: float) -> float | None:
     pt = math.hypot(px, py)
     if pt <= 0.0:
@@ -240,6 +316,7 @@ def _eta(px: float, py: float, pz: float) -> float | None:
 def parse_lhe_particles(lhe_path: Path, *, powheg_job_id: str | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Parse a compact subset of LHE event records into particle/event rows."""
     text = lhe_path.read_text(encoding="utf-8", errors="replace")
+    init_metadata = parse_lhe_init(text)
     job_id = powheg_job_id or lhe_path.parent.name
     particles: list[dict[str, Any]] = []
     events: list[dict[str, Any]] = []
@@ -329,6 +406,17 @@ def parse_lhe_particles(lhe_path: Path, *, powheg_job_id: str | None = None) -> 
         outgoing_names = [str(row["particle_name"]) for row in final_particles]
         incoming_display_names = [str(row["particle_display"]) for row in initial_particles]
         outgoing_display_names = [str(row["particle_display"]) for row in final_particles]
+        initial_four_sum = {
+            key: sum(float(row[key]) for row in initial_particles)
+            for key in ("energy_gev", "px_gev", "py_gev", "pz_gev")
+        }
+        final_four_sum = {
+            key: sum(float(row[key]) for row in final_particles)
+            for key in ("energy_gev", "px_gev", "py_gev", "pz_gev")
+        }
+        four_residual = {key: final_four_sum[key] - initial_four_sum[key] for key in initial_four_sum}
+        four_scale = max(abs(initial_four_sum["energy_gev"]), 1.0)
+        four_residual_relative = max(abs(value) for value in four_residual.values()) / four_scale
         events.append(
             {
                 "powheg_job_id": job_id,
@@ -343,6 +431,13 @@ def parse_lhe_particles(lhe_path: Path, *, powheg_job_id: str | None = None) -> 
                 "sum_final_energy_gev": sum(float(row["energy_gev"]) for row in final_particles),
                 "sum_final_px_gev": sum(float(row["px_gev"]) for row in final_particles),
                 "sum_final_py_gev": sum(float(row["py_gev"]) for row in final_particles),
+                "initial_four_momentum_sum": initial_four_sum,
+                "final_four_momentum_sum": final_four_sum,
+                "four_momentum_residual": four_residual,
+                "four_momentum_residual_relative": four_residual_relative,
+                "lhe_init": init_metadata,
+                "idwtup": init_metadata.get("idwtup"),
+                "xsecup_total_pb": init_metadata.get("xsecup_total_pb"),
                 "sum_final_pz_gev": sum(float(row["pz_gev"]) for row in final_particles),
                 "pdg_ids": [int(row["pdg_id"]) for row in event_particles],
                 "particle_names": [str(row["particle_name"]) for row in event_particles],
@@ -639,6 +734,13 @@ def _physics_summary(particles: list[dict[str, Any]], events: list[dict[str, Any
     pts = [float(row["pt_gev"]) for row in outgoing]
     weights = [float(event.get("event_weight", 0.0)) for event in events]
     multiplicities = [float(event.get("n_final_state", 0)) for event in events]
+    momentum_residuals = [float(event.get("four_momentum_residual_relative", 0.0)) for event in events]
+    init_metadata = dict(events[0].get("lhe_init") or {}) if events else {}
+    weight_statistics = lhe_weight_statistics(
+        weights,
+        idwtup=init_metadata.get("idwtup"),
+        xsecup_total_pb=init_metadata.get("xsecup_total_pb"),
+    )
     return {
         "incoming_particles": sorted({_particle_display_name(int(row["pdg_id"])) for row in incoming}),
         "outgoing_particles": sorted({_particle_display_name(int(row["pdg_id"])) for row in outgoing}),
@@ -650,6 +752,11 @@ def _physics_summary(particles: list[dict[str, Any]], events: list[dict[str, Any
         "average_event_weight": _mean(weights),
         "average_pt_gev": _mean(pts),
         "average_multiplicity": _mean(multiplicities),
+        "four_momentum_residual_relative_max": max(momentum_residuals) if momentum_residuals else 0.0,
+        "four_momentum_conservation_tolerance": 5.0e-8,
+        "four_momentum_conservation_pass": bool(momentum_residuals) and max(momentum_residuals) <= 5.0e-8,
+        "lhe_init": init_metadata,
+        "lhe_weight_statistics": weight_statistics,
         "max_final_energy_gev": max(final_energies) if final_energies else 0.0,
         "n_incoming_particles": len(incoming),
         "n_outgoing_particles": len(outgoing),
@@ -999,8 +1106,9 @@ def _write_particle_content_report(path: Path, particles: list[dict[str, Any]], 
             "hard process. These are parton-level hard-process records, not hadronized particles."
         ),
         "cc_nc_note": (
-            "The current HADROS3 POWHEG card records channel_type and vtype from the configured nudis template. Inspect each generated "
-            "powheg.input for the exact CC/NC configuration used by that job."
+            "The HADROS3 nudis card selects charged-current scattering with channel_type=3. The required vtype card input controls "
+            "photon/Z content only for neutral-current channels and is not used to infer charged-current lepton flavor; ih1=12 "
+            "selects the incoming electron neutrino."
         ),
         "pdf_note": "Incoming partons are sampled from the configured LHAPDF set; the observed flavor mix reflects PDF support and POWHEG matrix-element channel selection.",
         "n_events": len(events),
@@ -1321,8 +1429,17 @@ def generate_powheg_products(values: dict[str, dict[str, Any]], *, run_output_di
     requests = _read_jsonl(requests_path)
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     run_mode = str(summary.get("powheg_run_mode", values.get("powheg", {}).get("run_mode", "dry_run")))
+    perturbative_order = str(summary.get("perturbative_order", values.get("powheg", {}).get("perturbative_order", "LO")))
 
     first_card = output_dir / "powheg_input_cards" / (requests[0]["powheg_request_id"] if requests else "H3PWHG-000001") / "powheg.input"
+    if first_card.exists():
+        card_text = first_card.read_text(encoding="utf-8")
+        born_only_card = any(line.strip() == "LOevents 1" for line in card_text.splitlines())
+        expected_born_only = perturbative_order == "LO"
+        if born_only_card != expected_born_only:
+            raise RuntimeError(
+                f"POWHEG card/order mismatch: perturbative_order={perturbative_order}, LOevents 1 present={born_only_card}"
+            )
     _draw_card_preview(first_card, output_dir / "powheg_card_preview.png")
     _draw_energy_distribution(requests, output_dir / "powheg_energy_distribution.png")
 
@@ -1331,6 +1448,9 @@ def generate_powheg_products(values: dict[str, dict[str, Any]], *, run_output_di
         "powheg_validation_status": "not_run",
         "run_mode": run_mode,
         "powheg_run_mode": run_mode,
+        "perturbative_order": perturbative_order,
+        "born_only": perturbative_order == "LO",
+        "nlo_real_virtual_enabled": perturbative_order == "NLO",
         "powheg_invoked": run_mode in {"real_smoke", "real_free"},
         "pwhg_main_executed": False,
         "powheg_lhe_generated": False,
@@ -1427,6 +1547,13 @@ def generate_powheg_products(values: dict[str, dict[str, Any]], *, run_output_di
     else:
         summary["powheg_validation_report_generated"] = True
 
+    validation_report.update(
+        {
+            "perturbative_order": perturbative_order,
+            "born_only": perturbative_order == "LO",
+            "nlo_real_virtual_enabled": perturbative_order == "NLO",
+        }
+    )
     write_json(validation_report_path, validation_report)
     _draw_job_summary(summary, output_dir / "powheg_job_summary.png")
     write_json(summary_path, summary)

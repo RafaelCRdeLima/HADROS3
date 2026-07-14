@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 from hadros3.config import defaults
-from hadros3.provenance import build_provenance
+from hadros3.provenance import (
+    THEORY_COMPATIBLE_HADROS3_COMMIT,
+    THEORY_GENERATION_DATE,
+    THEORY_IMPLEMENTED_STAGES,
+    THEORY_PIPELINE_VERSION,
+    THEORY_VERSION,
+    build_provenance,
+)
 from scripts.release.update_version import update_version
 
 
@@ -17,6 +25,12 @@ REQUIRED_VERSION_KEYS = {
     "theory_version",
     "theory_document",
 }
+
+
+def _theory_macro(tex: str, name: str) -> str:
+    match = re.search(rf"\\newcommand\{{\\{name}\}}\{{([^}}]+)\}}", tex)
+    assert match is not None, f"missing theory macro {name}"
+    return match.group(1)
 
 
 def _write_version(path: Path) -> dict[str, str]:
@@ -51,6 +65,24 @@ def _write_theory_tex(path: Path) -> None:
 def test_version_json_exists_and_has_required_keys() -> None:
     payload = json.loads(Path("VERSION.json").read_text(encoding="utf-8"))
     assert REQUIRED_VERSION_KEYS <= payload.keys()
+
+
+def test_checked_in_scientific_release_is_coherent_and_compatible() -> None:
+    payload = json.loads(Path("VERSION.json").read_text(encoding="utf-8"))
+    tex = Path("docs/Theory/HADROS3_Physics_Theory.tex").read_text(encoding="utf-8")
+
+    assert _theory_macro(tex, "SoftwareVersion") == payload["software_version"]
+    assert _theory_macro(tex, "PhysicsVersion") == payload["physics_version"]
+    assert _theory_macro(tex, "TheoryVersion") == payload["theory_version"] == THEORY_VERSION
+    assert _theory_macro(tex, "TheoryPipelineVersion") == payload["pipeline_version"] == THEORY_PIPELINE_VERSION
+    assert _theory_macro(tex, "TheoryCompatibleCommit") == payload["git_commit"] == THEORY_COMPATIBLE_HADROS3_COMMIT
+    assert _theory_macro(tex, "TheoryGenerationDate") == payload["last_release_date"] == THEORY_GENERATION_DATE
+    assert "H3-W8b" in THEORY_IMPLEMENTED_STAGES
+
+    subprocess.run(
+        ["git", "merge-base", "--is-ancestor", THEORY_COMPATIBLE_HADROS3_COMMIT, "HEAD"],
+        check=True,
+    )
 
 
 def test_update_version_software_increments_only_software_version(tmp_path: Path) -> None:

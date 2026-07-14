@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#05090f">
+  <meta name="description" content="HADROS3 — apresentação de seminário: do buraco negro Kerr ao transporte local com GEANT4.">
+  <title>HADROS3 — do espaço-tempo à cascata hadrônica</title>
+  <style>
+    :root {
+      --bg: #05090f; --panel: #0b1420; --panel-2: #101d2b; --ink: #f5f7fa;
+      --muted: #a8b4c1; --gold: #f1b45c; --gold-2: #ffd99b; --cyan: #5bd6e7;
+      --green: #4ade80; --red: #fb7185; --line: rgba(255,255,255,.13);
+      --shadow: 0 28px 80px rgba(0,0,0,.48);
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: var(--bg); color: var(--ink); }
+    body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    button, a { font: inherit; }
+    .deck { width: 100%; height: 100%; position: relative; background:
+      radial-gradient(circle at 85% 5%, rgba(91,214,231,.08), transparent 28%),
+      radial-gradient(circle at 12% 90%, rgba(241,180,92,.08), transparent 32%), var(--bg); }
+    .slide { position: absolute; inset: 0; padding: clamp(28px, 4vw, 72px) clamp(32px, 6vw, 110px) clamp(46px, 5vw, 84px);
+      display: grid; grid-template-rows: auto 1fr; gap: clamp(16px, 2vh, 30px); opacity: 0; visibility: hidden;
+      transform: translateX(30px); transition: opacity .24s ease, transform .24s ease; }
+    .slide.active { opacity: 1; visibility: visible; transform: none; z-index: 2; }
+    .slide::after { content: attr(data-section); position: absolute; right: clamp(22px, 3vw, 56px); top: 50%;
+      writing-mode: vertical-rl; text-transform: uppercase; letter-spacing: .22em; font-size: 10px; color: rgba(255,255,255,.24); }
+    .head { display: flex; align-items: end; justify-content: space-between; gap: 24px; border-bottom: 1px solid var(--line); padding-bottom: 14px; }
+    .eyebrow { color: var(--gold); text-transform: uppercase; letter-spacing: .2em; font-size: clamp(10px, 1vw, 14px); font-weight: 760; }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { font-size: clamp(42px, 6.4vw, 104px); line-height: .95; letter-spacing: -.055em; max-width: 1080px; margin-bottom: 22px; }
+    h2 { font-size: clamp(30px, 4.2vw, 68px); line-height: 1; letter-spacing: -.045em; margin: 5px 0 0; }
+    h3 { font-size: clamp(18px, 1.7vw, 28px); margin-bottom: 12px; }
+    .lead { font-size: clamp(18px, 2vw, 32px); line-height: 1.38; color: var(--muted); max-width: 1040px; }
+    .accent { color: var(--gold); } .cyan { color: var(--cyan); } .green { color: var(--green); }
+    .content { min-height: 0; display: grid; align-items: center; }
+    .split { grid-template-columns: minmax(0, .86fr) minmax(0, 1.14fr); gap: clamp(28px, 5vw, 86px); }
+    .split.wide-copy { grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr); }
+    .stack { display: grid; gap: 16px; }
+    .card { background: linear-gradient(145deg, rgba(16,29,43,.96), rgba(8,16,26,.92)); border: 1px solid var(--line);
+      border-radius: 18px; padding: clamp(16px, 2vw, 28px); box-shadow: var(--shadow); }
+    .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .cards.two { grid-template-columns: repeat(2, 1fr); }
+    .metric { font-size: clamp(32px, 4vw, 62px); letter-spacing: -.05em; color: var(--gold-2); font-weight: 780; line-height: 1; }
+    .metric-label { color: var(--muted); margin-top: 8px; line-height: 1.35; }
+    ul { margin: 0; padding-left: 1.15em; display: grid; gap: clamp(8px, 1.2vh, 15px); }
+    li { font-size: clamp(15px, 1.45vw, 23px); line-height: 1.35; color: #dce4ec; }
+    li::marker { color: var(--gold); }
+    code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--cyan); }
+    .visual { min-width: 0; min-height: 0; height: 100%; display: grid; place-items: center; position: relative; }
+    .visual img { width: 100%; height: 100%; max-height: 67vh; object-fit: contain; border-radius: 14px; box-shadow: var(--shadow); }
+    .visual.clean img { box-shadow: none; }
+    .visual.cover img { object-fit: cover; }
+    .caption { position: absolute; left: 18px; bottom: 16px; padding: 8px 12px; border-radius: 8px;
+      background: rgba(2,6,12,.82); color: #d7e0e9; font-size: clamp(10px, .9vw, 14px); border: 1px solid var(--line); }
+    .pipeline { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; align-items: stretch; }
+    .stage { position: relative; min-height: 104px; padding: 16px 13px; border: 1px solid var(--line); border-radius: 13px;
+      background: rgba(14,25,38,.86); display: flex; flex-direction: column; justify-content: space-between; }
+    .stage:not(:last-child)::after { content: "›"; position: absolute; right: -10px; top: 34%; color: var(--gold); font-size: 30px; z-index: 2; }
+    .stage b { color: var(--gold-2); font-size: clamp(12px, 1.05vw, 17px); }
+    .stage span { color: var(--muted); font-size: clamp(9px, .78vw, 13px); }
+    .quote { border-left: 4px solid var(--gold); padding-left: 22px; font-size: clamp(22px, 2.7vw, 42px); line-height: 1.25; }
+    .badge { display: inline-flex; align-items: center; gap: 7px; border: 1px solid rgba(74,222,128,.4); color: #b9f6cd;
+      background: rgba(74,222,128,.08); padding: 7px 11px; border-radius: 999px; font-size: 13px; }
+    .badge::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 14px var(--green); }
+    .formula { padding: 18px 22px; border: 1px solid rgba(91,214,231,.3); border-radius: 12px; background: rgba(91,214,231,.06);
+      font: clamp(16px, 1.55vw, 25px)/1.4 ui-monospace, monospace; color: #d8f8fc; }
+    .title-slide { grid-template-rows: 1fr auto; background: #000; padding: clamp(36px, 6vw, 100px); }
+    .title-slide::after { display: none; }
+    .title-main { align-self: center; display: grid; grid-template-columns: minmax(0,1.15fr) minmax(330px,.85fr); align-items: center; gap: 5vw; }
+    .title-logo { width: 100%; max-width: 760px; }
+    .title-orbit { aspect-ratio: 1; border: 1px solid rgba(241,180,92,.25); border-radius: 50%; position: relative;
+      background: radial-gradient(circle, #000 0 10%, rgba(241,180,92,.08) 10.5% 11%, transparent 11.5% 29%, rgba(91,214,231,.08) 29.5% 30%, transparent 30.5%); }
+    .title-orbit::before, .title-orbit::after { content:""; position:absolute; inset:18%; border:1px solid rgba(241,180,92,.48); border-radius:50%; transform:rotate(24deg) scaleY(.32); }
+    .title-orbit::after { inset:5%; transform:rotate(-47deg) scaleY(.18); border-color:rgba(91,214,231,.35); }
+    .meta { display: flex; justify-content: space-between; align-items: center; color: #929ca8; font-size: 13px; letter-spacing: .08em; }
+    .foot { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; align-items: center; gap: 14px;
+      padding: 10px clamp(18px, 3vw, 50px); background: linear-gradient(transparent, rgba(0,0,0,.88)); pointer-events: none; }
+    .progress { height: 3px; flex: 1; background: rgba(255,255,255,.12); border-radius: 3px; overflow: hidden; }
+    .progress > i { display: block; width: 0; height: 100%; background: linear-gradient(90deg, var(--gold), var(--cyan)); transition: width .2s; }
+    .counter { font: 12px ui-monospace, monospace; color: #b9c2cb; }
+    .controls { position: fixed; right: 18px; bottom: 24px; z-index: 30; display: flex; gap: 7px; opacity: .26; transition: opacity .2s; }
+    .controls:hover { opacity: 1; }
+    .controls button { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); color: #fff; background: rgba(5,9,15,.85); cursor: pointer; }
+    .speaker-note { display: none; position: fixed; z-index: 50; left: 5vw; right: 5vw; bottom: 6vh; max-height: 34vh; overflow: auto;
+      padding: 20px 24px; border: 1px solid rgba(241,180,92,.5); border-radius: 14px; background: rgba(4,8,13,.96); color: #e8edf2; box-shadow: var(--shadow); }
+    body.notes .slide.active .speaker-note { display: block; }
+    .help { position: fixed; inset: 0; z-index: 100; display: none; place-items: center; background: rgba(0,0,0,.74); }
+    .help.open { display: grid; }
+    .help .card { max-width: 620px; width: calc(100% - 40px); }
+    body.overview { overflow: auto; }
+    body.overview .deck { height: auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 18px; padding: 24px; }
+    body.overview .slide { position: relative; inset: auto; aspect-ratio: 16/9; padding: 24px; opacity: 1; visibility: visible; transform: none; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; cursor: pointer; }
+    body.overview .slide * { pointer-events: none; }
+    body.overview .slide h2 { font-size: 28px; } body.overview .slide h1 { font-size: 40px; }
+    body.overview .foot, body.overview .controls { display: none; }
+    @media (max-width: 900px) {
+      .split, .split.wide-copy, .title-main { grid-template-columns: 1fr; }
+      .title-orbit { display: none; } .cards { grid-template-columns: 1fr 1fr; }
+      .pipeline { grid-template-columns: repeat(3, 1fr); } .visual img { max-height: 48vh; }
+    }
+    @media print {
+      @page { size: 16in 9in; margin: 0; }
+      html, body { overflow: visible; background: #05090f !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      .deck { height: auto; } .slide { position: relative; opacity: 1; visibility: visible; transform: none; width: 16in; height: 9in; break-after: page; }
+      .foot, .controls, .speaker-note, .help { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+<main class="deck" aria-live="polite">
+  <section class="slide title-slide active" data-title="Abertura" data-section="HADROS3">
+    <div class="title-main">
+      <div>
+        <img class="title-logo" src="assets/hadros-logo.png" alt="Logotipo HADROS">
+        <h1>Do espaço-tempo à<br><span class="accent">cascata hadrônica</span></h1>
+        <p class="lead">Uma plataforma auditável para astrofísica multiescala em sistemas compactos e opacos.</p>
+      </div>
+      <div class="title-orbit" aria-hidden="true"></div>
+    </div>
+    <div class="meta"><span>SEMINÁRIO • HADROS3</span><span>pipeline H3-W11 • 2026</span></div>
+    <aside class="speaker-note"><b>Mensagem de abertura:</b> HADROS3 conecta uma imagem intuitiva do sistema Kerr a uma cadeia numérica rastreável que termina, no estágio atual, no transporte local de partículas com GEANT4.</aside>
+  </section>
+
+  <section class="slide" data-title="A pergunta" data-section="Motivação">
+    <header class="head"><div><div class="eyebrow">01 · Motivação</div><h2>Uma pergunta, muitas escalas</h2></div><span class="badge">pipeline executável</span></header>
+    <div class="content split wide-copy">
+      <div class="stack">
+        <p class="quote">Como uma partícula UHE nasce, percorre o espaço-tempo de Kerr, interage com matéria densa e produz uma cascata observável?</p>
+        <div class="formula">geometria → geodésicas → DIS → evento → transporte</div>
+      </div>
+      <div class="cards two">
+        <div class="card"><div class="metric">10⁰–10²</div><div class="metric-label">raios gravitacionais: sistema macro</div></div>
+        <div class="card"><div class="metric">mm</div><div class="metric-label">volume local de transporte GEANT4</div></div>
+        <div class="card"><div class="metric">Kerr</div><div class="metric-label">propagação relativística completa</div></div>
+        <div class="card"><div class="metric">HepMC3</div><div class="metric-label">contrato entre geração e transporte</div></div>
+      </div>
+    </div>
+    <aside class="speaker-note">Enfatizar a separação de escalas. O GEANT4 não representa o toro inteiro: ele resolve um patch tangente local em cada sítio de interação.</aside>
+  </section>
+
+  <section class="slide" data-title="Plataforma" data-section="Interface">
+    <header class="head"><div><div class="eyebrow">02 · Plataforma</div><h2>Um laboratório, não apenas um plot</h2></div><span class="mono">hadros-web</span></header>
+    <div class="content split">
+      <div class="stack">
+        <p class="lead">A interface organiza configuração, execução explícita, diagnóstico e proveniência em uma única narrativa.</p>
+        <ul>
+          <li>seleção de massa, spin, câmera, toro e funil;</li>
+          <li>ações independentes por estágio — sem execução implícita;</li>
+          <li>produtos JSON/JSONL/CSV, imagens e viewers 3D;</li>
+          <li>estado, hashes e validações preservados por run.</li>
+        </ul>
+      </div>
+      <figure class="visual"><img src="assets/hadros-web-ui.png" alt="Interface hadros-web com logo, ações do workflow, navegação e geometria"><figcaption class="caption">snapshot real da interface hadros-web</figcaption></figure>
+    </div>
+    <aside class="speaker-note">Mostrar que a UI não é uma camada decorativa: ela expõe contratos de execução, separa “pronto”, “rodando” e “concluído”, e aponta para os artefatos científicos.</aside>
+  </section>
+
+  <section class="slide" data-title="Pipeline" data-section="Arquitetura">
+    <header class="head"><div><div class="eyebrow">03 · Arquitetura</div><h2>Uma cadeia com fronteiras explícitas</h2></div><span class="mono">H3-W0 → H3-W11</span></header>
+    <div class="content stack">
+      <div class="pipeline">
+        <div class="stage"><b>Geometria</b><span>BH Kerr · toro · funil · câmera</span></div>
+        <div class="stage"><b>Fonte UHE</b><span>posição · energia · direção local</span></div>
+        <div class="stage"><b>Geodésicas</b><span>momento nulo · Kerr · invariantes</span></div>
+        <div class="stage"><b>DIS</b><span>τ covariante · GBW/IIM · vértice</span></div>
+        <div class="stage"><b>Observador</b><span>câmera · imagens · seleção</span></div>
+        <div class="stage"><b>POWHEG</b><span>hard process · LHE ponderado</span></div>
+      </div>
+      <div class="pipeline">
+        <div class="stage"><b>PYTHIA 8</b><span>shower · hadronização · decaimentos</span></div>
+        <div class="stage"><b>HepMC3</b><span>estado final · unidades · frame</span></div>
+        <div class="stage"><b>GEANT4</b><span>patch local · matéria H/He · FTFP_BERT</span></div>
+        <div class="stage"><b>Auditoria</b><span>conservação · domínio · cardinalidade</span></div>
+        <div class="stage"><b>Viewers</b><span>macro ↔ sítio local clicável</span></div>
+        <div class="stage"><b>Próximo</b><span>transporte radiativo · espectros</span></div>
+      </div>
+      <div class="card"><b class="accent">Princípio:</b> cada estágio consome um contrato validado e nunca reinterpreta silenciosamente o estágio anterior.</div>
+    </div>
+    <aside class="speaker-note">Esta é a lâmina para orientar toda a apresentação. Os próximos slides seguem da esquerda para a direita.</aside>
+  </section>
+
+  <section class="slide" data-title="Câmera Kerr" data-section="Visualização">
+    <header class="head"><div><div class="eyebrow">04 · Visualização</div><h2>Começamos pelo que o observador vê</h2></div><span class="mono">Kerr camera</span></header>
+    <div class="content split">
+      <div class="stack">
+        <p class="lead">A câmera fornece a leitura intuitiva do sistema e fixa convenções que reaparecem no Observer Bridge.</p>
+        <ul>
+          <li>massa e spin do buraco negro;</li>
+          <li>distância, inclinação, azimute e campo de visão;</li>
+          <li>preview acelerado e orientação norte/sul auditada;</li>
+          <li>fundo celeste + emissão/absorção esquemática do toro.</li>
+        </ul>
+      </div>
+      <figure class="visual"><img src="assets/camera-kerr.png" alt="Visualização da câmera Kerr de um buraco negro com toro"><figcaption class="caption">Camera Preview · inclinação 81°</figcaption></figure>
+    </div>
+    <aside class="speaker-note">Explicar que esta imagem é a porta de entrada visual, mas o pipeline não infere a física de colisões a partir dos pixels.</aside>
+  </section>
+
+  <section class="slide" data-title="Geometria macro" data-section="Geometria">
+    <header class="head"><div><div class="eyebrow">05 · Sistema macro</div><h2>BH + toro + funil + observador</h2></div><span class="mono">Boyer–Lindquist</span></header>
+    <div class="content split">
+      <figure class="visual"><img src="assets/macro-geometry.png" alt="Esquema geométrico do buraco negro, toro, funis polares e observador"><figcaption class="caption">geometria de referência em unidades r/r<sub>g</sub></figcaption></figure>
+      <div class="stack">
+        <p class="lead">Uma mesma descrição geométrica alimenta visualização, meio, fonte e diagnósticos.</p>
+        <div class="cards two">
+          <div class="card"><h3>Toro analítico</h3><p class="metric-label">perfil radial e gaussiano em θ; densidade local consultável.</p></div>
+          <div class="card"><h3>Funil polar</h3><p class="metric-label">domínio da fonte UHE e referência para os jatos.</p></div>
+          <div class="card"><h3>Horizonte</h3><p class="metric-label">condição de parada física para geodésicas.</p></div>
+          <div class="card"><h3>Observador</h3><p class="metric-label">base de câmera e projeção para o plano de imagem.</p></div>
+        </div>
+      </div>
+    </div>
+    <aside class="speaker-note">Distinguir modelo analítico atual de uma GRMHD completa. A vantagem é auditabilidade e custo controlado; a limitação é explicitamente documentada.</aside>
+  </section>
+
+  <section class="slide" data-title="Fonte UHE" data-section="Fonte">
+    <header class="head"><div><div class="eyebrow">06 · Condição inicial</div><h2>A fonte nasce em um frame local</h2></div><span class="mono">isotropic_local</span></header>
+    <div class="content split wide-copy">
+      <div class="stack">
+        <ul>
+          <li>amostragem dentro do funil polar;</li>
+          <li>energia monoenergética ou distribuição configurável;</li>
+          <li>direções isotrópicas no referencial local;</li>
+          <li>seeds fixas e testes de uniformidade.</li>
+        </ul>
+        <div class="formula">(x<sup>μ</sup>, p<sup>(a)</sup>)<sub>local</sub> → p<sup>μ</sup><sub>Kerr</sub></div>
+      </div>
+      <figure class="visual"><img src="assets/uhe-source.png" alt="Preview tridimensional da fonte de neutrinos UHE no funil polar"><figcaption class="caption">fonte UHE e domínio polar</figcaption></figure>
+    </div>
+    <aside class="speaker-note">A direção não é reconstruída posteriormente: ela nasce na fonte e é consumida pela propagação Kerr.</aside>
+  </section>
+
+  <section class="slide" data-title="Geodésicas" data-section="Relatividade">
+    <header class="head"><div><div class="eyebrow">07 · Propagação</div><h2>Geodésicas nulas no espaço-tempo de Kerr</h2></div><span class="badge">64 trajetórias válidas</span></header>
+    <div class="content split">
+      <figure class="visual"><img src="assets/forward-geodesics.png" alt="Geodésicas de neutrinos UHE propagadas ao redor do sistema Kerr"><figcaption class="caption">10.342 segmentos · 55 escapes · 9 max-steps</figcaption></figure>
+      <div class="stack">
+        <p class="lead">O backend C++ integra o quatro-momento e monitora invariantes físicos ao longo do caminho.</p>
+        <div class="cards two">
+          <div class="card"><div class="metric">3.28×10⁻⁷</div><div class="metric-label">máximo de |g<sub>μν</sub>p<sup>μ</sup>p<sup>ν</sup>|</div></div>
+          <div class="card"><div class="metric">0</div><div class="metric-label">erro registrado em E e L<sub>z</sub></div></div>
+        </div>
+        <ul><li>escape externo, horizonte ou limite de integração;</li><li>segmentos carregam frame e densidade do meio.</li></ul>
+      </div>
+    </div>
+    <aside class="speaker-note">Os valores exibidos vêm do run de demonstração. Não generalizar o zero de erro para qualquer configuração: é o registro deste caso.</aside>
+  </section>
+
+  <section class="slide" data-title="DIS" data-section="Interações">
+    <header class="head"><div><div class="eyebrow">08 · Deep Inelastic Scattering</div><h2>Onde a trajetória encontra matéria</h2></div><span class="mono">GBW / IIM</span></header>
+    <div class="content split">
+      <div class="stack">
+        <div class="formula">dτ = n(x) · σ(E<sub>local</sub>) · [−u·k] dλ</div>
+        <ul>
+          <li>profundidade óptica covariante, invariante a reparametrização afim;</li>
+          <li>vértice sorteado pela CDF intrassegmento de τ;</li>
+          <li>energia local, densidade e seção de choque preservadas;</li>
+          <li>comparação diagnóstica entre modelos GBW e IIM.</li>
+        </ul>
+        <div class="cards two"><div class="card"><div class="metric">36</div><div class="metric-label">interações aceitas</div></div><div class="card"><div class="metric">56.25%</div><div class="metric-label">aceitação GBW no run</div></div></div>
+      </div>
+      <figure class="visual"><img src="assets/dis-interactions.png" alt="Localizações das interações DIS sobre o campo de densidade do toro"><figcaption class="caption">vértices DIS sobre o campo de densidade</figcaption></figure>
+    </div>
+    <aside class="speaker-note">Esta é a transição da propagação contínua para o evento microscópico. O vértice determina também a densidade que será usada depois no GEANT4.</aside>
+  </section>
+
+  <section class="slide" data-title="Observer Bridge" data-section="Observador">
+    <header class="head"><div><div class="eyebrow">09 · Observer Bridge</div><h2>Da interação ao plano da câmera</h2></div><span class="mono">Kerr pixel match</span></header>
+    <div class="content split wide-copy">
+      <figure class="visual"><img src="assets/observer-overlay.png" alt="Candidatos DIS projetados sobre a imagem da câmera do observador"><figcaption class="caption">candidatos, ranking e correspondência Kerr</figcaption></figure>
+      <div class="stack">
+        <p class="lead">O bridge conecta localização física, geodésicas reversas da câmera e seleção downstream.</p>
+        <ul>
+          <li>projeção com base tetrádica compatível com a câmera;</li>
+          <li>auditoria de hemisfério e orientação;</li>
+          <li>scores separados de pesos físicos;</li>
+          <li>seleção explícita para POWHEG.</li>
+        </ul>
+      </div>
+    </div>
+    <aside class="speaker-note">Dizer claramente: o score de observação é ferramenta de seleção/diagnóstico; ele não deve ser confundido com a seção de choque física.</aside>
+  </section>
+
+  <section class="slide" data-title="Imagens gravitacionais" data-section="Lenteamento">
+    <header class="head"><div><div class="eyebrow">10 · Multiplicidade de imagens</div><h2>Um candidato pode ter mais de um caminho</h2></div><span class="mono">branch-aware</span></header>
+    <div class="content split">
+      <div class="stack">
+        <p class="lead">Raios próximos no plano de imagem são agrupados em ramos físicos, e um ramo primário é selecionado sem apagar os demais.</p>
+        <ul>
+          <li>clusterização invariável a permutação;</li>
+          <li>score de ramo: contagem, proximidade e compacidade;</li>
+          <li>proveniência candidato → ramo → POWHEG;</li>
+          <li>viewer dedicado para inspeção física.</li>
+        </ul>
+      </div>
+      <figure class="visual"><img src="assets/image-branches.png" alt="História de seleção de um candidato, seus ramos de imagem e encaminhamento ao POWHEG"><figcaption class="caption">história auditável de uma seleção</figcaption></figure>
+    </div>
+    <aside class="speaker-note">O pipeline preserva multiplicidade, mas escolhe uma entrada inequívoca para a etapa perturbativa.</aside>
+  </section>
+
+  <section class="slide" data-title="POWHEG" data-section="Evento duro">
+    <header class="head"><div><div class="eyebrow">11 · Hard process</div><h2>POWHEG transforma candidatos em LHE</h2></div><span class="badge">LHE real</span></header>
+    <div class="content split wide-copy">
+      <figure class="visual"><img src="assets/powheg-jobs.png" alt="Resumo de jobs, cards e eventos LHE produzidos pelo POWHEG"><figcaption class="caption">candidato → job → card → LHE</figcaption></figure>
+      <div class="stack">
+        <ul>
+          <li>cards por candidato selecionado;</li>
+          <li>cinemática no frame local da matéria;</li>
+          <li>pesos assinados e normalização <span class="mono">IDWTUP</span> preservados;</li>
+          <li>LO/NLO não podem ser rotulados de modo ambíguo;</li>
+          <li>hashes ligam LHE ao candidato de origem.</li>
+        </ul>
+        <div class="card"><b class="accent">Saída:</b> hard process partônico — ainda não é um estado final detector-level.</div>
+      </div>
+    </div>
+    <aside class="speaker-note">Fazer a ponte conceitual: POWHEG fornece o núcleo perturbativo e a escala de matching; PYTHIA completa shower/hadronização.</aside>
+  </section>
+
+  <section class="slide" data-title="Event Generation" data-section="PYTHIA 8">
+    <header class="head"><div><div class="eyebrow">12 · Event Generation</div><h2>Do parton ao estado final hadrônico</h2></div><span class="mono">PYTHIA 8.312 + HepMC3</span></header>
+    <div class="content split">
+      <div class="stack">
+        <p class="lead">FSR com veto POWHEG, hadronização e decaimentos produzem partículas finais transportáveis.</p>
+        <div class="cards two">
+          <div class="card"><div class="metric">10</div><div class="metric-label">eventos no run ilustrado</div></div>
+          <div class="card"><div class="metric">298</div><div class="metric-label">partículas finais</div></div>
+          <div class="card"><div class="metric">3.7×10⁻¹⁰</div><div class="metric-label">resíduo relativo máximo de quadrimomento</div></div>
+          <div class="card"><div class="metric">4.77 s⁻¹</div><div class="metric-label">taxa observada de eventos</div></div>
+        </div>
+        <p class="metric-label">Contrato: frame local da matéria · GeV · mm · IDs upstream · pesos físicos.</p>
+      </div>
+      <figure class="visual"><img src="assets/event-species.png" alt="Histograma de espécies de partículas finais geradas pelo PYTHIA"><figcaption class="caption">símbolos físicos, não apenas códigos PDG</figcaption></figure>
+    </div>
+    <aside class="speaker-note">As métricas são do snapshot atual. Ressaltar as validações: cardinalidade, on-shell, carga, matching e conservação de quadrimomento.</aside>
+  </section>
+
+  <section class="slide" data-title="GEANT4 macro" data-section="GEANT4">
+    <header class="head"><div><div class="eyebrow">13 · Transporte em matéria</div><h2>Primeiro: localizar os sítios no sistema macro</h2></div><span class="mono">H3-W11</span></header>
+    <div class="content split wide-copy">
+      <figure class="visual cover"><img src="assets/geant4-macro.png" alt="Viewer macro com buraco negro, toro e sítios clicáveis do GEANT4"><figcaption class="caption">viewer macro · sítio verde clicável</figcaption></figure>
+      <div class="stack">
+        <p class="lead">O usuário vê <em>onde</em> cada cálculo local foi aplicado — sem desenhar milímetros na escala de dezenas de r<sub>g</sub>.</p>
+        <ul>
+          <li>BH, toro e referências do sistema;</li>
+          <li>um marcador por evento/sítio transportado;</li>
+          <li>ponte clicável para o volume local correspondente;</li>
+          <li>posição e densidade herdadas do vértice DIS.</li>
+        </ul>
+      </div>
+    </div>
+    <aside class="speaker-note">Esta lâmina resolve a dúvida conceitual central: “de qual volume vieram os resultados?”. Cada ponto abre seu patch local.</aside>
+  </section>
+
+  <section class="slide" data-title="GEANT4 local" data-section="GEANT4">
+    <header class="head"><div><div class="eyebrow">14 · Volume local</div><h2>Depois: inspecionar a cascata microscópica</h2></div><span class="badge">FTFP_BERT</span></header>
+    <div class="content split">
+      <div class="stack">
+        <p class="lead">Cada sítio executa um processo GEANT4 isolado com seu próprio material e densidade.</p>
+        <ul>
+          <li>patch homogêneo tangente no frame local da matéria;</li>
+          <li>mistura H/He com densidade local do toro;</li>
+          <li>primárias, secundárias, processos e escapes;</li>
+          <li>um job por sítio, paralelismo externo limitado;</li>
+          <li>agregação determinística e publicação atômica.</li>
+        </ul>
+        <div class="formula">interaction_id → ρ<sub>local</sub> → G4Material → BeamOn</div>
+      </div>
+      <figure class="visual cover"><img src="assets/geant4-local.png" alt="Viewer do volume local GEANT4 com trajetórias e processos de partículas"><figcaption class="caption">patch local · trajetórias e processos registrados</figcaption></figure>
+    </div>
+    <aside class="speaker-note">Explicar que eventos em densidades diferentes nunca compartilham um G4Material. A separação por subprocesso foi escolhida por correção física e auditabilidade.</aside>
+  </section>
+
+  <section class="slide" data-title="Validação" data-section="Confiança numérica">
+    <header class="head"><div><div class="eyebrow">15 · Evidência</div><h2>Não basta rodar: precisa passar</h2></div><span class="badge">status ok</span></header>
+    <div class="content split wide-copy">
+      <div class="stack">
+        <div class="cards two">
+          <div class="card"><div class="metric">2</div><div class="metric-label">sítios GEANT4 isolados</div></div>
+          <div class="card"><div class="metric">51</div><div class="metric-label">primárias finais importadas</div></div>
+          <div class="card"><div class="metric">6.13 M</div><div class="metric-label">steps totais executados</div></div>
+          <div class="card"><div class="metric">10,792</div><div class="metric-label">partículas escapando dos patches</div></div>
+        </div>
+        <ul>
+          <li><span class="green">✓</span> domínio, cardinalidade e energia;</li>
+          <li><span class="green">✓</span> isolamento e mapeamento de densidade;</li>
+          <li><span class="green">✓</span> hashes upstream inalterados;</li>
+          <li><span class="green">✓</span> serial e paralelo com outputs científicos idênticos.</li>
+        </ul>
+      </div>
+      <figure class="visual"><img src="assets/geant4-energy.png" alt="Ledger de energia do evento transportado no GEANT4"><figcaption class="caption">ledger: energia depositada + energia escapando</figcaption></figure>
+    </div>
+    <aside class="speaker-note">Os 100 mil steps gravados são uma amostra truncada para visualização; o backend executou 6,13 milhões e registra essa distinção.</aside>
+  </section>
+
+  <section class="slide" data-title="Limites" data-section="Fronteira atual">
+    <header class="head"><div><div class="eyebrow">16 · O que o modelo diz — e o que não diz</div><h2>Limites explícitos são parte do resultado</h2></div><span class="mono">physics v1.3</span></header>
+    <div class="content cards two">
+      <div class="card"><h3 class="green">Já demonstrado</h3><ul>
+        <li>geometria e câmera Kerr;</li><li>fonte UHE e geodésicas nulas;</li><li>DIS covariante e seleção do observador;</li>
+        <li>POWHEG → PYTHIA → HepMC3;</li><li>GEANT4 local por sítio e densidade.</li>
+      </ul></div>
+      <div class="card"><h3 class="accent">Próxima fronteira</h3><ul>
+        <li>convergência de patch e production cuts;</li><li>equação de estado e efeitos coletivos da matéria ultradensa;</li>
+        <li>transporte Kerr pós-cascata;</li><li>transporte radiativo e espectros observáveis;</li><li>comparação com modelos GRMHD.</li>
+      </ul></div>
+      <div class="card"><h3>Interpretação GEANT4</h3><p class="metric-label">FTFP_BERT trata a cascata microscópica no material configurado; não substitui uma microfísica completa de plasma degenerado.</p></div>
+      <div class="card"><h3>Interpretação estatística</h3><p class="metric-label">pesos físicos, scores de observação e pesos estatísticos permanecem separados em todos os contratos.</p></div>
+    </div>
+    <aside class="speaker-note">Evitar overclaim. A força científica do HADROS3 atual está na integração e auditabilidade; a fidelidade astrofísica continuará crescendo por módulos.</aside>
+  </section>
+
+  <section class="slide title-slide" data-title="Encerramento" data-section="Conclusão">
+    <div class="title-main">
+      <div>
+        <img class="title-logo" src="assets/hadros-logo.png" alt="Logotipo HADROS">
+        <h1>Uma cadeia.<br><span class="accent">Muitas escalas.</span><br>Contratos claros.</h1>
+        <p class="lead">HADROS3 chegou ao transporte local com GEANT4 — mantendo cada decisão física inspecionável.</p>
+      </div>
+      <div class="stack">
+        <div class="card"><div class="eyebrow">repositório</div><p class="lead" style="margin:8px 0 0"><a style="color:var(--ink)" href="https://github.com/RafaelCRdeLima/HADROS3">github.com/RafaelCRdeLima/HADROS3</a></p></div>
+        <div class="card"><div class="eyebrow">atalhos</div><p class="metric-label" style="margin:8px 0 0">← → navegar · F tela cheia · O visão geral · N notas · ? ajuda</p></div>
+      </div>
+    </div>
+    <div class="meta"><span>OBRIGADO</span><span>perguntas?</span></div>
+    <aside class="speaker-note">Encerrar retomando a tese: a cadeia conecta uma imagem do buraco negro a produtos microscópicos sem esconder as transformações intermediárias.</aside>
+  </section>
+</main>
+
+<div class="foot" aria-hidden="true"><div class="progress"><i id="bar"></i></div><span class="counter" id="counter">01 / 18</span></div>
+<nav class="controls" aria-label="Controles da apresentação"><button id="prev" title="Anterior">‹</button><button id="next" title="Próximo">›</button><button id="full" title="Tela cheia">⛶</button><button id="overview" title="Visão geral">▦</button><button id="helpBtn" title="Ajuda">?</button></nav>
+<div class="help" id="help" role="dialog" aria-modal="true" aria-label="Atalhos"><div class="card"><h3>Controles</h3><p>←/→, Page Up/Page Down ou espaço: navegar<br>Home/End: início/fim<br>F: tela cheia · O: visão geral · N: notas · ?: ajuda<br>Esc: fechar modo atual</p><p class="metric-label">Para PDF, use a impressão do navegador em paisagem; cada slide é uma página 16:9.</p></div></div>
+
+<script>
+(() => {
+  const slides = [...document.querySelectorAll('.slide')];
+  const bar = document.getElementById('bar'), counter = document.getElementById('counter'), help = document.getElementById('help');
+  let index = Math.max(0, Math.min(slides.length - 1, Number(location.hash.slice(1)) - 1 || 0));
+  function show(next, updateHash = true) {
+    index = Math.max(0, Math.min(slides.length - 1, next));
+    slides.forEach((slide, i) => slide.classList.toggle('active', i === index));
+    bar.style.width = `${((index + 1) / slides.length) * 100}%`;
+    counter.textContent = `${String(index + 1).padStart(2,'0')} / ${String(slides.length).padStart(2,'0')}`;
+    document.title = `${slides[index].dataset.title} — HADROS3`;
+    if (updateHash) history.replaceState(null, '', `#${index + 1}`);
+  }
+  const step = delta => { if (!document.body.classList.contains('overview')) show(index + delta); };
+  function toggleOverview(force) { document.body.classList.toggle('overview', force); if (!document.body.classList.contains('overview')) show(index); }
+  document.getElementById('prev').onclick = () => step(-1);
+  document.getElementById('next').onclick = () => step(1);
+  document.getElementById('full').onclick = () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+  document.getElementById('overview').onclick = () => toggleOverview(!document.body.classList.contains('overview'));
+  document.getElementById('helpBtn').onclick = () => help.classList.add('open');
+  help.onclick = e => { if (e.target === help) help.classList.remove('open'); };
+  slides.forEach((slide, i) => slide.onclick = () => { if (document.body.classList.contains('overview')) { index = i; toggleOverview(false); } });
+  addEventListener('keydown', e => {
+    if (['ArrowRight','ArrowDown','PageDown',' '].includes(e.key)) { e.preventDefault(); step(1); }
+    else if (['ArrowLeft','ArrowUp','PageUp'].includes(e.key)) { e.preventDefault(); step(-1); }
+    else if (e.key === 'Home') show(0); else if (e.key === 'End') show(slides.length - 1);
+    else if (e.key.toLowerCase() === 'f') document.getElementById('full').click();
+    else if (e.key.toLowerCase() === 'o') toggleOverview(!document.body.classList.contains('overview'));
+    else if (e.key.toLowerCase() === 'n') document.body.classList.toggle('notes');
+    else if (e.key === '?') help.classList.toggle('open');
+    else if (e.key === 'Escape') { help.classList.remove('open'); document.body.classList.remove('notes'); toggleOverview(false); }
+  });
+  let startX = null;
+  addEventListener('touchstart', e => startX = e.changedTouches[0].clientX, {passive:true});
+  addEventListener('touchend', e => { if (startX === null) return; const dx = e.changedTouches[0].clientX - startX; if (Math.abs(dx) > 55) step(dx < 0 ? 1 : -1); startX = null; }, {passive:true});
+  addEventListener('hashchange', () => show(Number(location.hash.slice(1)) - 1 || 0, false));
+  show(index, false);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,330 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[brazil]{babel}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{geometry}
+\geometry{margin=2.25cm}
+\usepackage{amsmath,amssymb,booktabs,longtable,array,xcolor,graphicx,hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!60!black}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.55em}
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\rhoNine}{\rho_9}
+
+\title{Validação de PYTHIA 8 e GEANT4 em matéria densa no HADROS3\\
+\large Revisão bibliográfica, limites físicos e campanha quantitativa}
+\author{Projeto HADROS3}
+\date{14 de julho de 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Este relatório confronta a cadeia HADROS3 de interação neutrino--núcleon,
+geração do estado final e transporte com resultados modernos de QCD,
+medições de neutrinos no LHC, testes de calorímetros e teoria de matéria
+densa. A conclusão central é que há três problemas fisicamente distintos:
+(i) a probabilidade e a cinemática da interação DIS; (ii) o shower e a
+hadronização de uma colisão isolada; e (iii) a propagação coletiva dos
+secundários no plasma denso. PYTHIA 8 é apropriado para (ii), e GEANT4 possui
+forte validação laboratorial para partes de (iii), mas nenhum experimento
+terrestre reproduz o plasma H/He degenerado de
+$\rho\sim10^9$--$10^{10}\,\mathrm{g\,cm^{-3}}$. Portanto, a execução atual é
+uma extrapolação controlável, não uma validação completa do meio
+astrofísico. São definidos testes numéricos, observáveis e critérios de
+aceitação para tornar essa afirmação quantitativa.
+\end{abstract}
+
+\tableofcontents
+
+\section{Pergunta física e escopo}
+
+O objetivo é saber quanto se pode confiar na produção e no transporte de
+partículas nos pontos do toro amostrados pelo HADROS3. É essencial não
+misturar densidade macroscópica com física do vértice elementar:
+{\small\begin{equation}
+\underbrace{\nu N\rightarrow \ell/X}_{\text{DIS e PDFs}}
+\quad\longrightarrow\quad
+\underbrace{\text{shower, hadronização, decaimentos}}_{\text{PYTHIA}}
+\quad\longrightarrow\quad
+\underbrace{\text{propagação e reinterações no meio}}_{\text{GEANT4 + correções densas}}.
+\end{equation}}
+Em primeira aproximação, a densidade local multiplica a taxa de alvos e
+fixa profundidades ópticas; ela não deve alterar diretamente uma colisão
+isolada no PYTHIA. Efeitos do meio entram nas PDFs nucleares, no estado
+termodinâmico dos alvos e, sobretudo, na propagação dos secundários.
+
+\section{Estado concreto do HADROS3 analisado}
+
+Os produtos locais de H3-W10 registram PYTHIA 8.312 e HepMC3 3.03.01, dez
+eventos, 298 partículas finais e 145 hádrons finais. A maior violação
+relativa de conservação de quatro-momento é $3.71\times10^{-10}$, bem abaixo
+do critério $5\times10^{-8}$. A taxa medida é $4.77$ eventos/s.
+
+H3-W11 transportou os dez eventos em dez processos isolados por sítio,
+usando GEANT4 11.4.2, a lista FTFP\_BERT e um material H/He homogêneo com
+frações de massa $X=0.75$ e $Y=0.25$. Cada caixa tem semi-lado de 10 mm. As
+densidades vêm dos pontos DIS e alcançam aproximadamente
+$1.36\times10^9$ a $9.81\times10^9\,\mathrm{g\,cm^{-3}}$ na amostra exibida.
+A execução importou 298 primárias, alcançou energia máxima de
+$9.45\times10^3$ GeV, efetuou $2.734\times10^7$ passos em 43.1 s e truncou o
+registro em $5\times10^5$ passos. Esses números demonstram execução e
+consistência interna; não demonstram por si sós validade do modelo de meio.
+
+\section{O que os papers permitem validar}
+
+\subsection{PYTHIA e o evento elementar}
+
+O manual moderno do PYTHIA 8.3 descreve shower, hadronização por strings,
+decaimentos, tunes e interfaces LHA/HepMC \cite{Bierlich2022Pythia}. Para o
+HADROS3, a comparação apropriada é no mesmo evento POWHEG/LHE: cardinalidade
+1:1, conservação de quatro-momento, conteúdo de espécies, multiplicidade,
+escala de matching e estabilidade sob seeds. A densidade do toro deve ficar
+como metadado do sítio, nunca como um ``tune de densidade'' do PYTHIA.
+
+O resultado atual de conservação é excelente. Ainda faltam testes de forma:
+distribuições de multiplicidade, fração de energia por espécie, $p_T$,
+rapidez e dependência com a inelasticidade $y$. Esses testes devem comparar
+PYTHIA e, quando possível, uma segunda cadeia geradora ou dados de neutrinos.
+
+\subsection{DIS em TeV e UHE}
+
+Xie et al. calculam seções de choque de DIS de alta energia com PDFs modernas
+e incertezas \cite{Xie2024}. Weigel et al. fornecem seções totais e
+distribuições de inelasticidade de 50 GeV a $5\times10^{12}$ GeV, incluindo
+massas de quarks pesados, small-$x$, correções nucleares e radiação de estado
+final \cite{Weigel2024}. Le e Mäntysaari quantificam supressão nuclear e a
+componente difrativa em neutrino--núcleo \cite{Le2024}.
+
+Esses trabalhos são o benchmark direto para a camada DIS do HADROS3. Em
+cada bin de $E_\nu$, devem ser comparados $\sigma_{CC}$, $\sigma_{NC}$,
+$d\sigma/dy$, razão $\bar\nu/\nu$ e incertezas. Como o toro é H/He, a
+correção nuclear deve ser aplicada por espécie e fração, não pela densidade
+de massa. A densidade determina $n_N\sigma$, enquanto estrutura nuclear e
+small-$x$ determinam $\sigma$.
+
+\subsection{O elo experimental do CERN}
+
+O FASER mediu diretamente $\nu_e$ e $\nu_\mu$ em alvo de tungstênio, com
+energias reconstruídas aproximadamente entre 0.5 e 1.8 TeV
+\cite{FASER2024}. A análise posterior mediu a seção de choque de
+$\nu_\mu+\bar\nu_\mu$ diferencial em energia, em seis bins, usando 338
+eventos CC \cite{FASER2025}. É o teste experimental mais próximo da escala
+TeV do HADROS3 entre os papers selecionados.
+
+Esse dado valida o setor eletrofraco/DIS e partes da modelagem de estados
+finais, mas não a densidade astrofísica: tungstênio de detector é matéria
+fria ordinária. Além disso, a energia atual máxima do HADROS3, 9.45 TeV,
+fica acima do alcance direto publicado pelo FASER, exigindo extrapolação com
+PDFs e sua incerteza.
+
+\subsection{GEANT4, FTFP\_BERT e test beams}
+
+GEANT4 é uma biblioteca geral de transporte cujo desenvolvimento e domínio
+de aplicações são descritos por Allison et al. \cite{Allison2016Geant4}.
+CALICE confrontou modelos hadrônicos GEANT4 com chuveiros em calorímetros de
+aço altamente granulares \cite{CALICE2013,CALICE2016,CALICE2019}. Esses
+papers permitem testar perfis longitudinais e radiais, energia visível,
+tempo, multiplicidade de hits e decomposição em componentes eletromagnética,
+hadronicamente interagente, nêutrons e fragmentos.
+
+Eles sustentam o uso de FTFP\_BERT como referência para chuveiros em materiais
+laboratoriais e nas faixas de energia testadas. Não sustentam extrapolar um
+\code{G4Material} atômico para $10^9$--$10^{10}\,\mathrm{g\,cm^{-3}}$ sem
+correções. O teste CALICE deve ser reproduzido separadamente no HADROS3 como
+benchmark do executável; não se deve ajustar o toro para ``parecer'' um
+calorímetro.
+
+\section{Por que a densidade extrema muda o problema}
+
+Para $X=0.75$, $Y=0.25$, a fração eletrônica é
+$Y_e=X+Y/2=0.875$. Definindo $\rhoNine=\rho/(10^9\,\mathrm{g\,cm^{-3}})$,
+\begin{align}
+n_e &\simeq 5.27\times10^{32}\rhoNine\ \mathrm{cm^{-3}},\\
+p_Fc &= \hbar c(3\pi^2n_e)^{1/3}\simeq4.93\rhoNine^{1/3}\ \mathrm{MeV},\\
+E_{F,\mathrm{kin}}&=\sqrt{(p_Fc)^2+(m_ec^2)^2}-m_ec^2.
+\end{align}
+Assim, $E_{F,\mathrm{kin}}\simeq4.45$ MeV em $10^9$ e cerca de 10.1 MeV em
+$10^{10}\,\mathrm{g\,cm^{-3}}$. Elétrons são relativisticamente degenerados
+se $kT\ll E_F$. A densidade de íons é aproximadamente
+$4.89\times10^{32}\rhoNine\,\mathrm{cm^{-3}}$ e o raio de Wigner--Seitz é
+aproximadamente $79\rhoNine^{-1/3}$ fm: muito menor que uma escala atômica,
+mas ainda maior que raios nucleares.
+
+Esse regime é conhecido na física de crostas de estrelas compactas e
+transporte degenerado \cite{Chamel2008,Potekhin2015}. Ele implica ionização
+completa, screening, correlações do plasma, ocupação de estados eletrônicos e
+possível bloqueio de Pauli. Para processos eletromagnéticos de alta energia,
+o comprimento de formação pode introduzir supressões LPM e dielétrica
+\cite{Klein1999}. Estudos modernos de stopping em matéria densa mostram
+explicitamente que campos coletivos podem tornar inadequada a soma de perdas
+por colisões independentes \cite{Fu2023}. O paper de Fu et al. trata alfas em
+DT de fusão, não hádrons TeV no toro; sua importância é demonstrar a classe
+de física ausente, não fornecer uma correção pronta.
+
+Há uma nuance importante: os núcleos ainda estão separados por dezenas de
+fm, portanto uma colisão forte dura em um núcleo pode continuar sendo tratada
+localmente. O maior risco não é que o PYTHIA ``veja todos os núcleos ao mesmo
+tempo'', mas que o transporte entre colisões, a resposta eletromagnética e o
+resfriamento/absorção de secundários sejam modelados como matéria atômica
+fria independente.
+
+\section{Fontes ocultas e jatos dentro de matéria}
+
+Murase e Ioka mostram que jatos dentro de estrelas podem produzir neutrinos
+TeV--PeV, mas que a radiação mediada e o resfriamento dos píons/múons impõem
+condições fortes \cite{MuraseIoka2013}. Senno, Murase e Mészáros estendem a
+análise para jatos sufocados e GRBs de baixa luminosidade, enfatizando fontes
+ocultas e competição entre produção e perdas \cite{Senno2016}.
+
+Para o HADROS3, a lição não é copiar a geometria estelar. É calcular, em cada
+sítio, a hierarquia
+\begin{equation}
+t_{\rm dec},\quad t_{\rm had},\quad t_{\rm em},\quad t_{\rm syn},\quad
+t_{\rm adv},
+\end{equation}
+para píons, káons, múons, nucleons e fótons. Se $t_{\rm had}<t_{\rm dec}$, a
+composição final prevista apenas por decaimentos PYTHIA não representa o que
+escapa do toro. O PYTHIA continua correto como condição inicial; a evolução
+posterior é que muda.
+
+\section{Escalas úteis e interpretação do volume atual}
+
+Uma caixa de lado 20 mm atravessada integralmente tem coluna
+\begin{equation}
+X_{\rm box}=\rho L=2\times10^9\rhoNine\ \mathrm{g\,cm^{-2}}.
+\end{equation}
+Logo, os sítios atuais representam colunas de ordem $10^9$--$2\times10^{10}$
+g cm$^{-2}$. Comparações de densidade devem manter a coluna $X=\rho L$, não
+o comprimento geométrico, quando a aproximação de centros independentes é
+válida. Para uma seção neutrino--núcleon $\sigma_{\nu N}$,
+\begin{equation}
+\lambda_X=(N_A\sigma_{\nu N})^{-1},\qquad
+P_{\rm int}=1-\exp(-X/\lambda_X).
+\end{equation}
+Para hádrons, seções fortes são muitas ordens maiores que as fracas; por isso
+os comprimentos físicos entre interações tornam-se microscópicos e o número
+de passos cresce rapidamente. Os $2.7\times10^7$ passos atuais são coerentes
+com um problema computacionalmente rígido, mas a rigidez não prova que as
+seções e perdas usadas sejam as do plasma real.
+
+\section{Matriz de validade}
+
+{\footnotesize
+\begin{longtable}{p{0.20\textwidth}p{0.24\textwidth}p{0.24\textwidth}p{0.17\textwidth}}
+\toprule
+Componente & Evidência disponível & Limitação & Status recomendado \\
+\midrule\endhead
+Conservação H3-W10 & testes numéricos do próprio run & não testa distribuições & validado internamente \\
+Shower/hadronização & manual/tunes PYTHIA e dados HEP & canal DIS e energia específicos precisam comparação & parcialmente validado \\
+Seção DIS & cálculos NNLO/NLO e FASER TeV & extrapolação até 10 TeV e small-$x$ & validável com incerteza \\
+Chuveiro GEANT4 & CALICE aço, FTFP\_BERT & material/energia diferentes & validado apenas no benchmark \\
+Escala $1/\rho$ & teoria de centros independentes & falha com efeitos coletivos & teste de consistência \\
+Plasma H/He denso & teoria de matéria degenerada & sem dados de hádrons TeV nessas densidades & não validado \\
+Toro completo & modelo analítico local & sem GRMHD, campos ou gradientes no patch & aproximação exploratória \\
+\bottomrule
+\end{longtable}
+}
+
+\section{Campanha numérica proposta}
+
+\subsection*{V1 --- DIS contra referências modernas}
+Gerar uma grade logarítmica de 50 GeV a $10^5$ GeV, com pelo menos $10^5$
+amostras por década. Comparar $\sigma_{CC/NC}$ e quantis de $y$ com Xie e
+Weigel. Aceitar se a curva central estiver dentro da banda teórica publicada;
+onde não houver tabela digital, exigir acordo de 5\% após digitalização e
+propagar a incerteza de PDF separadamente.
+
+\subsection*{V2 --- fechamento do PYTHIA}
+Em cada bin de energia e $y$, gerar pelo menos $10^4$ eventos. Exigir
+cardinalidade 1:1, carga exata, resíduo relativo de quatro-momento abaixo de
+$5\times10^{-8}$ em 100\% dos eventos, ausência de pártons finais e nenhuma
+emissão acima de SCALUP. Publicar médias, covariâncias e intervalos de
+multiplicidade/fração de energia por espécie. A densidade não pode alterar o
+hash do evento PYTHIA para a mesma seed e LHE.
+
+\subsection*{V3 --- benchmark GEANT4/CALICE}
+Construir uma geometria de validação separada em aço com feixes de $\pi^\pm$
+nas energias dos papers. Comparar energia média visível, resolução, centro de
+gravidade longitudinal e raio do shower. Aceitar somente quando cada
+observável estiver dentro da incerteza experimental combinada ou, na ausência
+de covariância, dentro de 10\%. Esse teste valida executável/lista física, não
+o toro.
+
+\subsection*{V4 --- invariância em profundidade de massa}
+Usar o mesmo material ideal diluído em uma região onde efeitos coletivos são
+desprezíveis. Executar pares $(\rho,L)$ com $\rho L$ fixo e a mesma seed.
+Comparar probabilidade da primeira interação, energia depositada por coluna e
+espectro de escape. Exigir desvio menor que 2\% com pelo menos $10^4$ eventos.
+Falha indica dependência geométrica/numérica indevida; sucesso não valida o
+regime degenerado.
+
+\subsection*{V5 --- convergência de produção cuts e passos}
+Variar production cut e step limiter por fatores 2 e 4. Aceitar quando energia
+depositada, energia escapada e multiplicidades relevantes variarem menos que
+1\%, enquanto o balanço e os hashes de entrada permanecem válidos. O atual
+\code{steps\_truncated=true} deve ser reportado como limitação de saída, nunca
+como perda silenciosa de física.
+
+\subsection*{V6 --- envelope de matéria densa}
+Calcular $E_F$, parâmetro de acoplamento iônico, comprimentos de screening,
+formação e interação em cada sítio usando também a temperatura local. Rodar
+três modelos: GEANT4 atômico bruto; stopping com correções de plasma; e
+limites superior/inferior para LPM, screening e bloqueio. Não há critério de
+``acordo com dado''; o produto aceito é uma banda sistemática. Se a banda
+exceder 20\% num observável científico, ele deve ser marcado como dependente
+do modelo de meio.
+
+\subsection*{V7 --- competição interação/decaimento}
+Para $\pi^\pm$, $K^\pm$, $K_L$, $\mu^\pm$, nêutrons e fótons, comparar
+$t_{\rm dec}$, $t_{\rm int}$, $t_{\rm loss}$ e $t_{\rm escape}$ por energia e
+sítio. Exigir que toda partícula declarada ``final'' tenha a decisão
+transportar/decaír/absorver documentada. Este teste liga diretamente PYTHIA
+ao observável astrofísico.
+
+\subsection*{V8 --- desempenho}
+Medir tempo por evento, passos por GeV e memória em função de densidade,
+coluna e multiplicidade. Com o run atual, a referência é 10 eventos em 43.1 s
+com quatro workers. Definir um orçamento de erro, não apenas de tempo:
+parallelismo por sítio é seguro; juntar densidades em um mesmo material não é.
+Aplicar thinning/biasing somente com pesos auditados e comparação contra uma
+amostra sem aceleração, exigindo acordo estatístico de 2\%.
+
+\section{Mudanças recomendadas no HADROS3}
+
+\begin{enumerate}
+\item Separar no relatório web três selos independentes: validação do gerador
+de eventos, validação do benchmark GEANT4 e validação da microfísica do meio
+denso. O terceiro deve começar falso; os nomes de máquina propostos são
+\code{event\_generator\_validated}, \code{geant4\_benchmark\_validated} e
+\code{dense\_medium\_microphysics\_validated}.
+\item Registrar temperatura, ionização, $Y_e$, degenerescência, magnetização e
+gradientes junto à densidade. Densidade sozinha não define um material.
+\item Reportar comprimentos e histogramas também em g cm$^{-2}$.
+\item Preservar o processamento por sítio já implementado: um material/volume
+local para cada densidade. Isso corrige a mistura de sítios, mas não corrige a
+microfísica de plasma.
+\item Criar um backend de correções densas versionado, inicialmente como
+envelope sistemático, sem modificar PYTHIA.
+\item Adicionar os testes V1--V8 à campanha de física e gravar DOI/arXiv,
+versões, seeds, cards e hashes em cada produto.
+\end{enumerate}
+
+\section{Conclusão}
+
+É possível validar grande parte da cadeia, mas não com uma única comparação.
+FASER e os cálculos modernos testam a interação de neutrinos em TeV; PYTHIA
+testa o estado final de cada colisão; CALICE testa FTFP\_BERT em calorímetros.
+Os papers de matéria densa mostram por que a etapa restante exige nova
+microfísica. O resultado atual do HADROS3 deve ser descrito como
+\emph{transporte GEANT4 de uma mistura H/He homogênea escalada à densidade
+local, com consistência interna verificada e efeitos coletivos ainda não
+validados}. Essa formulação é rigorosa, útil e aponta diretamente para os
+testes que podem convertê-la, progressivamente, em uma previsão astrofísica.
+
+\bibliographystyle{unsrt}
+\bibliography{references}
+
+\end{document}

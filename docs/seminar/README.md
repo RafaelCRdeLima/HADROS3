@@ -1,29 +1,43 @@
-# Seminário HADROS3
+# HADROS3 Seminar
 
-Apresentação web autocontida sobre o pipeline HADROS3, da visualização do sistema Kerr ao transporte local por sítio com GEANT4.
+A self-contained web presentation of the HADROS3 pipeline, from Kerr-system
+visualization to local per-site transport with GEANT4. The final section
+discusses modern collider and theoretical validation, the limits of applying
+standard GEANT4 matter at torus densities, and the V1--V8 numerical campaign.
 
-## Apresentar localmente
+## Present locally
 
-Abra `index.html` diretamente ou sirva o diretório:
+Open `index.html` directly or serve the documentation directory:
 
 ```bash
 python3 -m http.server 8000 --directory docs
 ```
 
-e acesse `http://127.0.0.1:8000/seminar/`.
+and open `http://127.0.0.1:8000/seminar/`.
 
-Controles: setas ou espaço para navegar, `F` para tela cheia, `O` para visão geral, `N` para notas e `?` para ajuda.
+Controls: arrow keys or Space to navigate, `F` for fullscreen, `O` for the
+overview, `N` for speaker notes, and `?` for help.
 
 ## GitHub Pages
 
-O workflow `pages.yml` publica o diretório `docs/` após cada push em `main`. A apresentação fica em:
+The `pages.yml` workflow publishes `docs/` after every push to `main`. The
+presentation is available at:
 
 ```text
 https://rafaelcrdelima.github.io/HADROS3/seminar/
 ```
 
-Se o repositório ainda não usa Pages via Actions, selecione **Settings → Pages → Source → GitHub Actions** uma única vez.
+If the repository is not yet configured to deploy Pages with Actions, select
+**Settings → Pages → Source → GitHub Actions** once.
 
-## Atualizar snapshots
+## Physics review and references
 
-Os arquivos em `assets/` são cópias congeladas de um run validado. Isso impede que a apresentação dependa do diretório local `output/`, normalmente ignorado pelo Git.
+The full review linked from slide 18 is stored in
+`docs/bibliography/HADROS3_UHE_Dense_Matter/`, together with 16 downloaded
+papers, BibTeX metadata, and SHA-256 checksums.
+
+## Update snapshots
+
+Files in `assets/` are frozen copies from a validated run. This prevents the
+presentation from depending on the local `output/` directory, which is normally
+ignored by Git.

@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#05090f">
-  <meta name="description" content="HADROS3 — apresentação de seminário: do buraco negro Kerr ao transporte local com GEANT4.">
-  <title>HADROS3 — do espaço-tempo à cascata hadrônica</title>
+  <meta name="description" content="HADROS3 seminar — from Kerr black-hole visualization to local particle transport with GEANT4.">
+  <title>HADROS3 — from spacetime to hadronic cascades</title>
   <style>
     :root {
       --bg: #05090f; --panel: #0b1420; --panel-2: #101d2b; --ink: #f5f7fa;
@@ -66,6 +66,13 @@
     .badge::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 14px var(--green); }
     .formula { padding: 18px 22px; border: 1px solid rgba(91,214,231,.3); border-radius: 12px; background: rgba(91,214,231,.06);
       font: clamp(16px, 1.55vw, 25px)/1.4 ui-monospace, monospace; color: #d8f8fc; }
+    .references { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; align-items: stretch; }
+    .references .card { padding: clamp(13px, 1.4vw, 20px); box-shadow: none; }
+    .references h3 { font-size: clamp(14px, 1.25vw, 20px); margin-bottom: 7px; }
+    .references p { color: var(--muted); font-size: clamp(11px, .9vw, 14px); line-height: 1.35; margin: 0; }
+    .references a { color: var(--gold-2); text-decoration-color: rgba(241,180,92,.4); }
+    .status-line { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; }
+    .status-line b { white-space: nowrap; }
     .title-slide { grid-template-rows: 1fr auto; background: #000; padding: clamp(36px, 6vw, 100px); }
     .title-slide::after { display: none; }
     .title-main { align-self: center; display: grid; grid-template-columns: minmax(0,1.15fr) minmax(330px,.85fr); align-items: center; gap: 5vw; }
@@ -98,339 +105,400 @@
     @media (max-width: 900px) {
       .split, .split.wide-copy, .title-main { grid-template-columns: 1fr; }
       .title-orbit { display: none; } .cards { grid-template-columns: 1fr 1fr; }
-      .pipeline { grid-template-columns: repeat(3, 1fr); } .visual img { max-height: 48vh; }
+      .pipeline, .references { grid-template-columns: repeat(2, 1fr); } .visual img { max-height: 48vh; }
     }
     @media print {
       @page { size: 16in 9in; margin: 0; }
       html, body { overflow: visible; background: #05090f !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-      .deck { height: auto; } .slide { position: relative; opacity: 1; visibility: visible; transform: none; width: 16in; height: 9in; break-after: page; }
+      .deck { height: auto; } .slide { position: relative; opacity: 1; visibility: visible; transform: none; width: 16in; height: 9in; overflow: hidden; break-inside: avoid; break-after: page; }
       .foot, .controls, .speaker-note, .help { display: none !important; }
     }
   </style>
 </head>
 <body>
 <main class="deck" aria-live="polite">
-  <section class="slide title-slide active" data-title="Abertura" data-section="HADROS3">
+  <section class="slide title-slide active" data-title="Opening" data-section="HADROS3">
     <div class="title-main">
       <div>
-        <img class="title-logo" src="assets/hadros-logo.png" alt="Logotipo HADROS">
-        <h1>Do espaço-tempo à<br><span class="accent">cascata hadrônica</span></h1>
-        <p class="lead">Uma plataforma auditável para astrofísica multiescala em sistemas compactos e opacos.</p>
+        <img class="title-logo" src="assets/hadros-logo.png" alt="HADROS logo">
+        <h1>From spacetime to<br><span class="accent">hadronic cascades</span></h1>
+        <p class="lead">An auditable platform for multiscale astrophysics in compact, opaque systems.</p>
       </div>
       <div class="title-orbit" aria-hidden="true"></div>
     </div>
-    <div class="meta"><span>SEMINÁRIO • HADROS3</span><span>pipeline H3-W11 • 2026</span></div>
-    <aside class="speaker-note"><b>Mensagem de abertura:</b> HADROS3 conecta uma imagem intuitiva do sistema Kerr a uma cadeia numérica rastreável que termina, no estágio atual, no transporte local de partículas com GEANT4.</aside>
+    <div class="meta"><span>HADROS3 SEMINAR</span><span>pipeline through H3-W11 • 2026</span></div>
+    <aside class="speaker-note"><b>Opening message:</b> HADROS3 connects an intuitive image of a Kerr system to a traceable numerical chain that currently reaches local particle transport with GEANT4.</aside>
   </section>
 
-  <section class="slide" data-title="A pergunta" data-section="Motivação">
-    <header class="head"><div><div class="eyebrow">01 · Motivação</div><h2>Uma pergunta, muitas escalas</h2></div><span class="badge">pipeline executável</span></header>
+  <section class="slide" data-title="The question" data-section="Motivation">
+    <header class="head"><div><div class="eyebrow">01 · Motivation</div><h2>One question, many scales</h2></div><span class="badge">executable pipeline</span></header>
     <div class="content split wide-copy">
       <div class="stack">
-        <p class="quote">Como uma partícula UHE nasce, percorre o espaço-tempo de Kerr, interage com matéria densa e produz uma cascata observável?</p>
-        <div class="formula">geometria → geodésicas → DIS → evento → transporte</div>
+        <p class="quote">How is a UHE particle born, propagated through Kerr spacetime, scattered in dense matter, and converted into an observable cascade?</p>
+        <div class="formula">geometry → geodesics → DIS → event → transport</div>
       </div>
       <div class="cards two">
-        <div class="card"><div class="metric">10⁰–10²</div><div class="metric-label">raios gravitacionais: sistema macro</div></div>
-        <div class="card"><div class="metric">mm</div><div class="metric-label">volume local de transporte GEANT4</div></div>
-        <div class="card"><div class="metric">Kerr</div><div class="metric-label">propagação relativística completa</div></div>
-        <div class="card"><div class="metric">HepMC3</div><div class="metric-label">contrato entre geração e transporte</div></div>
+        <div class="card"><div class="metric">10⁰–10²</div><div class="metric-label">gravitational radii: the macroscopic system</div></div>
+        <div class="card"><div class="metric">mm</div><div class="metric-label">local GEANT4 transport volume</div></div>
+        <div class="card"><div class="metric">Kerr</div><div class="metric-label">fully relativistic propagation</div></div>
+        <div class="card"><div class="metric">HepMC3</div><div class="metric-label">generation-to-transport contract</div></div>
       </div>
     </div>
-    <aside class="speaker-note">Enfatizar a separação de escalas. O GEANT4 não representa o toro inteiro: ele resolve um patch tangente local em cada sítio de interação.</aside>
+    <aside class="speaker-note">Emphasize scale separation. GEANT4 does not represent the entire torus: it resolves a local tangent patch at each interaction site.</aside>
   </section>
 
-  <section class="slide" data-title="Plataforma" data-section="Interface">
-    <header class="head"><div><div class="eyebrow">02 · Plataforma</div><h2>Um laboratório, não apenas um plot</h2></div><span class="mono">hadros-web</span></header>
+  <section class="slide" data-title="Platform" data-section="Interface">
+    <header class="head"><div><div class="eyebrow">02 · Platform</div><h2>A laboratory, not merely a plot</h2></div><span class="mono">hadros-web</span></header>
     <div class="content split">
       <div class="stack">
-        <p class="lead">A interface organiza configuração, execução explícita, diagnóstico e proveniência em uma única narrativa.</p>
+        <p class="lead">The interface organizes configuration, explicit execution, diagnostics, and provenance into a single narrative.</p>
         <ul>
-          <li>seleção de massa, spin, câmera, toro e funil;</li>
-          <li>ações independentes por estágio — sem execução implícita;</li>
-          <li>produtos JSON/JSONL/CSV, imagens e viewers 3D;</li>
-          <li>estado, hashes e validações preservados por run.</li>
+          <li>black-hole mass and spin, camera, torus, and funnel selection;</li>
+          <li>independent actions per stage—with no implicit execution;</li>
+          <li>JSON/JSONL/CSV products, images, and 3D viewers;</li>
+          <li>state, hashes, and validations preserved for every run.</li>
         </ul>
       </div>
-      <figure class="visual"><img src="assets/hadros-web-ui.png" alt="Interface hadros-web com logo, ações do workflow, navegação e geometria"><figcaption class="caption">snapshot real da interface hadros-web</figcaption></figure>
+      <figure class="visual"><img src="assets/hadros-web-ui.png" alt="hadros-web interface with logo, workflow actions, navigation, and geometry"><figcaption class="caption">snapshot from the actual hadros-web interface</figcaption></figure>
     </div>
-    <aside class="speaker-note">Mostrar que a UI não é uma camada decorativa: ela expõe contratos de execução, separa “pronto”, “rodando” e “concluído”, e aponta para os artefatos científicos.</aside>
+    <aside class="speaker-note">Show that the UI is not decorative: it exposes execution contracts, separates ready, running, and completed states, and links to scientific artifacts.</aside>
   </section>
 
-  <section class="slide" data-title="Pipeline" data-section="Arquitetura">
-    <header class="head"><div><div class="eyebrow">03 · Arquitetura</div><h2>Uma cadeia com fronteiras explícitas</h2></div><span class="mono">H3-W0 → H3-W11</span></header>
+  <section class="slide" data-title="Pipeline" data-section="Architecture">
+    <header class="head"><div><div class="eyebrow">03 · Architecture</div><h2>A chain with explicit boundaries</h2></div><span class="mono">H3-W0 → H3-W11</span></header>
     <div class="content stack">
       <div class="pipeline">
-        <div class="stage"><b>Geometria</b><span>BH Kerr · toro · funil · câmera</span></div>
-        <div class="stage"><b>Fonte UHE</b><span>posição · energia · direção local</span></div>
-        <div class="stage"><b>Geodésicas</b><span>momento nulo · Kerr · invariantes</span></div>
-        <div class="stage"><b>DIS</b><span>τ covariante · GBW/IIM · vértice</span></div>
-        <div class="stage"><b>Observador</b><span>câmera · imagens · seleção</span></div>
-        <div class="stage"><b>POWHEG</b><span>hard process · LHE ponderado</span></div>
+        <div class="stage"><b>Geometry</b><span>Kerr BH · torus · funnel · camera</span></div>
+        <div class="stage"><b>UHE source</b><span>position · energy · local direction</span></div>
+        <div class="stage"><b>Geodesics</b><span>null momentum · Kerr · invariants</span></div>
+        <div class="stage"><b>DIS</b><span>covariant τ · GBW/IIM · vertex</span></div>
+        <div class="stage"><b>Observer</b><span>camera · images · selection</span></div>
+        <div class="stage"><b>POWHEG</b><span>hard process · weighted LHE</span></div>
       </div>
       <div class="pipeline">
-        <div class="stage"><b>PYTHIA 8</b><span>shower · hadronização · decaimentos</span></div>
-        <div class="stage"><b>HepMC3</b><span>estado final · unidades · frame</span></div>
-        <div class="stage"><b>GEANT4</b><span>patch local · matéria H/He · FTFP_BERT</span></div>
-        <div class="stage"><b>Auditoria</b><span>conservação · domínio · cardinalidade</span></div>
-        <div class="stage"><b>Viewers</b><span>macro ↔ sítio local clicável</span></div>
-        <div class="stage"><b>Próximo</b><span>transporte radiativo · espectros</span></div>
+        <div class="stage"><b>PYTHIA 8</b><span>shower · hadronization · decays</span></div>
+        <div class="stage"><b>HepMC3</b><span>final state · units · frame</span></div>
+        <div class="stage"><b>GEANT4</b><span>local patch · H/He matter · FTFP_BERT</span></div>
+        <div class="stage"><b>Audit</b><span>conservation · domain · cardinality</span></div>
+        <div class="stage"><b>Viewers</b><span>macro ↔ clickable local site</span></div>
+        <div class="stage"><b>Next</b><span>radiative transport · spectra</span></div>
       </div>
-      <div class="card"><b class="accent">Princípio:</b> cada estágio consome um contrato validado e nunca reinterpreta silenciosamente o estágio anterior.</div>
+      <div class="card"><b class="accent">Principle:</b> each stage consumes a validated contract and never silently reinterprets the preceding stage.</div>
     </div>
-    <aside class="speaker-note">Esta é a lâmina para orientar toda a apresentação. Os próximos slides seguem da esquerda para a direita.</aside>
+    <aside class="speaker-note">Use this slide to orient the entire talk. The next slides follow the chain from left to right.</aside>
   </section>
 
-  <section class="slide" data-title="Câmera Kerr" data-section="Visualização">
-    <header class="head"><div><div class="eyebrow">04 · Visualização</div><h2>Começamos pelo que o observador vê</h2></div><span class="mono">Kerr camera</span></header>
+  <section class="slide" data-title="Kerr camera" data-section="Visualization">
+    <header class="head"><div><div class="eyebrow">04 · Visualization</div><h2>We begin with what the observer sees</h2></div><span class="mono">Kerr camera</span></header>
     <div class="content split">
       <div class="stack">
-        <p class="lead">A câmera fornece a leitura intuitiva do sistema e fixa convenções que reaparecem no Observer Bridge.</p>
+        <p class="lead">The camera provides an intuitive view of the system and fixes conventions later reused by the Observer Bridge.</p>
         <ul>
-          <li>massa e spin do buraco negro;</li>
-          <li>distância, inclinação, azimute e campo de visão;</li>
-          <li>preview acelerado e orientação norte/sul auditada;</li>
-          <li>fundo celeste + emissão/absorção esquemática do toro.</li>
+          <li>black-hole mass and spin;</li>
+          <li>distance, inclination, azimuth, and field of view;</li>
+          <li>accelerated preview with audited north/south orientation;</li>
+          <li>sky background plus schematic torus emission and absorption.</li>
         </ul>
       </div>
-      <figure class="visual"><img src="assets/camera-kerr.png" alt="Visualização da câmera Kerr de um buraco negro com toro"><figcaption class="caption">Camera Preview · inclinação 81°</figcaption></figure>
+      <figure class="visual"><img src="assets/camera-kerr.png" alt="Kerr camera view of a black hole and torus"><figcaption class="caption">Camera Preview · 81° inclination</figcaption></figure>
     </div>
-    <aside class="speaker-note">Explicar que esta imagem é a porta de entrada visual, mas o pipeline não infere a física de colisões a partir dos pixels.</aside>
+    <aside class="speaker-note">Explain that this image is the visual entry point, but the pipeline does not infer collision physics from pixels.</aside>
   </section>
 
-  <section class="slide" data-title="Geometria macro" data-section="Geometria">
-    <header class="head"><div><div class="eyebrow">05 · Sistema macro</div><h2>BH + toro + funil + observador</h2></div><span class="mono">Boyer–Lindquist</span></header>
+  <section class="slide" data-title="Macro geometry" data-section="Geometry">
+    <header class="head"><div><div class="eyebrow">05 · Macroscopic system</div><h2>BH + torus + funnel + observer</h2></div><span class="mono">Boyer–Lindquist</span></header>
     <div class="content split">
-      <figure class="visual"><img src="assets/macro-geometry.png" alt="Esquema geométrico do buraco negro, toro, funis polares e observador"><figcaption class="caption">geometria de referência em unidades r/r<sub>g</sub></figcaption></figure>
+      <figure class="visual"><img src="assets/macro-geometry.png" alt="Geometric diagram of the black hole, torus, polar funnels, and observer"><figcaption class="caption">reference geometry in r/r<sub>g</sub> units</figcaption></figure>
       <div class="stack">
-        <p class="lead">Uma mesma descrição geométrica alimenta visualização, meio, fonte e diagnósticos.</p>
+        <p class="lead">A single geometric description drives visualization, medium, source, and diagnostics.</p>
         <div class="cards two">
-          <div class="card"><h3>Toro analítico</h3><p class="metric-label">perfil radial e gaussiano em θ; densidade local consultável.</p></div>
-          <div class="card"><h3>Funil polar</h3><p class="metric-label">domínio da fonte UHE e referência para os jatos.</p></div>
-          <div class="card"><h3>Horizonte</h3><p class="metric-label">condição de parada física para geodésicas.</p></div>
-          <div class="card"><h3>Observador</h3><p class="metric-label">base de câmera e projeção para o plano de imagem.</p></div>
+          <div class="card"><h3>Analytic torus</h3><p class="metric-label">radial and Gaussian θ profile with queryable local density.</p></div>
+          <div class="card"><h3>Polar funnel</h3><p class="metric-label">UHE source domain and reference for the jets.</p></div>
+          <div class="card"><h3>Horizon</h3><p class="metric-label">physical stopping condition for geodesics.</p></div>
+          <div class="card"><h3>Observer</h3><p class="metric-label">camera basis and projection onto the image plane.</p></div>
         </div>
       </div>
     </div>
-    <aside class="speaker-note">Distinguir modelo analítico atual de uma GRMHD completa. A vantagem é auditabilidade e custo controlado; a limitação é explicitamente documentada.</aside>
+    <aside class="speaker-note">Distinguish the current analytic model from full GRMHD. Its advantages are auditability and controlled cost; its limitations are explicitly documented.</aside>
   </section>
 
-  <section class="slide" data-title="Fonte UHE" data-section="Fonte">
-    <header class="head"><div><div class="eyebrow">06 · Condição inicial</div><h2>A fonte nasce em um frame local</h2></div><span class="mono">isotropic_local</span></header>
+  <section class="slide" data-title="UHE source" data-section="Source">
+    <header class="head"><div><div class="eyebrow">06 · Initial condition</div><h2>The source is born in a local frame</h2></div><span class="mono">isotropic_local</span></header>
     <div class="content split wide-copy">
       <div class="stack">
         <ul>
-          <li>amostragem dentro do funil polar;</li>
-          <li>energia monoenergética ou distribuição configurável;</li>
-          <li>direções isotrópicas no referencial local;</li>
-          <li>seeds fixas e testes de uniformidade.</li>
+          <li>sampling inside the polar funnel;</li>
+          <li>monoenergetic or configurable energy distribution;</li>
+          <li>isotropic directions in the local reference frame;</li>
+          <li>fixed seeds and uniformity tests.</li>
         </ul>
         <div class="formula">(x<sup>μ</sup>, p<sup>(a)</sup>)<sub>local</sub> → p<sup>μ</sup><sub>Kerr</sub></div>
       </div>
-      <figure class="visual"><img src="assets/uhe-source.png" alt="Preview tridimensional da fonte de neutrinos UHE no funil polar"><figcaption class="caption">fonte UHE e domínio polar</figcaption></figure>
+      <figure class="visual"><img src="assets/uhe-source.png" alt="Three-dimensional preview of the UHE neutrino source in the polar funnel"><figcaption class="caption">UHE source and polar domain</figcaption></figure>
     </div>
-    <aside class="speaker-note">A direção não é reconstruída posteriormente: ela nasce na fonte e é consumida pela propagação Kerr.</aside>
+    <aside class="speaker-note">The direction is not reconstructed later: it is generated at the source and consumed by Kerr propagation.</aside>
   </section>
 
-  <section class="slide" data-title="Geodésicas" data-section="Relatividade">
-    <header class="head"><div><div class="eyebrow">07 · Propagação</div><h2>Geodésicas nulas no espaço-tempo de Kerr</h2></div><span class="badge">64 trajetórias válidas</span></header>
+  <section class="slide" data-title="Geodesics" data-section="Relativity">
+    <header class="head"><div><div class="eyebrow">07 · Propagation</div><h2>Null geodesics in Kerr spacetime</h2></div><span class="badge">64 valid trajectories</span></header>
     <div class="content split">
-      <figure class="visual"><img src="assets/forward-geodesics.png" alt="Geodésicas de neutrinos UHE propagadas ao redor do sistema Kerr"><figcaption class="caption">10.342 segmentos · 55 escapes · 9 max-steps</figcaption></figure>
+      <figure class="visual"><img src="assets/forward-geodesics.png" alt="UHE neutrino geodesics propagated through the Kerr system"><figcaption class="caption">10,342 segments · 55 escapes · 9 max-steps</figcaption></figure>
       <div class="stack">
-        <p class="lead">O backend C++ integra o quatro-momento e monitora invariantes físicos ao longo do caminho.</p>
+        <p class="lead">The C++ backend integrates four-momentum and monitors physical invariants along every path.</p>
         <div class="cards two">
-          <div class="card"><div class="metric">3.28×10⁻⁷</div><div class="metric-label">máximo de |g<sub>μν</sub>p<sup>μ</sup>p<sup>ν</sup>|</div></div>
-          <div class="card"><div class="metric">0</div><div class="metric-label">erro registrado em E e L<sub>z</sub></div></div>
+          <div class="card"><div class="metric">3.28×10⁻⁷</div><div class="metric-label">maximum |g<sub>μν</sub>p<sup>μ</sup>p<sup>ν</sup>|</div></div>
+          <div class="card"><div class="metric">0</div><div class="metric-label">recorded error in E and L<sub>z</sub></div></div>
         </div>
-        <ul><li>escape externo, horizonte ou limite de integração;</li><li>segmentos carregam frame e densidade do meio.</li></ul>
+        <ul><li>outer escape, horizon crossing, or integration limit;</li><li>segments carry frame and medium-density metadata.</li></ul>
       </div>
     </div>
-    <aside class="speaker-note">Os valores exibidos vêm do run de demonstração. Não generalizar o zero de erro para qualquer configuração: é o registro deste caso.</aside>
+    <aside class="speaker-note">These values come from the demonstration run. Do not generalize the zero recorded error to every configuration: it belongs to this case.</aside>
   </section>
 
-  <section class="slide" data-title="DIS" data-section="Interações">
-    <header class="head"><div><div class="eyebrow">08 · Deep Inelastic Scattering</div><h2>Onde a trajetória encontra matéria</h2></div><span class="mono">GBW / IIM</span></header>
+  <section class="slide" data-title="DIS" data-section="Interactions">
+    <header class="head"><div><div class="eyebrow">08 · Deep Inelastic Scattering</div><h2>Where the trajectory encounters matter</h2></div><span class="mono">GBW / IIM</span></header>
     <div class="content split">
       <div class="stack">
         <div class="formula">dτ = n(x) · σ(E<sub>local</sub>) · [−u·k] dλ</div>
         <ul>
-          <li>profundidade óptica covariante, invariante a reparametrização afim;</li>
-          <li>vértice sorteado pela CDF intrassegmento de τ;</li>
-          <li>energia local, densidade e seção de choque preservadas;</li>
-          <li>comparação diagnóstica entre modelos GBW e IIM.</li>
+          <li>covariant optical depth, invariant under affine reparameterization;</li>
+          <li>vertex sampled from the within-segment τ CDF;</li>
+          <li>local energy, density, and cross section preserved;</li>
+          <li>diagnostic comparison between GBW and IIM models.</li>
         </ul>
-        <div class="cards two"><div class="card"><div class="metric">36</div><div class="metric-label">interações aceitas</div></div><div class="card"><div class="metric">56.25%</div><div class="metric-label">aceitação GBW no run</div></div></div>
+        <div class="cards two"><div class="card"><div class="metric">36</div><div class="metric-label">accepted interactions</div></div><div class="card"><div class="metric">56.25%</div><div class="metric-label">GBW acceptance in this run</div></div></div>
       </div>
-      <figure class="visual"><img src="assets/dis-interactions.png" alt="Localizações das interações DIS sobre o campo de densidade do toro"><figcaption class="caption">vértices DIS sobre o campo de densidade</figcaption></figure>
+      <figure class="visual"><img src="assets/dis-interactions.png" alt="DIS interaction positions over the torus density field"><figcaption class="caption">DIS vertices over the density field</figcaption></figure>
     </div>
-    <aside class="speaker-note">Esta é a transição da propagação contínua para o evento microscópico. O vértice determina também a densidade que será usada depois no GEANT4.</aside>
+    <aside class="speaker-note">This is the transition from continuous propagation to a microscopic event. The vertex also determines the density later used by GEANT4.</aside>
   </section>
 
-  <section class="slide" data-title="Observer Bridge" data-section="Observador">
-    <header class="head"><div><div class="eyebrow">09 · Observer Bridge</div><h2>Da interação ao plano da câmera</h2></div><span class="mono">Kerr pixel match</span></header>
+  <section class="slide" data-title="Observer Bridge" data-section="Observer">
+    <header class="head"><div><div class="eyebrow">09 · Observer Bridge</div><h2>From the interaction to the camera plane</h2></div><span class="mono">Kerr pixel match</span></header>
     <div class="content split wide-copy">
-      <figure class="visual"><img src="assets/observer-overlay.png" alt="Candidatos DIS projetados sobre a imagem da câmera do observador"><figcaption class="caption">candidatos, ranking e correspondência Kerr</figcaption></figure>
+      <figure class="visual"><img src="assets/observer-overlay.png" alt="DIS candidates projected onto the observer camera image"><figcaption class="caption">candidates, ranking, and Kerr matching</figcaption></figure>
       <div class="stack">
-        <p class="lead">O bridge conecta localização física, geodésicas reversas da câmera e seleção downstream.</p>
+        <p class="lead">The bridge connects physical location, reverse camera geodesics, and downstream selection.</p>
         <ul>
-          <li>projeção com base tetrádica compatível com a câmera;</li>
-          <li>auditoria de hemisfério e orientação;</li>
-          <li>scores separados de pesos físicos;</li>
-          <li>seleção explícita para POWHEG.</li>
+          <li>projection with a camera-compatible tetrad basis;</li>
+          <li>hemisphere and orientation audit;</li>
+          <li>scores kept separate from physical weights;</li>
+          <li>explicit selection for POWHEG.</li>
         </ul>
       </div>
     </div>
-    <aside class="speaker-note">Dizer claramente: o score de observação é ferramenta de seleção/diagnóstico; ele não deve ser confundido com a seção de choque física.</aside>
+    <aside class="speaker-note">State clearly: the observation score is a selection and diagnostic tool; it must not be confused with a physical cross section.</aside>
   </section>
 
-  <section class="slide" data-title="Imagens gravitacionais" data-section="Lenteamento">
-    <header class="head"><div><div class="eyebrow">10 · Multiplicidade de imagens</div><h2>Um candidato pode ter mais de um caminho</h2></div><span class="mono">branch-aware</span></header>
+  <section class="slide" data-title="Gravitational images" data-section="Lensing">
+    <header class="head"><div><div class="eyebrow">10 · Image multiplicity</div><h2>One candidate may have multiple paths</h2></div><span class="mono">branch-aware</span></header>
     <div class="content split">
       <div class="stack">
-        <p class="lead">Raios próximos no plano de imagem são agrupados em ramos físicos, e um ramo primário é selecionado sem apagar os demais.</p>
+        <p class="lead">Nearby rays on the image plane are grouped into physical branches, and one primary branch is selected without erasing the others.</p>
         <ul>
-          <li>clusterização invariável a permutação;</li>
-          <li>score de ramo: contagem, proximidade e compacidade;</li>
-          <li>proveniência candidato → ramo → POWHEG;</li>
-          <li>viewer dedicado para inspeção física.</li>
+          <li>permutation-invariant clustering;</li>
+          <li>branch score from population, proximity, and compactness;</li>
+          <li>candidate → branch → POWHEG provenance;</li>
+          <li>dedicated viewer for physical inspection.</li>
         </ul>
       </div>
-      <figure class="visual"><img src="assets/image-branches.png" alt="História de seleção de um candidato, seus ramos de imagem e encaminhamento ao POWHEG"><figcaption class="caption">história auditável de uma seleção</figcaption></figure>
+      <figure class="visual"><img src="assets/image-branches.png" alt="Selection history of a candidate, its image branches, and forwarding to POWHEG"><figcaption class="caption">auditable history of one selection</figcaption></figure>
     </div>
-    <aside class="speaker-note">O pipeline preserva multiplicidade, mas escolhe uma entrada inequívoca para a etapa perturbativa.</aside>
+    <aside class="speaker-note">The pipeline preserves multiplicity while choosing an unambiguous input for the perturbative stage.</aside>
   </section>
 
-  <section class="slide" data-title="POWHEG" data-section="Evento duro">
-    <header class="head"><div><div class="eyebrow">11 · Hard process</div><h2>POWHEG transforma candidatos em LHE</h2></div><span class="badge">LHE real</span></header>
+  <section class="slide" data-title="POWHEG" data-section="Hard event">
+    <header class="head"><div><div class="eyebrow">11 · Hard process</div><h2>POWHEG turns candidates into LHE events</h2></div><span class="badge">real LHE</span></header>
     <div class="content split wide-copy">
-      <figure class="visual"><img src="assets/powheg-jobs.png" alt="Resumo de jobs, cards e eventos LHE produzidos pelo POWHEG"><figcaption class="caption">candidato → job → card → LHE</figcaption></figure>
+      <figure class="visual"><img src="assets/powheg-jobs.png" alt="Summary of jobs, cards, and LHE events produced by POWHEG"><figcaption class="caption">candidate → job → card → LHE</figcaption></figure>
       <div class="stack">
         <ul>
-          <li>cards por candidato selecionado;</li>
-          <li>cinemática no frame local da matéria;</li>
-          <li>pesos assinados e normalização <span class="mono">IDWTUP</span> preservados;</li>
-          <li>LO/NLO não podem ser rotulados de modo ambíguo;</li>
-          <li>hashes ligam LHE ao candidato de origem.</li>
+          <li>one card per selected candidate;</li>
+          <li>kinematics in the local matter frame;</li>
+          <li>signed weights and <span class="mono">IDWTUP</span> normalization preserved;</li>
+          <li>LO/NLO labels cannot be ambiguous;</li>
+          <li>hashes link every LHE event to its source candidate.</li>
         </ul>
-        <div class="card"><b class="accent">Saída:</b> hard process partônico — ainda não é um estado final detector-level.</div>
+        <div class="card"><b class="accent">Output:</b> a partonic hard process—not yet a detector-level final state.</div>
       </div>
     </div>
-    <aside class="speaker-note">Fazer a ponte conceitual: POWHEG fornece o núcleo perturbativo e a escala de matching; PYTHIA completa shower/hadronização.</aside>
+    <aside class="speaker-note">Make the conceptual bridge: POWHEG provides the perturbative core and matching scale; PYTHIA completes showering and hadronization.</aside>
   </section>
 
   <section class="slide" data-title="Event Generation" data-section="PYTHIA 8">
-    <header class="head"><div><div class="eyebrow">12 · Event Generation</div><h2>Do parton ao estado final hadrônico</h2></div><span class="mono">PYTHIA 8.312 + HepMC3</span></header>
+    <header class="head"><div><div class="eyebrow">12 · Event Generation</div><h2>From partons to the hadronic final state</h2></div><span class="mono">PYTHIA 8.312 + HepMC3</span></header>
     <div class="content split">
       <div class="stack">
-        <p class="lead">FSR com veto POWHEG, hadronização e decaimentos produzem partículas finais transportáveis.</p>
+        <p class="lead">POWHEG-vetoed FSR, hadronization, and decays produce transportable final particles.</p>
         <div class="cards two">
-          <div class="card"><div class="metric">10</div><div class="metric-label">eventos no run ilustrado</div></div>
-          <div class="card"><div class="metric">298</div><div class="metric-label">partículas finais</div></div>
-          <div class="card"><div class="metric">3.7×10⁻¹⁰</div><div class="metric-label">resíduo relativo máximo de quadrimomento</div></div>
-          <div class="card"><div class="metric">4.77 s⁻¹</div><div class="metric-label">taxa observada de eventos</div></div>
+          <div class="card"><div class="metric">10</div><div class="metric-label">events in the illustrated run</div></div>
+          <div class="card"><div class="metric">298</div><div class="metric-label">final particles</div></div>
+          <div class="card"><div class="metric">3.7×10⁻¹⁰</div><div class="metric-label">maximum relative four-momentum residual</div></div>
+          <div class="card"><div class="metric">4.77 s⁻¹</div><div class="metric-label">observed event throughput</div></div>
         </div>
-        <p class="metric-label">Contrato: frame local da matéria · GeV · mm · IDs upstream · pesos físicos.</p>
+        <p class="metric-label">Contract: local matter frame · GeV · mm · upstream IDs · physical weights.</p>
       </div>
-      <figure class="visual"><img src="assets/event-species.png" alt="Histograma de espécies de partículas finais geradas pelo PYTHIA"><figcaption class="caption">símbolos físicos, não apenas códigos PDG</figcaption></figure>
+      <figure class="visual"><img src="assets/event-species.png" alt="Histogram of final-particle species generated by PYTHIA"><figcaption class="caption">physical symbols, not only PDG codes</figcaption></figure>
     </div>
-    <aside class="speaker-note">As métricas são do snapshot atual. Ressaltar as validações: cardinalidade, on-shell, carga, matching e conservação de quadrimomento.</aside>
+    <aside class="speaker-note">The metrics belong to the current snapshot. Highlight cardinality, on-shell, charge, matching-scale, and four-momentum validation.</aside>
   </section>
 
   <section class="slide" data-title="GEANT4 macro" data-section="GEANT4">
-    <header class="head"><div><div class="eyebrow">13 · Transporte em matéria</div><h2>Primeiro: localizar os sítios no sistema macro</h2></div><span class="mono">H3-W11</span></header>
+    <header class="head"><div><div class="eyebrow">13 · Transport in matter</div><h2>First: locate every site in the macro system</h2></div><span class="mono">H3-W11</span></header>
     <div class="content split wide-copy">
-      <figure class="visual cover"><img src="assets/geant4-macro.png" alt="Viewer macro com buraco negro, toro e sítios clicáveis do GEANT4"><figcaption class="caption">viewer macro · sítio verde clicável</figcaption></figure>
+      <figure class="visual cover"><img src="assets/geant4-macro.png" alt="Macro viewer with black hole, torus, and clickable GEANT4 sites"><figcaption class="caption">macro viewer · clickable green site</figcaption></figure>
       <div class="stack">
-        <p class="lead">O usuário vê <em>onde</em> cada cálculo local foi aplicado — sem desenhar milímetros na escala de dezenas de r<sub>g</sub>.</p>
+        <p class="lead">The user sees <em>where</em> every local calculation was applied—without drawing millimeters at a scale of tens of r<sub>g</sub>.</p>
         <ul>
-          <li>BH, toro e referências do sistema;</li>
-          <li>um marcador por evento/sítio transportado;</li>
-          <li>ponte clicável para o volume local correspondente;</li>
-          <li>posição e densidade herdadas do vértice DIS.</li>
+          <li>black hole, torus, and system references;</li>
+          <li>one marker per transported event/site;</li>
+          <li>clickable bridge to the corresponding local volume;</li>
+          <li>position and density inherited from the DIS vertex.</li>
         </ul>
       </div>
     </div>
-    <aside class="speaker-note">Esta lâmina resolve a dúvida conceitual central: “de qual volume vieram os resultados?”. Cada ponto abre seu patch local.</aside>
+    <aside class="speaker-note">This slide answers the central conceptual question: “which volume produced these results?” Each point opens its own local patch.</aside>
   </section>
 
-  <section class="slide" data-title="GEANT4 local" data-section="GEANT4">
-    <header class="head"><div><div class="eyebrow">14 · Volume local</div><h2>Depois: inspecionar a cascata microscópica</h2></div><span class="badge">FTFP_BERT</span></header>
+  <section class="slide" data-title="Local GEANT4" data-section="GEANT4">
+    <header class="head"><div><div class="eyebrow">14 · Local volume</div><h2>Then: inspect the microscopic cascade</h2></div><span class="badge">FTFP_BERT</span></header>
     <div class="content split">
       <div class="stack">
-        <p class="lead">Cada sítio executa um processo GEANT4 isolado com seu próprio material e densidade.</p>
+        <p class="lead">Each site runs an isolated GEANT4 process with its own material and density.</p>
         <ul>
-          <li>patch homogêneo tangente no frame local da matéria;</li>
-          <li>mistura H/He com densidade local do toro;</li>
-          <li>primárias, secundárias, processos e escapes;</li>
-          <li>um job por sítio, paralelismo externo limitado;</li>
-          <li>agregação determinística e publicação atômica.</li>
+          <li>homogeneous tangent patch in the local matter frame;</li>
+          <li>H/He mixture at the local torus density;</li>
+          <li>primaries, secondaries, processes, and escapes;</li>
+          <li>one job per site with bounded external parallelism;</li>
+          <li>deterministic aggregation and atomic publication.</li>
         </ul>
         <div class="formula">interaction_id → ρ<sub>local</sub> → G4Material → BeamOn</div>
       </div>
-      <figure class="visual cover"><img src="assets/geant4-local.png" alt="Viewer do volume local GEANT4 com trajetórias e processos de partículas"><figcaption class="caption">patch local · trajetórias e processos registrados</figcaption></figure>
+      <figure class="visual cover"><img src="assets/geant4-local.png" alt="Local GEANT4 volume viewer with particle trajectories and processes"><figcaption class="caption">local patch · recorded trajectories and processes</figcaption></figure>
     </div>
-    <aside class="speaker-note">Explicar que eventos em densidades diferentes nunca compartilham um G4Material. A separação por subprocesso foi escolhida por correção física e auditabilidade.</aside>
+    <aside class="speaker-note">Explain that events at different densities never share a G4Material. Process isolation was chosen for physical correctness and auditability.</aside>
   </section>
 
-  <section class="slide" data-title="Validação" data-section="Confiança numérica">
-    <header class="head"><div><div class="eyebrow">15 · Evidência</div><h2>Não basta rodar: precisa passar</h2></div><span class="badge">status ok</span></header>
+  <section class="slide" data-title="Numerical validation" data-section="Numerical confidence">
+    <header class="head"><div><div class="eyebrow">15 · Evidence</div><h2>Running is not enough: it must pass</h2></div><span class="badge">status ok</span></header>
     <div class="content split wide-copy">
       <div class="stack">
         <div class="cards two">
-          <div class="card"><div class="metric">2</div><div class="metric-label">sítios GEANT4 isolados</div></div>
-          <div class="card"><div class="metric">51</div><div class="metric-label">primárias finais importadas</div></div>
-          <div class="card"><div class="metric">6.13 M</div><div class="metric-label">steps totais executados</div></div>
-          <div class="card"><div class="metric">10,792</div><div class="metric-label">partículas escapando dos patches</div></div>
+          <div class="card"><div class="metric">10</div><div class="metric-label">isolated GEANT4 sites</div></div>
+          <div class="card"><div class="metric">298</div><div class="metric-label">imported final primaries</div></div>
+          <div class="card"><div class="metric">27.34 M</div><div class="metric-label">total executed steps</div></div>
+          <div class="card"><div class="metric">47,030</div><div class="metric-label">particles escaping the patches</div></div>
         </div>
         <ul>
-          <li><span class="green">✓</span> domínio, cardinalidade e energia;</li>
-          <li><span class="green">✓</span> isolamento e mapeamento de densidade;</li>
-          <li><span class="green">✓</span> hashes upstream inalterados;</li>
-          <li><span class="green">✓</span> serial e paralelo com outputs científicos idênticos.</li>
+          <li><span class="green">✓</span> domain, cardinality, and energy ledger;</li>
+          <li><span class="green">✓</span> site isolation and density mapping;</li>
+          <li><span class="green">✓</span> upstream hashes unchanged;</li>
+          <li><span class="green">✓</span> 10 events completed with four site workers.</li>
         </ul>
       </div>
-      <figure class="visual"><img src="assets/geant4-energy.png" alt="Ledger de energia do evento transportado no GEANT4"><figcaption class="caption">ledger: energia depositada + energia escapando</figcaption></figure>
+      <figure class="visual"><img src="assets/geant4-energy.png" alt="Energy ledger of the event transported in GEANT4"><figcaption class="caption">ledger: deposited energy + escaping energy</figcaption></figure>
     </div>
-    <aside class="speaker-note">Os 100 mil steps gravados são uma amostra truncada para visualização; o backend executou 6,13 milhões e registra essa distinção.</aside>
+    <aside class="speaker-note">The current output records 500,000 steps for visualization while the backend executed 27.34 million. This truncation affects the visual record, not the transport itself, and is explicitly reported.</aside>
   </section>
 
-  <section class="slide" data-title="Limites" data-section="Fronteira atual">
-    <header class="head"><div><div class="eyebrow">16 · O que o modelo diz — e o que não diz</div><h2>Limites explícitos são parte do resultado</h2></div><span class="mono">physics v1.3</span></header>
-    <div class="content cards two">
-      <div class="card"><h3 class="green">Já demonstrado</h3><ul>
-        <li>geometria e câmera Kerr;</li><li>fonte UHE e geodésicas nulas;</li><li>DIS covariante e seleção do observador;</li>
-        <li>POWHEG → PYTHIA → HepMC3;</li><li>GEANT4 local por sítio e densidade.</li>
-      </ul></div>
-      <div class="card"><h3 class="accent">Próxima fronteira</h3><ul>
-        <li>convergência de patch e production cuts;</li><li>equação de estado e efeitos coletivos da matéria ultradensa;</li>
-        <li>transporte Kerr pós-cascata;</li><li>transporte radiativo e espectros observáveis;</li><li>comparação com modelos GRMHD.</li>
-      </ul></div>
-      <div class="card"><h3>Interpretação GEANT4</h3><p class="metric-label">FTFP_BERT trata a cascata microscópica no material configurado; não substitui uma microfísica completa de plasma degenerado.</p></div>
-      <div class="card"><h3>Interpretação estatística</h3><p class="metric-label">pesos físicos, scores de observação e pesos estatísticos permanecem separados em todos os contratos.</p></div>
+  <section class="slide" data-title="What is validated" data-section="Physics validation">
+    <header class="head"><div><div class="eyebrow">16 · Evidence hierarchy</div><h2>Three layers require three validations</h2></div><span class="mono">collision ≠ medium</span></header>
+    <div class="content cards">
+      <div class="card"><h3 class="green">1 · Neutrino DIS</h3><p class="lead">Modern NLO/NNLO calculations constrain σ(E) and dσ/dy. FASER directly probes TeV neutrinos at the LHC.</p><p class="metric-label">HADROS3 target: binwise cross sections, inelasticity, ν̄/ν, PDF and nuclear uncertainties.</p></div>
+      <div class="card"><h3 class="green">2 · Isolated event</h3><p class="lead">PYTHIA receives one validated LHE collision and produces the shower, hadronization, and decays.</p><p class="metric-label">Density controls interaction probability and site metadata; it must not retune the same PYTHIA collision.</p></div>
+      <div class="card"><h3 class="accent">3 · Dense-medium transport</h3><p class="lead">CALICE validates GEANT4 showers in ordinary detector matter—not in a degenerate H/He plasma.</p><p class="metric-label">The current high-density G4Material is a controlled extrapolation, not full astrophysical validation.</p></div>
     </div>
-    <aside class="speaker-note">Evitar overclaim. A força científica do HADROS3 atual está na integração e auditabilidade; a fidelidade astrofísica continuará crescendo por módulos.</aside>
+    <aside class="speaker-note">This is the central conclusion of the literature review. A successful conservation test does not validate the cross section, and a successful calorimeter benchmark does not validate an ultradense plasma.</aside>
   </section>
 
-  <section class="slide title-slide" data-title="Encerramento" data-section="Conclusão">
-    <div class="title-main">
-      <div>
-        <img class="title-logo" src="assets/hadros-logo.png" alt="Logotipo HADROS">
-        <h1>Uma cadeia.<br><span class="accent">Muitas escalas.</span><br>Contratos claros.</h1>
-        <p class="lead">HADROS3 chegou ao transporte local com GEANT4 — mantendo cada decisão física inspecionável.</p>
+  <section class="slide" data-title="Dense torus regime" data-section="Dense matter">
+    <header class="head"><div><div class="eyebrow">17 · The torus is not a terrestrial target</div><h2>What 10⁹–10¹⁰ g cm⁻³ implies</h2></div><span class="mono">X=0.75 · Y=0.25</span></header>
+    <div class="content split wide-copy">
+      <div class="stack">
+        <div class="formula">Y<sub>e</sub> = 0.875 · n<sub>e</sub> ≈ 5.27×10³² ρ₉ cm⁻³</div>
+        <div class="cards two">
+          <div class="card"><div class="metric">4.9–10.6</div><div class="metric-label">electron Fermi momentum p<sub>F</sub>c [MeV]</div></div>
+          <div class="card"><div class="metric">4.4–10.1</div><div class="metric-label">electron kinetic Fermi energy [MeV]</div></div>
+          <div class="card"><div class="metric">79–37</div><div class="metric-label">ion Wigner–Seitz radius [fm]</div></div>
+          <div class="card"><div class="metric">2×10⁹–2×10¹⁰</div><div class="metric-label">column of a 20 mm patch [g cm⁻²]</div></div>
+        </div>
       </div>
       <div class="stack">
-        <div class="card"><div class="eyebrow">repositório</div><p class="lead" style="margin:8px 0 0"><a style="color:var(--ink)" href="https://github.com/RafaelCRdeLima/HADROS3">github.com/RafaelCRdeLima/HADROS3</a></p></div>
-        <div class="card"><div class="eyebrow">atalhos</div><p class="metric-label" style="margin:8px 0 0">← → navegar · F tela cheia · O visão geral · N notas · ? ajuda</p></div>
+        <p class="lead">The plasma is fully ionized and its electrons are relativistically degenerate unless the temperature is multi-MeV.</p>
+        <ul>
+          <li>screening, correlations, and Pauli occupation can alter transport;</li>
+          <li>LPM and dielectric suppression can affect electromagnetic processes;</li>
+          <li>collective stopping is not equivalent to summing independent atoms;</li>
+          <li>hard nuclear collisions may remain local, while transport between them changes.</li>
+        </ul>
       </div>
     </div>
-    <div class="meta"><span>OBRIGADO</span><span>perguntas?</span></div>
-    <aside class="speaker-note">Encerrar retomando a tese: a cadeia conecta uma imagem do buraco negro a produtos microscópicos sem esconder as transformações intermediárias.</aside>
+    <aside class="speaker-note">Be nuanced: nuclei remain separated by tens of femtometers, so the hard vertex need not become collective. The strongest validity concern is the between-collision transport and the response of the degenerate plasma.</aside>
+  </section>
+
+  <section class="slide" data-title="Literature" data-section="References">
+    <header class="head"><div><div class="eyebrow">18 · Modern literature map</div><h2>Data, generators, and dense-matter theory</h2></div><a class="mono" href="../bibliography/HADROS3_UHE_Dense_Matter/HADROS3_UHE_Dense_Matter_Review.pdf">full review ↗</a></header>
+    <div class="content references">
+      <div class="card"><h3><a href="../bibliography/HADROS3_UHE_Dense_Matter/papers/Bierlich_2022_PYTHIA_8_3.pdf">PYTHIA 8.3 guide</a></h3><p>Bierlich et al. (2022): showers, hadronization, decays, tunes, and LHA/HepMC interfaces.</p></div>
+      <div class="card"><h3><a href="../bibliography/HADROS3_UHE_Dense_Matter/papers/FASER_2025_Energy_Dependent_Numu_Cross_Section.pdf">FASER at the LHC</a></h3><p>Energy-dependent ν<sub>μ</sub> interaction cross section in the TeV range (2025).</p></div>
+      <div class="card"><h3><a href="../bibliography/HADROS3_UHE_Dense_Matter/papers/Weigel_2024_High_Energy_Neutrino_DIS.pdf">High-energy DIS</a></h3><p>Weigel, Conrad &amp; Garcia-Soto (2024): σ and inelasticity from 50 GeV to UHE.</p></div>
+      <div class="card"><h3><a href="../bibliography/HADROS3_UHE_Dense_Matter/papers/CALICE_2013_Scintillator_Steel_Geant4_Validation.pdf">CALICE / GEANT4</a></h3><p>Test-beam validation of hadronic shower models in granular steel calorimeters.</p></div>
+      <div class="card"><h3><a href="../bibliography/HADROS3_UHE_Dense_Matter/papers/Potekhin_2015_Transport_Degenerate_Electrons.pdf">Degenerate transport</a></h3><p>Potekhin, Pons &amp; Page: transport physics in compact-star matter.</p></div>
+      <div class="card"><h3><a href="../bibliography/HADROS3_UHE_Dense_Matter/papers/Murase_Ioka_2013_Neutrinos_Jets_Inside_Stars.pdf">Hidden dense sources</a></h3><p>Murase &amp; Ioka: secondary cooling and neutrino production in jets inside stars.</p></div>
+    </div>
+    <aside class="speaker-note">The repository contains sixteen downloaded papers, BibTeX metadata, and SHA-256 checksums. These six are the shortest route through the argument; the linked full review discusses all references.</aside>
+  </section>
+
+  <section class="slide" data-title="Validation campaign" data-section="Next tests">
+    <header class="head"><div><div class="eyebrow">19 · Quantitative acceptance</div><h2>From a working pipeline to a validated prediction</h2></div><span class="badge">V1 → V8</span></header>
+    <div class="content cards two">
+      <div class="card"><div class="status-line"><b class="accent">V1–V2</b><div><h3>DIS + PYTHIA closure</h3><p class="metric-label">Compare σ and y with modern calculations; ≥10⁴ events/bin; four-momentum residual &lt;5×10⁻⁸; exact charge and 1:1 cardinality.</p></div></div></div>
+      <div class="card"><div class="status-line"><b class="accent">V3–V4</b><div><h3>GEANT4 benchmark + column scaling</h3><p class="metric-label">Reproduce CALICE within combined uncertainty or 10%; require &lt;2% changes at fixed ρL in the independent-center regime.</p></div></div></div>
+      <div class="card"><div class="status-line"><b class="accent">V5–V6</b><div><h3>Numerical convergence + dense envelope</h3><p class="metric-label">Production-cut/step convergence below 1%; bracket screening, LPM, degeneracy, and collective stopping systematics.</p></div></div></div>
+      <div class="card"><div class="status-line"><b class="accent">V7–V8</b><div><h3>Interaction/decay competition + speed</h3><p class="metric-label">Compare decay, interaction, loss, and escape times; validate any thinning or biasing against an unbiased sample at 2%.</p></div></div></div>
+      <div class="card"><h3 class="green">Keep separate</h3><p class="metric-label"><span class="mono">event_generator_validated</span> · <span class="mono">geant4_benchmark_validated</span> · dense-medium microphysics validation.</p></div>
+      <div class="card"><h3 class="accent">Initial scientific status</h3><p class="metric-label">The first two can pass independently. Dense-medium microphysics must remain explicitly unvalidated until V6–V7 constrain it.</p></div>
+    </div>
+    <aside class="speaker-note">The acceptance thresholds are specified in the full review. The campaign avoids a single misleading green status for physically different questions.</aside>
+  </section>
+
+  <section class="slide" data-title="Limits" data-section="Current frontier">
+    <header class="head"><div><div class="eyebrow">20 · What the model does—and does not—claim</div><h2>Explicit limits are part of the result</h2></div><span class="mono">physics v1.3</span></header>
+    <div class="content cards two">
+      <div class="card"><h3 class="green">Already demonstrated</h3><ul>
+        <li>Kerr geometry and camera;</li><li>UHE source and null geodesics;</li><li>covariant DIS and observer selection;</li>
+        <li>POWHEG → PYTHIA → HepMC3;</li><li>local GEANT4 per site and density.</li>
+      </ul></div>
+      <div class="card"><h3 class="accent">Next frontier</h3><ul>
+        <li>patch and production-cut convergence;</li><li>equation of state and collective ultradense-matter effects;</li>
+        <li>post-cascade Kerr transport;</li><li>radiative transport and observable spectra;</li><li>comparison with GRMHD models.</li>
+      </ul></div>
+      <div class="card"><h3>GEANT4 interpretation</h3><p class="metric-label">FTFP_BERT treats the microscopic cascade in the configured material; it does not replace complete degenerate-plasma microphysics.</p></div>
+      <div class="card"><h3>Statistical interpretation</h3><p class="metric-label">Physical weights, observation scores, and statistical track weights remain separate in every contract.</p></div>
+    </div>
+    <aside class="speaker-note">Avoid overclaiming. HADROS3 is currently strongest in integration and auditability; astrophysical fidelity will continue to grow module by module.</aside>
+  </section>
+
+  <section class="slide title-slide" data-title="Closing" data-section="Conclusion">
+    <div class="title-main">
+      <div>
+        <img class="title-logo" src="assets/hadros-logo.png" alt="HADROS logo">
+        <h1>One chain.<br><span class="accent">Many scales.</span><br>Clear contracts.</h1>
+        <p class="lead">HADROS3 has reached local GEANT4 transport—while keeping every physical decision inspectable.</p>
+      </div>
+      <div class="stack">
+        <div class="card"><div class="eyebrow">repository</div><p class="lead" style="margin:8px 0 0"><a style="color:var(--ink)" href="https://github.com/RafaelCRdeLima/HADROS3">github.com/RafaelCRdeLima/HADROS3</a></p></div>
+        <div class="card"><div class="eyebrow">shortcuts</div><p class="metric-label" style="margin:8px 0 0">← → navigate · F fullscreen · O overview · N notes · ? help</p></div>
+      </div>
+    </div>
+    <div class="meta"><span>THANK YOU</span><span>questions?</span></div>
+    <aside class="speaker-note">Close by returning to the thesis: the chain connects an image of a black hole to microscopic products without hiding the intermediate transformations.</aside>
   </section>
 </main>
 
-<div class="foot" aria-hidden="true"><div class="progress"><i id="bar"></i></div><span class="counter" id="counter">01 / 18</span></div>
-<nav class="controls" aria-label="Controles da apresentação"><button id="prev" title="Anterior">‹</button><button id="next" title="Próximo">›</button><button id="full" title="Tela cheia">⛶</button><button id="overview" title="Visão geral">▦</button><button id="helpBtn" title="Ajuda">?</button></nav>
-<div class="help" id="help" role="dialog" aria-modal="true" aria-label="Atalhos"><div class="card"><h3>Controles</h3><p>←/→, Page Up/Page Down ou espaço: navegar<br>Home/End: início/fim<br>F: tela cheia · O: visão geral · N: notas · ?: ajuda<br>Esc: fechar modo atual</p><p class="metric-label">Para PDF, use a impressão do navegador em paisagem; cada slide é uma página 16:9.</p></div></div>
+<div class="foot" aria-hidden="true"><div class="progress"><i id="bar"></i></div><span class="counter" id="counter">01 / 22</span></div>
+<nav class="controls" aria-label="Presentation controls"><button id="prev" title="Previous">‹</button><button id="next" title="Next">›</button><button id="full" title="Fullscreen">⛶</button><button id="overview" title="Overview">▦</button><button id="helpBtn" title="Help">?</button></nav>
+<div class="help" id="help" role="dialog" aria-modal="true" aria-label="Shortcuts"><div class="card"><h3>Controls</h3><p>←/→, Page Up/Page Down, or Space: navigate<br>Home/End: first/last slide<br>F: fullscreen · O: overview · N: notes · ?: help<br>Esc: close the current mode</p><p class="metric-label">To export PDF, print from the browser in landscape mode; every slide is one 16:9 page.</p></div></div>
 
 <script>
 (() => {

@@ -1,0 +1,100 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[brazil]{babel}
+\usepackage{lmodern}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\geometry{margin=2.25cm}
+\hypersetup{colorlinks=true,urlcolor=blue,citecolor=blue,linkcolor=blue}
+\title{Produção astrofísica de neutrinos UHE\\\large Bibliografia comentada e implicações para o HADROS3}
+\author{HADROS3 bibliography study}
+\date{14 de julho de 2026}
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Este relatório organiza trabalhos modernos sobre a produção de neutrinos de alta energia (HE) e ultra-alta energia (UHE) em jatos, discos, coroas e meios opticamente espessos. A conclusão central para o HADROS3 é de escopo: PYTHIA~8 e GEANT4 descrevem etapas posteriores a uma população de neutrinos injetada; eles não derivam, por si, a população UHE da aceleração e do transporte de hádrons no ambiente astrofísico. Para um toro com densidades locais da ordem de $10^9$--$10^{10}\,\mathrm{g\,cm^{-3}}$, uma extensão física deve tratar explicitamente a competição entre decaimento, reinteração e perdas de píons, káons e múons. Assim, densidade alta aumenta a taxa de colisões, mas não implica automaticamente um fluxo escapante alto de neutrinos UHE.
+\end{abstract}
+
+\section{Escopo e fronteira atual do HADROS3}
+
+Chamamos aqui de UHE, de modo operacional, neutrinos acima de aproximadamente $100\,$PeV; parte da literatura relevante cobre TeV--PeV, porque os mesmos mecanismos e supressões determinam a continuação até energias mais altas. A cadeia elementar é
+\[
+ p/A \longrightarrow \pi^{\pm},K^{\pm},\ldots \longrightarrow \nu_e,\nu_\mu,\nu_\tau,
+\]
+via alvos bariônicos ($pp$, $pA$) ou fotônicos ($p\gamma$, $A\gamma$). Em uma estimativa de ordem de grandeza, cada neutrino carrega alguns por cento da energia do próton; portanto, um neutrino de $100\,$PeV requer aceleradores capazes de fornecer prótons em torno de poucos EeV, dependendo do canal e da cinemática.
+
+No HADROS3 atual, o espectro de neutrinos UHE é uma condição de entrada. O Event Generation usa PYTHIA para a finalização hadrônica de eventos selecionados; o módulo GEANT4 transporta produtos em volumes locais de material. Esta cadeia é apropriada para estudar a interação e a resposta do meio \emph{depois} da injeção. Ela não substitui o cálculo de aceleração, de profundidade óptica $p\gamma/pp$, nem o transporte acoplado de secundários que constrói o espectro injetado.
+
+\section{Leitura crítica da bibliografia}
+
+\begin{longtable}{p{0.22\linewidth}p{0.26\linewidth}p{0.42\linewidth}}
+\toprule
+Trabalho & Ambiente/canal & Importância direta para o HADROS3 \\
+\midrule
+\endhead
+Bednarek (2016)~\cite{Bednarek2016} & Núcleos acelerados em jato AGN, fotodesintegração e nêutrons que atingem o disco. & É o análogo conceitual mais próximo de produção associada a disco: liga jato, núcleos, nêutrons e cascata hadrônica no alvo denso. Motiva resolver posição e coluna atravessada. \\
+Zhu et al. (2021)~\cite{Zhu2021} & GRBs sufocados em discos de AGN. & Mostra que um meio denso pode ocultar fótons e ainda produzir neutrinos; é relevante para fontes transientes imersas no sistema AGN--toro. \\
+Murase--Ioka (2013)~\cite{MuraseIoka2013} & Jatos de GRB dentro de estrelas. & Referência para o regime em que o jato não é livre: colisões, radiação térmica e resfriamento de secundários controlam a eficiência de neutrinos. \\
+Senno--Murase--Mészáros (2016)~\cite{Senno2016} & Jatos sufocados e GRBs de baixa luminosidade. & Evidencia que fontes ``escuras'' eletromagneticamente podem ser eficientes em neutrinos, mas requerem o balanço detalhado de perdas e decaimentos. \\
+Murase--Stecker (2022)~\cite{MuraseStecker2022} & Revisão de núcleos de AGN: disco, coroa, jatos e arredores magnetizados. & Guia para separar zonas de aceleração e alvos de matéria/radiação; evita tratar todo o toro como uma única fonte homogênea. \\
+Rodrigues et al. (2021)~\cite{Rodrigues2021} & Jatos de AGN, UHECRs e neutrinos de fonte em EeV. & Conecta explicitamente aceleradores UHECR a um componente de neutrinos que pode atingir EeV; é a referência mais direta para a escala UHE. \\
+Fiorillo et al. (2021)~\cite{Fiorillo2021} & Modelo térmico unificado para produção fotohadrônica. & Fornece a dependência do espectro em $T_\gamma$ e $B$ e explicita perdas de píons/múons: ingredientes que uma fonte HADROS3 deve receber localmente. \\
+Snowmass (2022)~\cite{Snowmass2022} & Síntese HE/UHE de fontes, detectores e perspectivas. & Serve como referência de contexto, faixas de energia e observáveis; não substitui modelagem específica do toro. \\
+\bottomrule
+\end{longtable}
+
+\subsection{Teses selecionadas}
+
+Três teses ampliam a utilidade prática da bibliografia. Rosales-de-León~\cite{RosalesDeLeon2022} estuda emissão fotohadrônica em blazares e sua conexão com alertas de neutrinos, sendo diretamente relevante para uma futura zona de jato no HADROS3. Hümmer~\cite{Hummer2013} desenvolve a descrição de interações fotohadrônicas incluindo produção ressonante, direta e multi-píon, secundários $\pi/\mu/K$, perdas por síncrotron e razões de sabor; é uma referência especialmente útil para a escolha de kernels e testes do módulo cinético proposto. Bustamante~\cite{Bustamante2015} trata a conexão UHECR--neutrinos em GRBs, fotodesintegração nuclear, cascatas e incertezas de fontes. Juntas, elas sustentam que uma modelagem por zona deve transportar não apenas prótons, mas também núcleos, nêutrons e secundários carregados.
+
+\section{O regime de toro muito denso}
+
+Para uma densidade local $\rho$, a escala de interação hadrônica pode ser escrita em unidades de comprimento como
+\[
+ \ell_{\mathrm{int}} \simeq \frac{\lambda_X}{\rho},
+\]
+onde $\lambda_X$ é a profundidade de interação em massa. Para valores típicos de dezenas a cerca de uma centena de $\mathrm{g\,cm^{-2}}$, e $\rho=10^9\,\mathrm{g\,cm^{-3}}$, obtém-se $\ell_{\mathrm{int}}\sim10^{-8}$--$10^{-7}\,$cm. Já o comprimento de decaimento cresce como $\ell_{\mathrm{dec}}=c\tau\gamma$. Para píons e múons energéticos, ele é macroscópico e cresce com a energia. Logo, no interior profundo do toro, a sequência provável é reinteração/cascata e termalização antes do decaimento, não uma emissão direta e livre de neutrinos UHE.
+
+Isso não proíbe produção: muda a pergunta física para a eficiência de escape. As zonas mais promissoras para uma componente UHE escapante são bordas de menor coluna, funil polar, cabeça de jato, coroa ou região de choque/reconexão adjacente ao toro. O cálculo deve usar os campos locais da simulação (densidade, composição, temperatura, campo magnético, espectro de fótons e geometria), e não uma densidade média global.
+
+\section{Arquitetura recomendada}
+
+Propõe-se um módulo de \emph{source physics} anterior à injeção UHE existente:
+\[
+ (\rho,T,B,n_\gamma,\mathbf{x})
+ \rightarrow \text{aceleração de }p/A
+ \rightarrow (pp,pA,p\gamma,A\gamma)
+ \rightarrow \text{transporte de }\pi/K/\mu
+ \rightarrow f_{\nu_\alpha}(E,\Omega,\mathbf{x}).
+\]
+
+Ele deve ser baseado em células/zonas locais, com um trabalho por zona de condições homogêneas. Em cada zona: (i) determinar $E_{\max}$ comparando aceleração com escape e perdas; (ii) calcular taxas de interação nos alvos bariônico e fotônico; (iii) evoluir prótons, núcleos, nêutrons, píons, káons e múons com decaimento e reinteração; (iv) registrar neutrinos por sabor, energia, direção e posição; (v) passar somente essa saída normalizada ao estágio de propagação Kerr e à cadeia já existente.
+
+Para a primeira implementação, recomenda-se tabelar taxas e usar um resolvedor cinético unidimensional em energia por zona. GEANT4 continua valioso para validação microscópica e resposta local, mas não deve ser tomado como resolvedor único de cascata astrofísica estacionária em plasma degenerado/magnetizado. As aproximações devem declarar validade em energia, composição e estado termodinâmico.
+
+\section{Testes de aceitação física}
+
+Uma implementação deve ser aceita somente se satisfizer, no mínimo:
+\begin{enumerate}
+  \item conservação de energia e de carga em cada canal e na soma de bins, dentro de tolerância numérica declarada;
+  \item limites assintóticos: $f_{pp},f_{p\gamma}\ll1$ para alvo rarefeito e comportamento calorimétrico apenas quando o transporte de secundários é incluído;
+  \item comparação de taxas e espectros de referência com os cenários publicados de GRB sufocado e AGN;
+  \item teste de supressão: ao aumentar $\rho$, verificar quantitativamente a transição decaimento $\rightarrow$ reinteração de $\pi/K/\mu$;
+  \item convergência em malha de energia, passo temporal e particionamento espacial; e
+  \item contrato de saída reprodutível: sementes, tabelas de física, perfil local e hashes da entrada gravados junto a cada espectro de neutrinos.
+\end{enumerate}
+
+\section{Conclusão}
+
+A literatura sustenta o cenário geral de produção UHE em jatos AGN e em fontes densas/ocultas, mas também mostra que a física de secundários é decisiva. Para o HADROS3, a prioridade não é aumentar indiscriminadamente a densidade do volume GEANT4: é acrescentar, antes da injeção, um transportador de fonte dependente da posição. Isso permitirá usar as densidades reais do toro para decidir onde neutrinos UHE podem ser produzidos e escapar, e entregará à cadeia Kerr--PYTHIA--GEANT4 uma população de entrada fisicamente calculada.
+
+\bibliographystyle{unsrt}
+\bibliography{references}
+\end{document}

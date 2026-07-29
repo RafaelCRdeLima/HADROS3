@@ -1,7 +1,0 @@
-/home/rafael/Dropbox/Projetos/DIS Neutrinos + Collapsar/Programas/HADROS3/build/geant4/CMakeFiles/hadros3_geant4_transport.dir
-/home/rafael/Dropbox/Projetos/DIS Neutrinos + Collapsar/Programas/HADROS3/build/geant4/CMakeFiles/edit_cache.dir
-/home/rafael/Dropbox/Projetos/DIS Neutrinos + Collapsar/Programas/HADROS3/build/geant4/CMakeFiles/rebuild_cache.dir
-/home/rafael/Dropbox/Projetos/DIS Neutrinos + Collapsar/Programas/HADROS3/build/geant4/CMakeFiles/list_install_components.dir
-/home/rafael/Dropbox/Projetos/DIS Neutrinos + Collapsar/Programas/HADROS3/build/geant4/CMakeFiles/install.dir
-/home/rafael/Dropbox/Projetos/DIS Neutrinos + Collapsar/Programas/HADROS3/build/geant4/CMakeFiles/install/local.dir
-/home/rafael/Dropbox/Projetos/DIS Neutrinos + Collapsar/Programas/HADROS3/build/geant4/CMakeFiles/install/strip.dir

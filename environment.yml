@@ -1,0 +1,33 @@
+# Canonical HADROS3 development environment.
+#
+#   make setup            creates/updates this environment automatically
+#   micromamba env create -f environment.yml     (equivalent manual command)
+#
+# The heavy physics backends (PYTHIA 8, Geant4, HepMC3) are not available on
+# PyPI, which is why conda-forge is the canonical channel for HADROS3.
+# A student who only works on geometry, camera preview and the web shell can
+# use the lighter pip path instead: `make setup-light`.
+#
+# CUDA is deliberately NOT listed here: the camera preview must be compiled
+# against the CUDA toolkit and driver already installed on the machine.
+# See `make doctor` for the CUDA/GLFW status of the current machine.
+name: hadros3
+channels:
+  - conda-forge
+dependencies:
+  # --- Python layer (mirrors requirements-dev.txt) ---
+  - python=3.11
+  - numpy>=2.0
+  - matplotlib>=3.9
+  - jsonschema>=4.0
+  - pytest>=8.0
+  - pip
+  # --- C++ toolchain used by the compiled backends ---
+  - cxx-compiler
+  - cmake>=3.24
+  - ninja
+  - pkg-config
+  # --- physics backends ---
+  - pythia8=8.312
+  - hepmc3=3.3.1
+  - geant4=11.4.2

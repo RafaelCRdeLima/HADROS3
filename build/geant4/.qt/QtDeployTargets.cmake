@@ -1,2 +1,0 @@
-set(__QT_DEPLOY_TARGET_hadros3_geant4_transport_FILE /home/rafael/Dropbox/Projetos/DIS Neutrinos + Collapsar/Programas/HADROS3/build/geant4/hadros3_geant4_transport)
-set(__QT_DEPLOY_TARGET_hadros3_geant4_transport_TYPE EXECUTABLE)

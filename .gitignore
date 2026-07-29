@@ -4,6 +4,11 @@ __pycache__/
 output/
 bin/hadros3_*
 configs/
+# Machine-specific build products and environment resolution: never commit these,
+# they carry absolute paths from whoever ran the build.
+build/
+.hadros3-env.mk
+.venv/
 tmp/powheg_smoke/
 output/POWHEG_smoke/
 external/powheg/POWHEG-BOX-RES/

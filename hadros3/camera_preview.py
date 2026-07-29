@@ -12,6 +12,7 @@ import json
 import math
 import os
 import subprocess
+import textwrap
 import warnings
 import hashlib
 from pathlib import Path
@@ -34,6 +35,16 @@ from .reuse import discover_original_hadros
 
 HADROS3_ROOT = Path(__file__).resolve().parents[1]
 HADROS3_CUDA_PREVIEW_BIN = HADROS3_ROOT / "bin" / "hadros3_geodesic_preview_cuda"
+CUDA_PREVIEW_BUILD_HINT = (
+    "bin/hadros3_geodesic_preview_cuda is not built on this machine. "
+    "Build it with 'make hadros3-geodesic-preview-cuda' (needs the CUDA toolkit, an NVIDIA GPU "
+    "and libglfw3-dev for the interactive window), then run 'make doctor' to confirm."
+)
+INTERACTIVE_ANALYTIC_HINT = (
+    "The analytic_geometry_only mode has no interactive window: it only renders the static "
+    "schematic preview ('make render-camera-preview'). For a live camera select the "
+    "kerr_like_cuda or full_kerr mode. " + CUDA_PREVIEW_BUILD_HINT
+)
 PAINT_SWATCH_DISK_LABEL = "paint_swatch_disk = diagnostic visual test, not physical torus emission"
 PAINT_SWATCH_DISK_DIAGNOSTIC_CONTRACT = {
     "disk_geometry": "thin_disk",
@@ -256,10 +267,15 @@ def _interactive_make_command(
         return command, geodesic_model, backend, None, preview_metadata
 
     hadros_root = _original_hadros_root()
+    if hadros_root is None:
+        # No legacy HADROS checkout next to HADROS3 -- the historical CPU/OpenGL
+        # preview simply does not exist here. Return no command at all instead of
+        # a broken `make -C ""` invocation; the caller reports the actionable hint.
+        return [], geodesic_model, backend, None, preview_metadata
     command = [
         "make",
         "-C",
-        str(hadros_root) if hadros_root is not None else "",
+        str(hadros_root),
         "geodesic_preview",
         f"OUTPUT_DIR={make_output_dir.as_posix()}",
         f"PLOT_DIR={(make_output_dir / 'plots').as_posix()}",
@@ -444,18 +460,33 @@ def available_backends() -> dict[str, Any]:
     return {
         "analytic_geometry_only": {
             "available": True,
+            "interactive_available": cpu_ok,
             "backend": "hadros3_analytic_camera_placeholder",
-            "reason": "Always available; schematic observer-view fallback.",
+            "reason": (
+                "Always available for the static preview (schematic observer view). "
+                "The interactive window is not provided by this mode: it requires the "
+                "CUDA preview, so select kerr_like_cuda or full_kerr for a live camera."
+            ),
         },
         "kerr_like_cuda": {
             "available": cuda_ok,
+            "interactive_available": cuda_ok,
             "backend": str(cuda),
-            "reason": "Uses self-contained HADROS3 bin/hadros3_geodesic_preview_cuda with --geodesic-model kerr_like.",
+            "reason": (
+                "Uses self-contained HADROS3 bin/hadros3_geodesic_preview_cuda with --geodesic-model kerr_like."
+                if cuda_ok
+                else CUDA_PREVIEW_BUILD_HINT
+            ),
         },
         "full_kerr": {
             "available": cuda_ok,
+            "interactive_available": cuda_ok,
             "backend": str(cuda),
-            "reason": "Uses self-contained HADROS3 bin/hadros3_geodesic_preview_cuda with --geodesic-model full_kerr.",
+            "reason": (
+                "Uses self-contained HADROS3 bin/hadros3_geodesic_preview_cuda with --geodesic-model full_kerr."
+                if cuda_ok
+                else CUDA_PREVIEW_BUILD_HINT
+            ),
         },
         "legacy_cpu_geodesic_preview": {
             "available": cpu_ok,
@@ -505,7 +536,7 @@ def _draw_analytic_camera_preview(
         ax.text(
             0.0,
             -0.93,
-            message,
+            textwrap.fill(message, width=72),
             color="#ffd166",
             fontsize=8,
             ha="center",
@@ -558,7 +589,7 @@ def render_camera_preview(
         if not cuda_info.get("available") or cuda_bin is None or not cuda_bin.exists():
             status = "fallback"
             fallback_used = True
-            message = "HADROS3 CUDA preview unavailable: bin/hadros3_geodesic_preview_cuda was not found."
+            message = CUDA_PREVIEW_BUILD_HINT
             _draw_analytic_camera_preview(values, png_path, message, preview_options=preview_options)
         else:
             try:
@@ -651,14 +682,15 @@ def launch_interactive_camera_preview(
     pid = None
     fallback_used = mode == "analytic_geometry_only"
     fallback_reason = "CPU/OpenGL HADROS preview requested by analytic_geometry_only mode." if fallback_used else None
-    if backend == "cuda" and not Path(command[0]).exists():
+    if backend == "cuda" and (not command or not Path(command[0]).exists()):
         status = "unavailable"
         fallback_used = True
-        fallback_reason = "HADROS3 CUDA preview unavailable: bin/hadros3_geodesic_preview_cuda was not found."
-        message = fallback_reason
+        fallback_reason = CUDA_PREVIEW_BUILD_HINT
+        message = CUDA_PREVIEW_BUILD_HINT
     elif backend != "cuda" and (hadros_root is None or not (hadros_root / "Makefile").exists()):
         status = "unavailable"
-        message = "Original HADROS checkout with Makefile was not found next to HADROS3."
+        fallback_reason = INTERACTIVE_ANALYTIC_HINT
+        message = INTERACTIVE_ANALYTIC_HINT
     else:
         env = os.environ.copy()
         env["HADROS_PREVIEW_OUTPUT_DIR"] = str(interactive_dir)

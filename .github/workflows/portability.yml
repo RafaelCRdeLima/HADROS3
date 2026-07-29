@@ -1,0 +1,40 @@
+name: portability
+
+# Guards the property that broke on the students' machines: a fresh clone on a
+# machine that has nothing but a compiler and python3 must configure, build and
+# test itself with the documented commands.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  fresh-clone:
+    name: fresh clone on a clean runner
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No machine-specific path leaked into the repository
+        run: |
+          if git grep -n -I -E "/home/[a-z0-9_-]+/|micromamba/envs" -- . \
+              ':!docs/**' ':!README.md' ':!.github/workflows/portability.yml'; then
+            echo "::error::a machine-specific absolute path is committed"
+            exit 1
+          fi
+
+      - name: make setup-light
+        run: make setup-light
+
+      - name: make doctor
+        run: make doctor
+
+      - name: make cpp-core
+        run: make cpp-core
+
+      - name: make test
+        run: make test
+
+      - name: doctor is green for the core workflow
+        run: make doctor ARGS=--strict

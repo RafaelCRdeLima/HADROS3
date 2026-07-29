@@ -16,6 +16,15 @@ from hadros3.powheg import generate_powheg_products
 from hadros3.provenance import build_provenance
 
 
+# The orchestrator refuses to run without a usable PYTHIA 8/HepMC3 backend, in every
+# mode including the dry runs. On a checkout without the conda-forge layer these
+# tests are skipped rather than failed; `make doctor` reports the gap.
+requires_event_backend = pytest.mark.skipif(
+    not backend_availability()["available"],
+    reason="PYTHIA 8/HepMC3 event backend is not available (run 'make setup' with micromamba/conda)",
+)
+
+
 def test_hepmc_merge_has_one_run_header_contiguous_events_and_global_ids(tmp_path: Path) -> None:
     source = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "geant4" / "six_muons_vacuum.hepmc3"
     merged = tmp_path / "merged.hepmc3"
@@ -111,6 +120,7 @@ def test_backend_availability_reports_pinned_toolchain() -> None:
         assert state["hepmc3_version"] == "3.03.01"
 
 
+@requires_event_backend
 def test_parton_check_is_bijective_preserves_weights_and_upstream(tmp_path: Path) -> None:
     lhe = _fixture_run(tmp_path, duplicate=True)
     before = _hash(lhe)
@@ -142,6 +152,7 @@ def test_parton_check_is_bijective_preserves_weights_and_upstream(tmp_path: Path
     Draft202012Validator({**schema, "$ref": "#/$defs/manifest"}).validate(manifest)
 
 
+@requires_event_backend
 def test_dry_run_validates_real_lhe_without_invoking_pythia(tmp_path: Path) -> None:
     _fixture_run(tmp_path)
     values = defaults()
@@ -154,6 +165,7 @@ def test_dry_run_validates_real_lhe_without_invoking_pythia(tmp_path: Path) -> N
     assert (event_generation_dir(tmp_path) / "event_generation_manifest.json").exists()
 
 
+@requires_event_backend
 def test_truncated_lhe_is_rejected_even_in_dry_run(tmp_path: Path) -> None:
     lhe = _fixture_run(tmp_path)
     lhe.write_text("<LesHouchesEvents><event>\n", encoding="utf-8")
@@ -163,6 +175,7 @@ def test_truncated_lhe_is_rejected_even_in_dry_run(tmp_path: Path) -> None:
         generate_event_generation_products(values, run_output_dir=tmp_path)
 
 
+@requires_event_backend
 def test_nonfinite_lhe_is_rejected(tmp_path: Path) -> None:
     lhe = _fixture_run(tmp_path)
     lhe.write_text(lhe.read_text(encoding="utf-8").replace("-2.5 10.0", "nan 10.0"), encoding="utf-8")

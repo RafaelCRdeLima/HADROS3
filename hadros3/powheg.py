@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 
 from .config import validate_values
+from .environment import conda_prefix
 from .paths import clear_powheg_outputs, observer_image_branches_dir, powheg_dir, run_metadata_dir
 from .provenance import write_json
 
@@ -1220,9 +1221,9 @@ def _powheg_runtime_env() -> dict[str, str]:
                 env["LHAPDF_DATA_PATH"] = datadir
         except Exception:
             pass
-    dis_lib = Path.home() / "micromamba" / "envs" / "dis" / "lib"
-    if dis_lib.exists():
-        lib_paths.append(str(dis_lib))
+    shared_lib = conda_prefix() / "lib"
+    if shared_lib.exists():
+        lib_paths.append(str(shared_lib))
     if lib_paths:
         env["LD_LIBRARY_PATH"] = os.pathsep.join(lib_paths + ([env["LD_LIBRARY_PATH"]] if env.get("LD_LIBRARY_PATH") else []))
     return env

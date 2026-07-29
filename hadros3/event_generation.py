@@ -20,13 +20,14 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from .config import validate_values
+from .environment import pythia8_prefix
 from .paths import clear_event_generation_outputs, event_generation_dir, powheg_dir
 from .powheg import lhe_weight_statistics, parse_lhe_particles
 
 
 ROOT = Path(__file__).resolve().parents[1]
 BACKEND = ROOT / "bin" / "hadros3_event_generator"
-PYTHIA_PREFIX = Path.home() / "micromamba" / "envs" / "dis"
+PYTHIA_PREFIX = pythia8_prefix()
 PYTHIA_CONFIG = PYTHIA_PREFIX / "bin" / "pythia8-config"
 PYTHIA_DATA = PYTHIA_PREFIX / "share" / "Pythia8" / "xmldoc"
 HEPMC_CONFIG = PYTHIA_PREFIX / "share" / "HepMC3" / "cmake" / "HepMC3Config-version.cmake"
@@ -99,7 +100,8 @@ def backend_availability() -> dict[str, Any]:
                 hepmc_version = line.split('"')[1]
                 break
     compiler_version = None
-    compiler = PYTHIA_PREFIX / "bin" / "x86_64-conda-linux-gnu-c++"
+    compilers = sorted((PYTHIA_PREFIX / "bin").glob("*-linux-gnu-c++")) if (PYTHIA_PREFIX / "bin").is_dir() else []
+    compiler = compilers[0] if compilers else PYTHIA_PREFIX / "bin" / "x86_64-conda-linux-gnu-c++"
     if compiler.exists():
         try:
             compiler_version = subprocess.check_output([str(compiler), "--version"], text=True).splitlines()[0].strip()

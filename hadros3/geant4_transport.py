@@ -15,12 +15,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
+from .environment import geant4_prefix
 from .paths import event_generation_dir, geant4_dir
 from .geant4_visualization import write_geant4_visualizations
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_PREFIX = Path(os.environ.get("CONDA_PREFIX", Path.home() / "micromamba" / "envs" / "dis"))
+DEFAULT_PREFIX = geant4_prefix()
 DATASETS = {
     "G4ABLADATA": "ABLA3.3",
     "G4CHANNELINGDATA": "CHANNELING2.0",

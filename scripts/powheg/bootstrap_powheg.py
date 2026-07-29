@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from hadros3.environment import conda_prefix as resolved_prefix
 from hadros3.powheg_kinematics import NUCLEON_MASS_GEV, fortran_double, qmax_for_energy_gev
 
 
@@ -141,6 +142,7 @@ def toolchain_env() -> dict[str, str]:
     if command_exists("gfortran"):
         return env
     candidates = [
+        resolved_prefix() / "bin",
         Path.home() / "micromamba" / "envs" / "hadros-cascade" / "bin",
         Path.home() / "micromamba" / "envs" / "dis" / "bin",
     ]
@@ -159,6 +161,7 @@ def find_lhapdf_config() -> str:
     if found:
         return found
     candidates = [
+        resolved_prefix() / "bin" / "lhapdf-config",
         Path.home() / "micromamba" / "envs" / "dis" / "bin" / "lhapdf-config",
         Path.home() / "micromamba" / "envs" / "hadros-cascade" / "bin" / "lhapdf-config",
     ]
@@ -223,6 +226,7 @@ def lhapdf_env(lhapdf_config: str) -> dict[str, str]:
     prefix = Path(lhapdf_config).resolve().parents[1]
     lib_paths = [str(prefix / "lib")]
     for candidate in [
+        resolved_prefix() / "lib",
         Path.home() / "micromamba" / "envs" / "hadros-cascade" / "lib",
         Path.home() / "micromamba" / "envs" / "dis" / "lib",
     ]:

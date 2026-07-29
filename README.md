@@ -12,19 +12,40 @@ still do not perform interactions.
 ## Getting started on a new machine
 
 ```bash
-git clone https://github.com/<owner>/HADROS3.git
+git clone https://github.com/RafaelCRdeLima/HADROS3.git
 cd HADROS3
-make setup      # resolves the Python environment for THIS machine
-make doctor     # reports what works here and how to fix what does not
-make all        # builds every backend this machine can actually build
-make test
+make install
 ```
 
-`make setup` writes `.hadros3-env.mk` (generated, never committed) with the
-interpreter and library prefixes it resolved. It looks for micromamba/mamba/conda
-first and creates the `hadros3` environment from [`environment.yml`](environment.yml);
-if no conda-like manager is installed it falls back to a local `.venv` with the
-pure-Python layer. Use `make setup-light` to force the `.venv` path.
+That is the whole installation. `make install` takes a machine that has nothing
+but a shell and a compiler and does everything:
+
+1. installs the system packages it needs (`apt`/`dnf`/`pacman`; asks for your
+   password once, or prints the command when you prefer to run it yourself);
+2. downloads **micromamba** into `.tools/bin` when it is not already installed;
+3. creates the **`dis`** environment from [`environment.yml`](environment.yml):
+   Python stack, PYTHIA 8, HepMC3, Geant4 with its datasets, LHAPDF, gfortran,
+   cmake, ninja;
+4. installs the **CUDA compiler** from conda-forge when an NVIDIA GPU is present
+   (no root needed);
+5. writes `.hadros3-env.mk` so the Makefile and the Python layer agree on paths;
+6. builds every C++/CUDA backend the machine can build;
+7. clones and builds **POWHEG-BOX-RES DIS**;
+8. prints the capability report.
+
+Expect 15-40 minutes and a few GB on the first run, mostly Geant4 datasets. Every
+step is independent and idempotent: a step that fails is reported and the install
+continues, and re-running `make install` only redoes what is missing.
+
+Useful variants:
+
+```bash
+make install ARGS=--skip-powheg      # skip the long POWHEG clone/build
+make install ARGS=--no-sudo          # never call sudo; print the packages instead
+make install ARGS="--env-name mine"  # use a different conda environment name
+make setup                           # only resolve/create the environment
+make setup-light                     # pure-Python layer in .venv, no conda
+```
 
 **`make doctor` is the first thing to run when something does not work.** It
 prints a capability table (interpreter, modules, compiler, PYTHIA 8, Geant4,
@@ -264,7 +285,7 @@ output/HADROS3_hadros_web_preview/
 Configure the machine once (see *Getting started on a new machine* above):
 
 ```bash
-make setup
+make install
 make doctor
 ```
 
@@ -301,8 +322,8 @@ make hadros3-geodesic-preview-cuda NVCC_ARCH_FLAGS=-arch=sm_75   # CUDA < 11.5
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| `make: ... 127` on any Python target | no environment configured yet | `make setup` |
-| `ModuleNotFoundError` in the web shell | the interpreter in use is not the configured one | `make print-env`, then `make setup` |
+| `make: ... 127` on any Python target | no environment configured yet | `make install` |
+| `ModuleNotFoundError` in the web shell | the interpreter in use is not the configured one | `make print-env`, then `make install` |
 | Camera preview reports `unavailable` | `bin/hadros3_geodesic_preview_cuda` is not built | `make hadros3-geodesic-preview-cuda`, then `make doctor` |
 | Camera preview has no interactive window | mode is `analytic_geometry_only`, or the binary was built headless | select `kerr_like_cuda`, install `libglfw3-dev`, rebuild |
 | `make geant4-build` fails on CMake | Geant4 not installed, or a stale `build/` from another machine | `make setup`, then `rm -rf build/geant4` |

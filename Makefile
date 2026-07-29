@@ -10,8 +10,8 @@
 -include .hadros3-env.mk
 
 BOOTSTRAP_PYTHON ?= python3
-MICROMAMBA := $(shell command -v micromamba 2>/dev/null)
-CONDA_ENV_GUESS := $(firstword $(wildcard $(HOME)/micromamba/envs/hadros3 $(HOME)/micromamba/envs/dis) $(CONDA_PREFIX))
+MICROMAMBA := $(firstword $(shell command -v micromamba 2>/dev/null) $(wildcard $(CURDIR)/.tools/bin/micromamba))
+CONDA_ENV_GUESS := $(firstword $(wildcard $(HOME)/micromamba/envs/dis $(HOME)/micromamba/envs/hadros3) $(CONDA_PREFIX))
 CONDA_ENV_NAME := $(notdir $(CONDA_ENV_GUESS))
 VENV_PYTHON := $(wildcard $(CURDIR)/.venv/bin/python)
 PYTHON_FALLBACK := $(if $(VENV_PYTHON),$(VENV_PYTHON),$(BOOTSTRAP_PYTHON))
@@ -30,14 +30,19 @@ NVCCFLAGS ?= -O3 -std=c++17
 # binary built on one machine can also run on a different NVIDIA GPU.
 # Override with NVCC_ARCH_FLAGS= for CUDA toolkits older than 11.5.
 NVCC_ARCH_FLAGS ?= -arch=all-major
+# Host compiler handed to nvcc. Conda CUDA toolkits ship a gcc that is often
+# newer than the CUDA release supports; scripts/setup/build_cuda_preview.sh
+# falls back to nvcc's own default when this one does not work.
+NVCC_CCBIN ?= $(firstword $(wildcard /usr/bin/g++) $(shell command -v g++ 2>/dev/null))
 CPP_INCLUDES := -Icpp/include
 KERR_PORT_SRC := cpp/src/kerr/kerr_metric.cpp cpp/src/kerr/kerr_geodesic.cpp cpp/src/cascade/kerr_local_tetrad.cpp cpp/src/cascade/packet_kerr_null_propagator.cpp
 
-.PHONY: setup setup-light doctor all print-env cpp-core cpp-optional cpp-all hadros3-geodesic-preview-cuda-optional
+.PHONY: install setup setup-light doctor all print-env cpp-core cpp-optional cpp-all hadros3-geodesic-preview-cuda-optional
 .PHONY: help install-dev test cpp hadros3-forward-geodesics hadros3-dis-sampler hadros3-observer-bridge hadros3-powheg-driver hadros3-event-generator hadros3-geant4-transport geant4-build geant4-environment-check geant4-import-check geant4-vacuum-smoke geant4-material-smoke geant4-real-free geant4-validate hadros3-geodesic-preview-cuda powheg-fetch powheg-build powheg-smoke powheg powheg-real-smoke powheg-real-free event-generation-dry-run event-generation-parton-check event-generation-real-smoke event-generation-real-free hadros-web render-hadros-web render-camera-preview launch-camera-preview sample-uhe-source propagate-forward-geodesics sample-dis-interactions observer-bridge observer-image-branches serve-hadros-web release-software release-physics release-pipeline theory check validate clean
 
 help:
 	@echo "HADROS3 commands:"
+	@echo "  make install           ONE COMMAND: install everything on a new machine and build it"
 	@echo "  make setup             Configure this machine (conda env if available, else .venv)"
 	@echo "  make setup-light       Configure only the pure-Python layer in .venv (no conda)"
 	@echo "  make doctor            Report what works on this machine and how to fix what does not"
@@ -86,6 +91,12 @@ help:
 	@echo "  PIP=$(PIP)"
 	@echo "  HOST=$(HOST)"
 	@echo "  PORT=$(PORT)"
+
+# The single entry point for a new machine: installs the system packages,
+# micromamba, the conda environment, the CUDA compiler, every backend and
+# POWHEG, then prints the capability report. Safe to re-run.
+install:
+	$(BOOTSTRAP_PYTHON) scripts/setup/install_everything.py $(ARGS)
 
 setup:
 	$(BOOTSTRAP_PYTHON) scripts/setup/bootstrap_environment.py $(ARGS)
@@ -155,23 +166,8 @@ hadros3-geodesic-preview-cuda: HADROS3_CUDA_REQUIRED := 1
 hadros3-geodesic-preview-cuda-optional: HADROS3_CUDA_REQUIRED := 0
 
 hadros3-geodesic-preview-cuda hadros3-geodesic-preview-cuda-optional:
-	@mkdir -p bin
-	@if ! command -v $(NVCC) >/dev/null 2>&1; then \
-	  echo "[hadros3_geodesic_preview_cuda] nvcc not found: $(NVCC)"; \
-	  echo "[hadros3_geodesic_preview_cuda] the interactive camera preview needs the CUDA toolkit and an NVIDIA GPU."; \
-	  echo "[hadros3_geodesic_preview_cuda] install it with: sudo apt install nvidia-cuda-toolkit libglfw3-dev pkg-config"; \
-	  echo "[hadros3_geodesic_preview_cuda] then run 'make doctor' to confirm."; \
-	  if [ "$(HADROS3_CUDA_REQUIRED)" = "1" ]; then exit 1; fi; \
-	  exit 0; \
-	fi; \
-	if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists glfw3; then \
-	  echo "[hadros3_geodesic_preview_cuda] Building self-contained CUDA preview renderer (interactive, GLFW)"; \
-	  $(NVCC) $(NVCCFLAGS) $(NVCC_ARCH_FLAGS) -DHADROS_CUDA_PREVIEW_GLFW cpp/cuda/hadros3_geodesic_preview_cuda.cu -o bin/hadros3_geodesic_preview_cuda $$(pkg-config --cflags --libs glfw3) -lGL; \
-	else \
-	  echo "[hadros3_geodesic_preview_cuda] GLFW not found; building HEADLESS CUDA preview renderer (no interactive window)"; \
-	  echo "[hadros3_geodesic_preview_cuda] install libglfw3-dev and rebuild to get the interactive window"; \
-	  $(NVCC) $(NVCCFLAGS) $(NVCC_ARCH_FLAGS) cpp/cuda/hadros3_geodesic_preview_cuda.cu -o bin/hadros3_geodesic_preview_cuda; \
-	fi
+	@NVCC="$(NVCC)" NVCCFLAGS="$(NVCCFLAGS)" NVCC_ARCH_FLAGS="$(NVCC_ARCH_FLAGS)" NVCC_CCBIN="$(NVCC_CCBIN)" \
+	  bash scripts/setup/build_cuda_preview.sh $(HADROS3_CUDA_REQUIRED)
 
 bin/hadros3_forward_geodesics: cpp/apps/hadros3_forward_geodesics.cpp $(KERR_PORT_SRC) cpp/include/geodesic_state.hpp cpp/include/kerr_metric.hpp cpp/include/kerr_metric_derivatives.hpp cpp/include/kerr_geodesic.hpp cpp/include/hadros/cascade/kerr_local_tetrad.hpp cpp/include/hadros/cascade/packet_kerr_null_propagator.hpp cpp/include/hadros/cascade/types.hpp
 	@mkdir -p bin

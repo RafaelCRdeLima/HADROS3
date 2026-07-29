@@ -9,6 +9,7 @@ configs/
 build/
 .hadros3-env.mk
 .venv/
+.tools/
 tmp/powheg_smoke/
 output/POWHEG_smoke/
 external/powheg/POWHEG-BOX-RES/

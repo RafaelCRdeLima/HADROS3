@@ -177,7 +177,7 @@ def check_python(report: Report, env: dict[str, str]) -> None:
             "environment",
             MISSING,
             "no .hadros3-env.mk",
-            "run: make setup",
+            "run: make install",
             True,
         )
     command = python_command(env)
@@ -192,14 +192,14 @@ def check_python(report: Report, env: dict[str, str]) -> None:
             "interpreter",
             MISSING,
             " ".join(command) + " does not run",
-            "run: make setup",
+            "run: make install",
             True,
         )
         return
     try:
         data = json.loads(raw.splitlines()[-1])
     except Exception:
-        report.add("Python", "interpreter", MISSING, "unexpected probe output", "run: make setup", True)
+        report.add("Python", "interpreter", MISSING, "unexpected probe output", "run: make install", True)
         return
     report.add("Python", "interpreter", OK, "%s (%s)" % (data["version"], data["executable"]))
     for name, present in sorted(data["modules"].items()):
@@ -208,7 +208,7 @@ def check_python(report: Report, env: dict[str, str]) -> None:
             "module %s" % name,
             OK if present else MISSING,
             "" if present else "not importable",
-            "run: make setup",
+            "run: make install",
             True,
         )
 
@@ -223,7 +223,7 @@ def check_physics_backends(report: Report, env: dict[str, str]) -> None:
             "PYTHIA 8",
             ABSENT,
             "headers not found",
-            "conda-forge only: make setup (needs micromamba/conda)",
+            "run: make install (installs micromamba and the conda-forge layer)",
         )
     geant4 = env.get("GEANT4_PREFIX")
     found_geant4 = False
@@ -239,7 +239,7 @@ def check_physics_backends(report: Report, env: dict[str, str]) -> None:
             "Geant4",
             ABSENT,
             "CMake package not found",
-            "conda-forge only: make setup (needs micromamba/conda)",
+            "run: make install (installs micromamba and the conda-forge layer)",
         )
 
 
@@ -255,7 +255,7 @@ def check_cuda(report: Report, env: dict[str, str]) -> None:
             "nvcc",
             ABSENT,
             "not in PATH",
-            "%s nvidia-cuda-toolkit (or install the NVIDIA CUDA toolkit)" % APT,
+            "run: make install (installs the CUDA compiler from conda-forge when a GPU is present)",
         )
     smi = shutil.which("nvidia-smi")
     if smi:
@@ -349,7 +349,7 @@ def main() -> int:
         print("Legend: [  ok  ] available   [ MISS ] required and missing   [  --  ] optional, not installed")
         if report.required_failures:
             print()
-            print("%d required item(s) missing. Start with: make setup && make cpp-core" % report.required_failures)
+            print("%d required item(s) missing. Start with: make install" % report.required_failures)
         else:
             print()
             print("Everything required for the core HADROS3 workflow is present.")

@@ -27,8 +27,8 @@ ROOT = Path(__file__).resolve().parents[1]
 ENV_FILE = ROOT / ".hadros3-env.mk"
 
 LEGACY_PREFIXES = [
-    Path.home() / "micromamba" / "envs" / "hadros3",
     Path.home() / "micromamba" / "envs" / "dis",
+    Path.home() / "micromamba" / "envs" / "hadros3",
 ]
 
 PYTHIA8_MARKER = Path("include") / "Pythia8" / "Pythia.h"

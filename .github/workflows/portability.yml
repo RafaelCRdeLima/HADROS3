@@ -16,10 +16,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: No machine-specific path leaked into the repository
+      - name: No machine-specific absolute path leaked into the repository
         run: |
-          if git grep -n -I -E "/home/[a-z0-9_-]+/|micromamba/envs" -- . \
-              ':!docs/**' ':!README.md' ':!.github/workflows/portability.yml'; then
+          # $(HOME)/... and Path.home()/... are fine: they resolve per machine.
+          # A literal /home/<user>/ is not, and that is what broke every clone.
+          if git grep -n -I -E "/home/[a-z0-9_-]+/" -- . \
+              ':!docs/**' ':!.github/workflows/portability.yml'; then
             echo "::error::a machine-specific absolute path is committed"
             exit 1
           fi

@@ -1,0 +1,1349 @@
+% =====================================================================
+%  Espalhamento Profundamente Inelástico — apostila do HADROS Sandbox
+%  Compilar com:  latexmk -pdf dis.tex     (pdflatex + biber)
+% =====================================================================
+\documentclass[11pt,a4paper,oneside]{report}
+
+% ---------- tipografia -------------------------------------------------
+% Palatino (Hermann Zapf, 1949) via newpx, com fonte matemática casada.
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[brazil]{babel}
+\usepackage{newpxtext}
+\usepackage[varg,bigdelims]{newpxmath}
+\usepackage[scaled=0.86]{helvet}
+\usepackage[scaled=0.83]{beramono}
+\usepackage{microtype}
+\linespread{1.06}
+
+% ---------- geometria --------------------------------------------------
+\usepackage[a4paper,left=30mm,right=48mm,top=28mm,bottom=30mm,
+            marginparwidth=34mm,marginparsep=6mm,footskip=14mm]{geometry}
+
+% ---------- matemática -------------------------------------------------
+\usepackage{amsmath}
+\let\Bbbk\relax          % newpxmath já define \Bbbk; evita o conflito com amssymb
+\usepackage{amssymb,mathtools}
+\usepackage{slashed}
+\usepackage{bm}
+\allowdisplaybreaks[1]
+
+% ---------- gráficos e cor --------------------------------------------
+\usepackage{graphicx}
+\usepackage[dvipsnames,table]{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,decorations.pathmorphing,decorations.markings,
+                decorations.pathreplacing,positioning,calc,shapes.geometric,
+                fit,backgrounds}
+\usepackage{booktabs}
+\usepackage[font=small,labelfont=bf]{caption}
+\usepackage{subcaption}
+
+% ---------- estrutura --------------------------------------------------
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage[most]{tcolorbox}
+\usepackage{fancyhdr}
+\usepackage{marginnote}
+\usepackage{csquotes}
+\usepackage[backend=biber,style=numeric-comp,sorting=none,giveninits=true,
+            maxbibnames=6,minbibnames=3,doi=false,isbn=false,url=false,
+            eprint=true]{biblatex}
+\addbibresource{dis.bib}
+\usepackage[hidelinks]{hyperref}
+\usepackage[nameinlink,brazilian]{cleveref}
+
+% ---------- paleta -----------------------------------------------------
+\definecolor{tinta}    {HTML}{16202B}
+\definecolor{acento}   {HTML}{1D4E89}
+\definecolor{acento2}  {HTML}{B14A20}
+\definecolor{verdemar} {HTML}{157F63}
+\definecolor{papel}    {HTML}{FBFAF7}
+\definecolor{filete}   {HTML}{C9CED6}
+\definecolor{suave}    {HTML}{6B7480}
+
+\pagecolor{papel}
+\color{tinta}
+
+% ---------- títulos ----------------------------------------------------
+\titleformat{\chapter}[display]
+  {\normalfont\sffamily}
+  {\raggedright\large\bfseries\color{acento}\MakeUppercase{Capítulo \thechapter}}
+  {0.6ex}
+  {\color{tinta}\Huge\bfseries\rmfamily\raggedright}
+  [\vspace{1.2ex}{\color{filete}\titlerule[1.1pt]}]
+\titlespacing*{\chapter}{0pt}{-8mm}{22pt}
+
+\titleformat{\section}
+  {\normalfont\sffamily\large\bfseries\color{acento}}{\thesection}{0.8em}{}
+\titleformat{\subsection}
+  {\normalfont\sffamily\normalsize\bfseries\color{tinta}}{\thesubsection}{0.7em}{}
+\titlespacing*{\section}{0pt}{2.6ex plus 1ex minus .2ex}{1.2ex plus .2ex}
+
+% ---------- cabeçalhos -------------------------------------------------
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\fancyhead[L]{\footnotesize\sffamily\color{suave}\nouppercase{\leftmark}}
+\fancyfoot[C]{\footnotesize\sffamily\color{suave}\thepage}
+\fancypagestyle{plain}{\fancyhf{}\renewcommand{\headrulewidth}{0pt}
+  \fancyfoot[C]{\footnotesize\sffamily\color{suave}\thepage}}
+\renewcommand{\chaptermark}[1]{\markboth{\thechapter\ \ #1}{}}
+
+% ---------- caixas -----------------------------------------------------
+\tcbset{
+  caixabase/.style={
+    enhanced, breakable, boxrule=0pt, frame hidden, sharp corners,
+    left=3.4mm, right=3.4mm, top=2.6mm, bottom=2.6mm,
+    borderline west={1.2pt}{0pt}{#1},
+    colback=#1!5!papel,
+    fonttitle=\sffamily\bfseries\small,
+    coltitle=#1, attach title to upper={\par\smallskip},
+    % quando a caixa quebra de página, a continuação ganha um rótulo próprio
+    % em vez de aparecer como um trecho órfão sem título
+    title after break={\normalfont\sffamily\itshape\small (continuação)}
+  }
+}
+
+\newtcolorbox{definicao}[1][]{caixabase=acento, title={#1}}
+\newtcolorbox{deducao}[1][]{caixabase=verdemar, title={#1}}
+\newtcolorbox{cuidado}[1][]{caixabase=acento2, title={#1}}
+\newtcolorbox{verifique}[1][]{caixabase=verdemar, title={#1}}
+
+\newtcolorbox{historia}[1][]{
+  enhanced, breakable, boxrule=0pt, frame hidden, sharp corners,
+  colback=papel, left=6mm, right=4mm, top=2mm, bottom=2mm,
+  borderline west={0.6pt}{0pt}{filete},
+  fontupper=\small\itshape, title={#1},
+  fonttitle=\sffamily\bfseries\small\upshape, coltitle=suave,
+  attach title to upper={\par\smallskip}
+}
+
+% ---------- atalhos ----------------------------------------------------
+\newcommand{\md}{\mathrm{d}}
+\newcommand{\gev}{\,\mathrm{GeV}}
+\newcommand{\cm}{\,\mathrm{cm}}
+\newcommand{\Qsq}{Q^{2}}
+\newcommand{\xB}{x}
+\newcommand{\nota}[1]{\marginnote{\footnotesize\sffamily\color{suave}#1}}
+% barra de Feynman: o pacote slashed posiciona a barra corretamente
+% em cada tamanho, o que \not sozinho não faz.
+\newcommand{\sla}[1]{\ensuremath{\slashed{#1}}}
+
+\newcommand{\fig}[1]{\includegraphics{figuras/#1}}
+
+% =====================================================================
+\begin{document}
+\pagenumbering{roman}   % a classe report não tem \frontmatter/\mainmatter
+
+% ---------------------------------------------------------------- capa
+\begin{titlepage}
+\thispagestyle{empty}
+\centering
+\vspace*{22mm}
+
+{\color{filete}\rule{\textwidth}{1.1pt}}
+
+\vspace{9mm}
+{\sffamily\large\color{acento}\MakeUppercase{HADROS Sandbox\quad\textbullet\quad Apostila 01}}
+
+\vspace{12mm}
+{\Huge\bfseries Espalhamento\\[2mm] Profundamente Inelástico\par}
+
+\vspace{7mm}
+{\Large\itshape Como se enxerga dentro de um próton,\\[1mm]
+ e por que isso decide o destino de um neutrino\\[1mm] de energia ultra-alta\par}
+
+\vspace{9mm}
+{\color{filete}\rule{\textwidth}{1.1pt}}
+
+\vspace{16mm}
+\begin{minipage}{0.80\textwidth}
+\centering\small\itshape\color{suave}
+Notas de aula para estudantes de pós-graduação que vão trabalhar com o HADROS3.
+Deduções completas, sem pular passos; dados reais do HERA; e todas as figuras
+reprodutíveis a partir do código que acompanha o texto.
+\end{minipage}
+
+\vfill
+
+\begin{minipage}{0.80\textwidth}
+\centering\footnotesize\sffamily\color{suave}
+Projeto HADROS3\\[1mm]
+\texttt{sandbox/apostila/dis.tex}\\[3mm]
+\today
+\end{minipage}
+
+\vspace{12mm}
+\end{titlepage}
+
+% ------------------------------------------------------------- prefácio
+\chapter*{Como usar esta apostila}
+\addcontentsline{toc}{chapter}{Como usar esta apostila}
+\markboth{Como usar esta apostila}{}
+
+Esta apostila existe porque o HADROS3 usa espalhamento profundamente inelástico
+(DIS, de \emph{deep inelastic scattering}) como um bloco fechado: uma seção de
+choque $\sigma_{\nu N}(E)$ que sai de uma tabela e entra numa integral de
+profundidade óptica. Isso é suficiente para \emph{rodar} o código, e insuficiente
+para \emph{confiar} nele. O que está tabelado ali é o resultado final de sessenta
+anos de física, e quem vai usar o HADROS3 precisa saber o que aquele número
+significa, de onde ele vem e onde ele é frágil.
+
+\medskip
+\noindent\textbf{O que assumimos que você já sabe.} Relatividade restrita com
+quadrivetores, mecânica quântica em nível de pós-graduação, e o mínimo de teoria
+quântica de campos para reconhecer um espinor de Dirac e uma matriz $\gamma^\mu$.
+Nada além disso: os traços de Dirac de que precisamos estão feitos passo a passo
+no \cref{cap:tensores}.
+
+\medskip
+\noindent\textbf{Como o texto é organizado.} As deduções longas ficam em caixas
+verdes; elas podem ser puladas numa primeira leitura, mas foram escritas
+justamente para \emph{não} serem puladas na segunda. As caixas laranja marcam
+armadilhas --- lugares onde é fácil escrever a fórmula certa e usá-la errado. As
+caixas azuis são definições que serão usadas o tempo todo depois.
+
+\medskip
+\noindent\textbf{Verificações.} Sempre que possível, uma afirmação vem
+acompanhada de um jeito de conferi-la: um limite conhecido, uma regra de soma,
+ou um número que você pode recalcular. Duas das figuras deste texto são
+construídas a partir dos dados públicos combinados de H1 e ZEUS~\cite{H1:2015ubc};
+uma terceira usa as distribuições de pártons HERAPDF2.0 extraídas da mesma
+publicação. O código que baixa esses dados, extrai os subconjuntos e desenha as
+figuras está em \texttt{sandbox/apostila/figuras/}.
+
+\medskip
+\noindent\textbf{Onde isto se conecta ao HADROS3.} O \cref{cap:cc} fecha o
+círculo: a fórmula de DIS de corrente carregada, a seção de choque de neutrinos
+de energia ultra-alta, e a integral de profundidade óptica que o notebook
+\texttt{01\_profundidade\_optica\_dis.ipynb} calcula. Recomendamos ler a apostila
+até o \cref{cap:partons} e então fazer o notebook, voltando depois para os
+\cref{cap:qcd,cap:cc}.
+
+\tableofcontents
+
+\cleardoublepage
+\pagenumbering{arabic}
+
+% =====================================================================
+\chapter{Por que ``profundamente inelástico''?}
+\label{cap:porque}
+
+\section{A ideia é velha: jogue coisas e veja o que volta}
+
+Em 1911 Geiger e Marsden jogaram partículas $\alpha$ contra uma folha de ouro.
+A esmagadora maioria passou quase reto; uma fração minúscula voltou para trás.
+Rutherford entendeu que o espalhamento a grande ângulo só era possível se a
+carga positiva do átomo estivesse concentrada num caroço muito pequeno. O
+método --- \emph{sonde com um projétil bem entendido e leia a estrutura do alvo
+na distribuição angular} --- é o mesmo até hoje.
+
+A diferença é a régua. Um projétil de momento transferido $q$ resolve estruturas
+de tamanho
+\begin{equation}
+  \lambda \sim \frac{\hbar c}{\sqrt{\Qsq}},
+  \qquad \Qsq \equiv -q^2 > 0 .
+  \label{eq:regua}
+\end{equation}
+Com $\hbar c = 0{,}1973\gev\cdot\mathrm{fm}$, sondar o próton inteiro
+($\approx 0{,}84$ fm) exige $\sqrt{\Qsq}\sim 0{,}2\gev$; enxergar dez vezes mais
+fundo exige cem vezes mais $\Qsq$. É por isso que a física de estrutura é uma
+física de aceleradores cada vez maiores.%
+\nota{$1\,$fm $=10^{-15}$\,m. O próton tem raio de carga $0{,}841$\,fm; um núcleo de ferro, cerca de $4$\,fm.}
+
+\nota{A \cref{fig:xtipico} mostra as duas escalas juntas: o $x$ sondado e o
+$\lambda$ correspondente.}
+
+\begin{figure}[t]
+  \centering
+  \fig{fig_x_tipico.pdf}
+  \caption{À esquerda, a fração de momento $x$ que um neutrino de energia $E_\nu$
+  tipicamente sonda; à direita, a resolução espacial associada a $\Qsq$. Um
+  neutrino de $10^{9}\gev$ enxerga pártons com $x\sim 10^{-6}$ --- três ordens de
+  grandeza abaixo do menor $x$ jamais medido.}
+  \label{fig:xtipico}
+\end{figure}
+
+\section{Quatro regimes, um mesmo processo}
+
+Considere um lépton batendo num núcleon. Chame de $W$ a massa invariante de
+tudo o que sai do lado hadrônico. Conforme $\Qsq$ e $W$ crescem, o processo passa
+por quatro regimes qualitativamente distintos:
+
+\begin{description}[style=nextline,leftmargin=0pt,font=\sffamily\bfseries\color{acento}]
+\item[Elástico ($W = M$)] O núcleon sobrevive inteiro. A informação está nos
+  fatores de forma $G_E(\Qsq)$, $G_M(\Qsq)$, que são as transformadas de Fourier
+  das distribuições de carga e magnetização. Foi assim que Hofstadter mediu o
+  raio do próton nos anos 1950.
+\item[Ressonante ($M < W \lesssim 2\gev$)] O núcleon é excitado para estados
+  ligados --- $\Delta(1232)$ e companhia. O espectro é cheio de picos.
+\item[Profundamente inelástico ($W \gg M$ \emph{e} $\Qsq \gg M^2$)] O núcleon é
+  estilhaçado. Os picos somem e sobra um contínuo suave. É aqui que vivemos.
+\item[Difrativo / $x$ pequeno] Um regime dentro do DIS em que a troca carrega os
+  números quânticos do vácuo e o próton pode até sobreviver. Voltaremos a ele no
+  \cref{cap:qcd}, porque é exatamente o regime dos neutrinos UHE.
+\end{description}
+
+O adjetivo ``profundamente'' se refere a $\Qsq \gg M^2$: a régua é muito menor
+que o alvo. O adjetivo ``inelástico'' se refere a $W \gg M$: o alvo não sobrevive.
+As duas condições juntas são o que permite a simplificação decisiva do
+\cref{cap:partons} --- tratar o núcleon como uma \emph{coleção de constituintes
+livres} durante o instante da colisão.
+
+\begin{historia}[O experimento que mudou tudo]
+Em 1968--69, no SLAC, o espectrômetro de 20\,GeV mediu espalhamento inelástico
+$ep$ a $6^\circ$ e $10^\circ$~\cite{Bloom:1969kc,Breidenbach:1969kd}. Esperava-se
+que a seção de choque caísse rapidamente com $\Qsq$, como cai no caso elástico,
+porque um objeto extenso e mole não deveria conseguir absorver muito momento sem
+se desmanchar suavemente. O que se viu foi o contrário: a seção de choque
+inelástica caía muito devagar, e a razão em relação ao espalhamento por um alvo
+puntual era praticamente independente de $\Qsq$.
+
+Bjorken já havia previsto essa independência --- o \emph{escalonamento} --- a
+partir de álgebra de correntes~\cite{Bjorken:1968dy}, e Feynman deu a ela a
+imagem que usamos até hoje: o próton é feito de constituintes puntuais que, no
+instante da colisão, se comportam como livres~\cite{Feynman:1969ej}. Friedman,
+Kendall e Taylor receberam o Nobel de 1990 por esses
+experimentos~\cite{Friedman:1972sy}.
+\end{historia}
+
+\section{O que realmente se mede}
+
+Vale insistir num ponto que costuma escapar. Num experimento de DIS inclusivo
+mede-se \emph{apenas o lépton que sai}: sua energia e seu ângulo. Nada do estado
+hadrônico $X$ é observado --- soma-se sobre tudo o que ele possa ser. Isso tem
+duas consequências:
+
+\begin{enumerate}[leftmargin=*]
+\item Toda a informação cabe em duas variáveis (a energia e o ângulo do lépton,
+  ou equivalentemente $\Qsq$ e $\nu$). É por isso que a seção de choque é
+  \emph{duplo}-diferencial e não mais que isso.
+\item A soma sobre $X$ é o que torna possível escrever o lado hadrônico em
+  termos de poucas funções --- as \emph{funções de estrutura}. Sem essa soma,
+  não haveria simplificação alguma.
+\end{enumerate}
+
+% =====================================================================
+\chapter{Cinemática}
+\label{cap:cinematica}
+
+Este capítulo é puro Lorentz: nenhuma dinâmica, nenhuma hipótese sobre
+constituintes. Tudo aqui vale exatamente, sempre.
+
+\section{O processo e seus quadrimomentos}
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[
+  x=1cm, y=1cm, every node/.style={font=\small},
+  fermion/.style={-{Stealth[length=2.6mm]},thick,tinta},
+  boson/.style={decorate,decoration={snake,amplitude=0.7mm,segment length=2.4mm},
+                thick,acento},
+  blob/.style={ellipse,draw=tinta,fill=acento!14,minimum width=14mm,
+               minimum height=9mm,thick}
+]
+\coordinate (V) at (3.4,2.6);          % vértice leptônico
+\coordinate (B) at (3.4,0.95);         % onde o bóson encontra o hádron
+
+% --- lado leptônico ---------------------------------------------------
+\draw[fermion] (0.35,3.35) -- node[above=1pt,pos=0.55]{$k$} (V);
+\draw[fermion] (V) -- node[above=1pt,pos=0.45]{$k'$} (6.55,3.5);
+\node[left]  at (0.3,3.35) {$\ell$};
+\node[right] at (6.6,3.5)  {$\ell'$};
+% continuação tracejada da direção incidente, para marcar o ângulo
+\draw[suave,thin,dashed] (V) -- ++(-17.4:1.7);
+\draw[suave,thin] ([shift=(-17.4:1.15)]V) arc (-17.4:15.7:1.15);
+\node[suave,font=\footnotesize] at ([shift=(-1:1.42)]V) {$\theta$};
+
+% --- bóson ------------------------------------------------------------
+\draw[boson] (V) -- (B);
+\node[anchor=east,font=\footnotesize] at (3.22,1.78) {$q = k-k'$};
+\node[anchor=west,acento,font=\footnotesize] at (3.58,1.78) {$\gamma^*,\ Z,\ W^\pm$};
+
+% --- lado hadrônico ---------------------------------------------------
+\node[blob] (b) at (3.4,0.55) {};
+\draw[fermion] (0.35,0.55) -- node[above=1pt]{$P$} (b.west);
+\node[left] at (0.3,0.55) {$N$};
+\foreach \a in {-30,-15,0,15,30}{
+  \draw[thick,tinta,opacity=0.72] (b.east) -- ++(\a:2.05);}
+\node[anchor=west] at (6.32,0.55) {$X$};
+\node[suave,font=\footnotesize,anchor=north] at (4.5,-0.95)
+  {$W^2 = (P+q)^2$};
+\end{tikzpicture}
+\caption{DIS inclusivo. Mede-se apenas $k'$; soma-se sobre todos os estados
+finais hadrônicos $X$. A troca é um fóton virtual (corrente neutra
+eletromagnética), um $Z$ (corrente neutra fraca) ou um $W^\pm$ (corrente
+carregada). Esta apostila trata sobretudo dos casos $\gamma^*$ e $W^\pm$.}
+\label{fig:processo}
+\end{figure}
+
+Fixemos a notação, que seguirá o resto do texto:
+\[
+\begin{array}{llll}
+  k & \text{lépton incidente} &\qquad P & \text{núcleon alvo, } P^2 = M^2\\
+  k' & \text{lépton espalhado} &\qquad q = k-k' & \text{momento transferido}
+\end{array}
+\]
+Trabalhamos sempre com $\hbar = c = 1$ e desprezamos as massas leptônicas
+(justificaremos isso no \cref{cap:cc}).
+
+\section{Os invariantes}
+
+\begin{definicao}[As variáveis de DIS]
+\begin{align}
+  s      &= (k+P)^2 \simeq 2\,M E_\ell &&\text{energia de centro de massa ao quadrado}\\
+  \Qsq   &= -q^2 \;=\; 4EE'\sin^2(\theta/2) &&\text{virtualidade da troca}\\
+  \nu    &= \frac{P\cdot q}{M} \;=\; E - E' &&\text{energia transferida (referencial do alvo)}\\
+  \xB    &= \frac{\Qsq}{2P\cdot q} = \frac{\Qsq}{2M\nu} &&\text{variável de Bjorken}\\
+  y      &= \frac{P\cdot q}{P\cdot k} = \frac{\nu}{E} &&\text{inelasticidade}\\
+  W^2    &= (P+q)^2 &&\text{massa invariante do sistema hadrônico}
+\end{align}
+As formas $\Qsq = 4EE'\sin^2(\theta/2)$, $\nu = E-E'$ e $y=\nu/E$ valem no
+referencial de repouso do alvo; $s$, $\Qsq$, $\xB$, $y$ e $W^2$ são invariantes
+de Lorentz e podem ser usados em qualquer referencial. Guarde essa distinção: ela
+volta a importar quando o ``referencial do alvo'' passa a ser o de um fluido
+girando perto de um buraco negro, como no HADROS3.%
+\nota{No HADROS3 isso vira a energia local $E=-u^\mu p_\mu$, medida por um observador estático ou ZAMO. Ver \texttt{dis\_sampler.py:185--203}.}
+\end{definicao}
+
+Só duas dessas variáveis são independentes (dado $s$). As relações entre elas
+são o assunto do resto da seção.
+
+\subsection{A relação $\Qsq = xys$}
+
+\begin{deducao}[Dedução 2.1]
+Por definição, $\xB = \Qsq/(2P\cdot q)$, logo
+\begin{equation}
+  \Qsq = 2\,\xB\,(P\cdot q).
+\end{equation}
+Também por definição $y = (P\cdot q)/(P\cdot k)$, então $P\cdot q = y\,(P\cdot k)$:
+\begin{equation}
+  \Qsq = 2\,\xB\,y\,(P\cdot k).
+\end{equation}
+Falta identificar $P\cdot k$. Como $s = (k+P)^2 = k^2 + 2P\cdot k + P^2$ e estamos
+desprezando a massa do lépton ($k^2=0$),
+\begin{equation}
+  s = 2P\cdot k + M^2 \quad\Longrightarrow\quad P\cdot k = \frac{s-M^2}{2}.
+\end{equation}
+Portanto, \emph{exatamente},
+\begin{equation}
+  \boxed{\ \Qsq = \xB\,y\,(s-M^2)\ } \qquad
+  \xrightarrow{\ s\,\gg\, M^2\ }\qquad \Qsq \simeq \xB\,y\,s .
+  \label{eq:q2xys}
+\end{equation}
+\end{deducao}
+
+\noindent Essa é a relação mais usada de todo o assunto, e ela diz uma coisa
+importante: \emph{fixado $s$, escolher $(x,y)$ é escolher $\Qsq$}. As três
+variáveis não são independentes.
+
+\subsection{Por que $0 \le x \le 1$}
+
+\begin{deducao}[Dedução 2.2]
+Escreva a massa invariante do sistema hadrônico:
+\begin{equation}
+  W^2 = (P+q)^2 = P^2 + 2P\cdot q + q^2 = M^2 + 2M\nu - \Qsq .
+  \label{eq:W2}
+\end{equation}
+Agora use $2M\nu = \Qsq/\xB$, que é a definição de $\xB$ reescrita:
+\begin{equation}
+  W^2 = M^2 + \frac{\Qsq}{\xB} - \Qsq
+      = M^2 + \Qsq\,\frac{1-\xB}{\xB}.
+  \label{eq:W2x}
+\end{equation}
+O estado final hadrônico mais leve possível é o próprio núcleon, então
+$W^2 \ge M^2$. Com $\Qsq>0$, a \cref{eq:W2x} exige
+\begin{equation}
+  \frac{1-\xB}{\xB}\ \ge\ 0 \quad\Longrightarrow\quad \boxed{\ 0 < \xB \le 1\ }.
+\end{equation}
+E o extremo é informativo: $\xB=1$ dá exatamente $W^2=M^2$, isto é,
+\textbf{$x=1$ é o espalhamento elástico}. O regime profundamente inelástico é
+$x$ bem abaixo de 1 com $\Qsq$ grande.%
+\nota{Limites úteis para conferir contas: $x=1$ é elástico; $y=0$ é o lépton passando reto; $\Qsq=0$ é um fóton real.}
+\end{deducao}
+
+\begin{cuidado}[Duas coisas diferentes com o mesmo nome]
+A variável $\xB$ definida acima é puramente cinemática --- ela existe mesmo que o
+próton não tenha constituinte nenhum. No \cref{cap:partons} vamos mostrar que,
+\emph{sob as hipóteses do modelo de pártons}, $\xB$ coincide com a fração de
+momento do párton atingido. Coincidem, mas não são a mesma coisa: a primeira é
+uma definição, a segunda é um resultado físico com condições de validade. Em
+correções de ordem superior, e sempre que massas importam, elas se separam.
+\end{cuidado}
+
+\subsection{O intervalo de $y$ e o significado físico}
+
+No referencial de repouso do alvo, $y = \nu/E = (E-E')/E$ é a \emph{fração da
+energia do lépton transferida ao sistema hadrônico}. Como $0 \le E' \le E$, temos
+imediatamente $0 \le y \le 1$. Em $y\to0$ o lépton mal é perturbado; em $y\to1$
+ele entrega tudo.
+
+Há ainda um vínculo conjunto: como $\Qsq = xys \le s$, nem todo par $(x,y)$ é
+acessível a um dado $s$. O lugar geométrico dessa restrição é o que a
+\cref{fig:plano} mostra.
+
+\begin{figure}[t]
+  \centering
+  \fig{fig_plano_cinematico.pdf}
+  \caption{O plano $(x,\Qsq)$. Os pontos são as $485$ medidas combinadas de H1 e
+  ZEUS para corrente neutra $e^+p$~\cite{H1:2015ubc}; a faixa clara é a região
+  típica de experimentos de alvo fixo. As linhas pontilhadas marcam o $x$ que um
+  neutrino de energia $E_\nu$ sonda quando o propagador do $W$ fixa
+  $\Qsq\sim m_W^2$. A distância entre os dados e essas linhas é o problema
+  central da física de neutrinos UHE.}
+  \label{fig:plano}
+\end{figure}
+
+\section{Trocando de variáveis: o jacobiano}
+
+Experimentalmente é natural medir $(\Qsq,\nu)$ --- ou $(E',\theta)$. Teoricamente
+é natural usar $(x,y)$. A conversão aparece o tempo todo e vale fazer com cuidado.
+
+\begin{deducao}[Dedução 2.3]
+No referencial de repouso do alvo, com $E$ fixo,
+\begin{equation}
+  \Qsq = 2ME\,x\,y, \qquad \nu = E\,y .
+\end{equation}
+O jacobiano da transformação $(x,y)\mapsto(\Qsq,\nu)$ é o determinante
+\begin{equation}
+  \left|\frac{\partial(\Qsq,\nu)}{\partial(x,y)}\right|
+  = \left|\det\!\begin{pmatrix}
+      \partial \Qsq/\partial x & \partial \Qsq/\partial y\\[2pt]
+      \partial \nu /\partial x & \partial \nu /\partial y
+    \end{pmatrix}\right|
+  = \left|\det\!\begin{pmatrix} 2MEy & 2MEx\\ 0 & E \end{pmatrix}\right|
+  = 2ME^{2}y .
+\end{equation}
+Logo
+\begin{equation}
+  \frac{\md^2\sigma}{\md x\,\md y} = 2ME^{2}y\;\frac{\md^2\sigma}{\md \Qsq\,\md \nu}.
+  \label{eq:jacobiano}
+\end{equation}
+\end{deducao}
+
+\begin{cuidado}[O fator $y$ some se você não prestar atenção]
+O jacobiano tem um $y$ dentro. Se você comparar uma distribuição em $y$ obtida de
+$\md^2\sigma/\md x\,\md y$ com uma obtida de $\md^2\sigma/\md \Qsq\,\md\nu$ sem
+incluí-lo, vai concluir que a física está errada quando na verdade a conta é que
+está. Este é, empiricamente, o erro mais comum de quem começa.
+\end{cuidado}
+
+% =====================================================================
+\chapter{A seção de choque em forma tensorial}
+\label{cap:tensores}
+
+Este é o capítulo técnico. O objetivo é chegar em
+$\md^2\sigma/\md x\,\md y$ escrita em termos de funções de estrutura, sem
+nenhuma hipótese sobre o que há dentro do núcleon. A estratégia é a mesma em
+qualquer livro-texto~\cite{Halzen:1984mc,Devenish:2004pb,Ellis:1996mzs}: separar
+o que sabemos calcular (o lado leptônico) do que não sabemos (o lado hadrônico),
+e espremer o segundo até que só sobre o que a simetria permite.
+
+\section{A fatoração}
+
+Em ordem mais baixa há um único diagrama: o lépton emite um bóson virtual, que é
+absorvido pelo núcleon. A amplitude fatoriza,
+\begin{equation}
+  \mathcal{M} \;=\; \underbrace{\bar u(k')\,\Gamma^\mu\,u(k)}_{\text{lado leptônico}}
+  \;\times\; \underbrace{\frac{-i\,g_{\mu\nu}}{q^2 - m_B^2}}_{\text{propagador}}
+  \;\times\; \underbrace{\langle X|J^\nu|P\rangle}_{\text{lado hadrônico}},
+\end{equation}
+e ao tomar $|\mathcal{M}|^2$, somar sobre estados finais e sobre spins, a seção
+de choque fica proporcional a uma contração de dois tensores:
+\begin{equation}
+  \boxed{\ \frac{\md^2\sigma}{\md \Qsq\,\md\nu} \;\propto\; L^{\mu\nu}\,W_{\mu\nu}\ }
+  \label{eq:LW}
+\end{equation}
+
+O tensor leptônico $L^{\mu\nu}$ é calculável exatamente --- é
+eletrodinâmica/teoria eletrofraca pura.%
+\nota{A separação em dois tensores só é possível porque trocamos \emph{um} bóson. Em ordens mais altas ela deixa de valer literalmente.} O tensor hadrônico $W_{\mu\nu}$ contém
+toda a QCD não perturbativa e \emph{não} é calculável a partir de primeiros
+princípios. A saída é não tentar calculá-lo: apenas descobrir quantas funções
+independentes ele pode conter.
+
+\section{O tensor leptônico, passo a passo}
+
+\begin{deducao}[Dedução 3.1 --- caso eletromagnético]
+Para um elétron, o vértice é $\Gamma^\mu = \gamma^\mu$ e
+\begin{equation}
+  L^{\mu\nu} = \frac{1}{2}\sum_{\text{spins}}
+    \big[\bar u(k')\gamma^\mu u(k)\big]\big[\bar u(k')\gamma^\nu u(k)\big]^{*},
+\end{equation}
+onde o $\tfrac12$ é a média sobre os dois estados de spin do elétron incidente.
+Usando $[\bar u(k')\gamma^\nu u(k)]^{*} = \bar u(k)\gamma^\nu u(k')$ e as relações
+de completeza $\sum_s u(p)\bar u(p) = \sla{p} + m$, com $m\to0$:
+\begin{equation}
+  L^{\mu\nu} = \frac{1}{2}\,\mathrm{Tr}\!\left[\sla{k}'\gamma^\mu \sla{k}\gamma^\nu\right].
+\end{equation}
+Escrevendo $\sla{k}' = k'_\alpha\gamma^\alpha$ e $\sla{k} = k_\beta\gamma^\beta$,
+precisamos do traço de quatro matrizes gama,
+\begin{equation}
+  \mathrm{Tr}\!\left[\gamma^\alpha\gamma^\mu\gamma^\beta\gamma^\nu\right]
+  = 4\left(g^{\alpha\mu}g^{\beta\nu} - g^{\alpha\beta}g^{\mu\nu}
+           + g^{\alpha\nu}g^{\mu\beta}\right).
+  \label{eq:traco4}
+\end{equation}
+Contraindo com $k'_\alpha k_\beta$:%
+\nota{A \cref{eq:traco4} é a identidade de traço mais usada da área. Vale a pena memorizá-la: dois $g$ com sinal $+$, o do meio com sinal $-$.}
+\begin{equation}
+  \mathrm{Tr}\!\left[\sla{k}'\gamma^\mu \sla{k}\gamma^\nu\right]
+  = 4\left(k'^{\mu}k^{\nu} - (k'\!\cdot\!k)\,g^{\mu\nu} + k'^{\nu}k^{\mu}\right).
+\end{equation}
+Finalmente, com $\Qsq = -(k-k')^2 = 2\,k\!\cdot\!k'$ (massas nulas),
+\begin{equation}
+  \boxed{\;L^{\mu\nu}_{\rm em}
+   = 2\left(k^{\mu}k'^{\nu} + k^{\nu}k'^{\mu}\right) - \Qsq\,g^{\mu\nu}\;}
+  \label{eq:Lem}
+\end{equation}
+\end{deducao}
+
+Repare em duas propriedades da \cref{eq:Lem} que vão ser usadas:
+\begin{enumerate}[leftmargin=*,itemsep=2pt]
+\item $L^{\mu\nu}$ é \emph{simétrico} em $\mu\leftrightarrow\nu$;
+\item $q_\mu L^{\mu\nu} = 0$ quando as massas leptônicas são nulas. De fato,
+  $q_\mu[2(k^\mu k'^\nu + k^\nu k'^\mu) - \Qsq g^{\mu\nu}]
+   = 2[(q\!\cdot\!k)k'^\nu + (q\!\cdot\!k')k^\nu] - \Qsq q^\nu$, e como
+  $q\cdot k = \Qsq/2$ e $q\cdot k' = -\Qsq/2$ (verifique!), isso é
+  $\Qsq(k'^\nu - k^\nu) - \Qsq q^\nu = 0$.
+\end{enumerate}
+
+\begin{deducao}[Dedução 3.2 --- caso de corrente carregada]
+Para um neutrino a estrutura do vértice é $V-A$: $\Gamma^\mu = \gamma^\mu(1-\gamma^5)$.
+Não há média sobre spin --- o neutrino só existe com hélicidade esquerda. Então
+\begin{equation}
+  L^{\mu\nu}_{\rm CC}
+  = \mathrm{Tr}\!\left[\sla{k}'\gamma^\mu(1-\gamma^5)\,\sla{k}\,\gamma^\nu(1-\gamma^5)\right].
+\end{equation}
+Use $(1-\gamma^5)\sla{k} = \sla{k}(1+\gamma^5)$ e $(1+\gamma^5)(1-\gamma^5)=0$,
+$(1-\gamma^5)^2 = 2(1-\gamma^5)$, para escrever
+\begin{equation}
+  L^{\mu\nu}_{\rm CC}
+  = 2\,\mathrm{Tr}\!\left[\sla{k}'\gamma^\mu \sla{k}\gamma^\nu(1-\gamma^5)\right].
+\end{equation}
+A parte sem $\gamma^5$ é o traço que já fizemos. A parte com $\gamma^5$ usa
+\begin{equation}
+  \mathrm{Tr}\!\left[\gamma^\alpha\gamma^\mu\gamma^\beta\gamma^\nu\gamma^5\right]
+  = -4i\,\epsilon^{\alpha\mu\beta\nu},
+  \qquad (\epsilon^{0123} = +1),
+\end{equation}
+e o resultado é
+\begin{equation}
+  \boxed{\;L^{\mu\nu}_{\rm CC}
+   = 8\left[k^{\mu}k'^{\nu} + k^{\nu}k'^{\mu}
+     - g^{\mu\nu}(k\!\cdot\!k')
+     \;{\color{acento2}\mp}\; i\,\epsilon^{\mu\nu\alpha\beta}k_\alpha k'_\beta\right]\;}
+  \label{eq:Lcc}
+\end{equation}
+com o sinal superior para neutrinos e o inferior para antineutrinos.
+\end{deducao}
+
+\begin{cuidado}[O termo antissimétrico é a paridade]
+A diferença essencial entre \cref{eq:Lem} e \cref{eq:Lcc} é o termo com
+$\epsilon^{\mu\nu\alpha\beta}$, que é \emph{antissimétrico} em
+$\mu\leftrightarrow\nu$. Ele existe porque a interação fraca viola paridade, e é
+ele que dará origem à terceira função de estrutura, $xF_3$ --- a que distingue
+neutrino de antineutrino. Se você já sabe que $xF_3$ mede $q-\bar q$, essa é a
+raiz: quarks e antiquarks acoplam de forma diferente a uma corrente que
+distingue hélicidade.
+\end{cuidado}
+
+\section{O tensor hadrônico: o que a simetria permite}
+
+Aqui está o truque central. Definimos
+\begin{equation}
+  W^{\mu\nu}(P,q) = \frac{1}{4\pi}\sum_X \int \md\Pi_X\,
+    \langle P|J^{\mu\dagger}|X\rangle\langle X|J^{\nu}|P\rangle\,
+    (2\pi)^4\delta^4(P+q-p_X),
+\end{equation}
+com a soma sobre \emph{todos} os estados hadrônicos --- é a soma inclusiva do
+\cref{cap:porque}. Não sabemos calcular isso. Mas sabemos que $W^{\mu\nu}$ é um
+tensor de rank 2 que só pode ser construído com os objetos disponíveis:%
+\nota{Este é o padrão argumentativo mais poderoso da física de partículas: não calcule o que não sabe --- conte quantas funções a simetria permite, e meça-as.}
+\begin{equation}
+  g^{\mu\nu},\qquad P^\mu,\qquad q^\mu,\qquad \epsilon^{\mu\nu\alpha\beta}P_\alpha q_\beta .
+\end{equation}
+(Não há mais nada: o alvo não é polarizado, então não existe vetor de spin.) A
+forma mais geral compatível com invariância de Lorentz é, portanto,
+\begin{align}
+  W^{\mu\nu} =\;& -W_1\,g^{\mu\nu}
+   + \frac{W_2}{M^2}\,P^\mu P^\nu
+   - \frac{i\,W_3}{2M^2}\,\epsilon^{\mu\nu\alpha\beta}P_\alpha q_\beta \nonumber\\
+   &+ \frac{W_4}{M^2}\,q^\mu q^\nu
+   + \frac{W_5}{2M^2}\left(P^\mu q^\nu + q^\mu P^\nu\right)
+   + \frac{i\,W_6}{2M^2}\left(P^\mu q^\nu - q^\mu P^\nu\right),
+  \label{eq:Wgeral}
+\end{align}
+onde cada $W_i = W_i(\Qsq,\nu)$ é uma função escalar --- duas variáveis, porque
+$P^2 = M^2$ é fixo e só sobram $q^2$ e $P\cdot q$ como invariantes.
+
+\begin{deducao}[Dedução 3.3 --- o corte de seis para três]
+Duas observações eliminam metade dos termos.
+
+\smallskip
+\textbf{(i) Conservação da corrente.} A corrente eletromagnética é conservada,
+$\partial_\mu J^\mu = 0$, o que impõe
+\begin{equation}
+  q_\mu W^{\mu\nu} = 0 = q_\nu W^{\mu\nu}.
+\end{equation}
+Aplicando isso à \cref{eq:Wgeral} obtêm-se relações que expressam $W_4$, $W_5$ e
+$W_6$ em termos de $W_1$ e $W_2$. (Para a corrente carregada a corrente não é
+exatamente conservada, e $W_4$, $W_5$ sobrevivem --- mas seus coeficientes na
+contração final vêm multiplicados por $m_\ell^2$, a massa do lépton carregado
+produzido. Para $E_\nu$ de GeV para cima isso é desprezível, exceto para o
+$\tau$.)
+
+\smallskip
+\textbf{(ii) O que sobrevive à contração.} Ainda que $W_4$, $W_5$, $W_6$ não
+fossem elimináveis, seus termos são proporcionais a $q^\mu$ ou $q^\nu$. Como
+mostramos que $q_\mu L^{\mu\nu} = 0$ no limite de lépton sem massa, esses termos
+\emph{não contribuem para nada de observável}.
+
+\smallskip
+Sobram três: $W_1$, $W_2$, $W_3$. Este é o conteúdo do teorema --- o lado
+hadrônico do DIS inclusivo não polarizado tem exatamente três graus de liberdade,
+não importa quão complicada seja a QCD lá dentro.
+\end{deducao}
+
+\begin{definicao}[Funções de estrutura adimensionais]
+É costume trocar $W_{1,2,3}$ por combinações adimensionais:
+\begin{equation}
+  F_1(x,\Qsq) = W_1,\qquad
+  F_2(x,\Qsq) = \frac{\nu}{M}\,W_2,\qquad
+  F_3(x,\Qsq) = \frac{\nu}{M}\,W_3 .
+\end{equation}
+A vantagem aparece no \cref{cap:partons}: nessas variáveis, o modelo de pártons
+prevê que as $F_i$ dependem \emph{só de $x$}, e não de $\Qsq$.
+\end{definicao}
+
+\section{A contração e a fórmula mestra}
+
+Contraindo \cref{eq:Lcc} com \cref{eq:Wgeral} e convertendo para as variáveis
+$(x,y)$ com o jacobiano da \cref{eq:jacobiano}, chega-se ao resultado central de
+toda a área:
+
+\begin{tcolorbox}[caixabase=acento,title={A fórmula mestra do DIS de corrente carregada}]
+\begin{equation}
+  \frac{\md^2\sigma^{\rm CC}_{\nu(\bar\nu)N}}{\md x\,\md y}
+  = \frac{G_F^2\,s}{4\pi}
+    \left(\frac{m_W^2}{m_W^2 + \Qsq}\right)^{\!2}
+    \Big[\,Y_+\,F_2(x,\Qsq)\;-\;y^2 F_L(x,\Qsq)\;{\pm}\;Y_-\,xF_3(x,\Qsq)\Big],
+  \label{eq:mestra}
+\end{equation}
+com
+\begin{equation}
+  Y_\pm \equiv 1 \pm (1-y)^2,
+  \qquad
+  F_L \equiv F_2 - 2xF_1 ,
+\end{equation}
+sinal $+$ para $\nu$ e $-$ para $\bar\nu$. Para o caso eletromagnético
+($e^\pm N$) troque $G_F^2 s/4\pi \to 4\pi\alpha^2 s/(\Qsq)^{2}\cdot(\dots)$,
+elimine $F_3$ e o fator de propagador.
+\end{tcolorbox}
+
+\begin{deducao}[Dedução 3.4 --- por que esta forma é igual à do PDG]
+O PDG~\cite{ParticleDataGroup:2024cfk} escreve a mesma coisa assim:
+\begin{equation}
+  \frac{\md^2\sigma}{\md x\,\md y}
+  = \frac{G_F^2 s}{2\pi}\left(\frac{m_W^2}{m_W^2+\Qsq}\right)^{\!2}
+    \Big[(1-y)F_2 + y^2 xF_1 \pm y\big(1-\tfrac{y}{2}\big)xF_3\Big].
+  \label{eq:pdgform}
+\end{equation}
+Parecem diferentes; são idênticas. Substituindo $F_L = F_2 - 2xF_1$ no colchete
+da \cref{eq:mestra}:
+\begin{align}
+  Y_+F_2 - y^2F_L
+  &= \big[1+(1-y)^2\big]F_2 - y^2\big(F_2 - 2xF_1\big)\nonumber\\
+  &= F_2\big[\underbrace{1+(1-y)^2-y^2}_{=\;2(1-y)}\big] + 2y^2\,xF_1
+   = 2(1-y)F_2 + 2y^2 xF_1 .
+\end{align}
+E para o termo de $F_3$:
+\begin{equation}
+  Y_- = 1-(1-y)^2 = 2y - y^2 = 2y\big(1-\tfrac{y}{2}\big).
+\end{equation}
+Pondo o fator 2 comum em evidência, $\tfrac{G_F^2s}{4\pi}\cdot 2 = \tfrac{G_F^2s}{2\pi}$,
+recupera-se exatamente a \cref{eq:pdgform}. As duas formas convivem na
+literatura; a primeira é mais usada em HERA (porque isola $F_L$), a segunda em
+física de neutrinos. É a mesma equação.
+\end{deducao}
+
+\begin{figure}[t]
+  \centering
+  \fig{fig_dependencia_y.pdf}
+  \caption{Os pesos cinemáticos da \cref{eq:mestra}. À direita, $Y_+$ multiplica
+  $F_2$, $Y_-$ multiplica $xF_3$ e $y^2$ multiplica $F_L$: em $y$ pequeno só
+  $F_2$ sobrevive, e é por isso que a seção de choque reduzida medida a baixo $y$
+  é essencialmente $F_2$. À esquerda, a distribuição em $y$ prevista pelo modelo
+  de pártons (\cref{cap:partons}) para quarks e antiquarks.}
+  \label{fig:ydep}
+\end{figure}
+
+% =====================================================================
+\chapter{O modelo de pártons}
+\label{cap:partons}
+
+Até aqui, nenhuma hipótese sobre o interior do núcleon. Agora fazemos uma, e
+tudo desaba num resultado de uma linha.
+
+\section{A hipótese}
+
+\begin{definicao}[Modelo de pártons de Feynman--Bjorken]
+Num referencial em que o núcleon tem momento muito grande (``momento infinito''),
+o núcleon é uma coleção de constituintes puntuais --- os \emph{pártons} ---
+que, durante o tempo brevíssimo da colisão, se comportam como \emph{livres} e
+\emph{colineares} com o núcleon. O párton $i$ carrega uma fração $\xi$ do momento
+do núcleon, distribuída segundo uma densidade $f_i(\xi)$.
+\end{definicao}
+
+\noindent A hipótese tem uma justificativa física: no referencial de momento
+infinito, a dilatação temporal congela as interações internas do núcleon, cujo
+tempo característico é $\sim 1/M$, enquanto a colisão dura $\sim 1/\sqrt{\Qsq}$.%
+\nota{Esta é a única justificativa física do modelo de pártons. Se $\Qsq$ não for grande, ele simplesmente não vale.}
+Se $\Qsq \gg M^2$ --- e é exatamente isso que ``profundamente'' significa --- a
+colisão é rápida demais para que os pártons ``percebam'' uns aos outros.
+
+\section{Espalhamento por um párton livre}
+
+\begin{deducao}[Dedução 4.1 --- $x$ é a fração de momento]
+Seja $p = \xi P$ o momento do párton atingido. Depois de absorver o bóson de
+momento $q$, o párton continua sendo um párton, de massa desprezível:
+\begin{equation}
+  (p + q)^2 = 0 .
+\end{equation}
+Expandindo, com $p^2 = \xi^2M^2 \approx 0$:
+\begin{equation}
+  2\,p\cdot q + q^2 = 0
+  \quad\Longrightarrow\quad
+  2\,\xi\,(P\cdot q) = \Qsq
+  \quad\Longrightarrow\quad
+  \xi = \frac{\Qsq}{2P\cdot q} = \xB .
+\end{equation}
+Ou seja: \textbf{a variável cinemática de Bjorken $\xB$ é a fração de momento do
+párton que foi atingido}. Este é o resultado que dá sentido físico a tudo o que
+veio antes. Note as hipóteses usadas: párton sem massa, colinear, e livre no
+estado final.
+\end{deducao}
+
+\section{A seção de choque e as funções de estrutura}
+
+Para a corrente carregada, o subprocesso elementar é $\nu q \to \ell^- q'$ --- é
+espalhamento de duas partículas puntuais, e a seção de choque é elementar:
+\begin{equation}
+  \frac{\md\hat\sigma}{\md y}(\nu q) = \frac{G_F^2\,\hat s}{\pi},
+  \qquad
+  \frac{\md\hat\sigma}{\md y}(\nu \bar q) = \frac{G_F^2\,\hat s}{\pi}\,(1-y)^2,
+  \label{eq:subproc}
+\end{equation}
+com $\hat s = x s$ a energia de centro de massa do subprocesso.
+
+\begin{deducao}[Dedução 4.2 --- de onde vem o $(1-y)^2$]
+A interação fraca de corrente carregada só acopla partículas de hélicidade
+esquerda e antipartículas de hélicidade direita. No centro de massa do
+subprocesso:
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+\item $\nu q$: o neutrino tem hélicidade $-\tfrac12$, o quark também. O momento
+  angular total ao longo do eixo de colisão é $J_z = 0$. Um estado com $J=0$ é
+  isotrópico --- não há direção preferida --- logo $\md\hat\sigma/\md\cos\theta^*$
+  é constante. Como $y = (1-\cos\theta^*)/2$, isso dá
+  $\md\hat\sigma/\md y = \text{const}$.
+\item $\nu\bar q$: agora o antiquark tem hélicidade $+\tfrac12$ e
+  $J_z = -1$. O espalhamento para trás ($\theta^*=\pi$, isto é $y=1$) exigiria
+  inverter $J_z$, o que é proibido. A amplitude carrega a função de Wigner
+  $d^{1}_{-1,-1}(\theta^*) = \tfrac{1}{2}(1+\cos\theta^*) = 1-y$, e a seção de
+  choque, o quadrado: $(1-y)^2$.
+\end{itemize}
+Essa é a assinatura mais limpa da estrutura $V-A$, e é o painel esquerdo da
+\cref{fig:ydep}. Medir a distribuição em $y$ é medir diretamente o conteúdo de
+antiquarks do núcleon.
+\end{deducao}
+
+Somando incoerentemente sobre os pártons, ponderados por suas densidades:
+\begin{equation}
+  \frac{\md^2\sigma^{\rm CC}_{\nu N}}{\md x\,\md y}
+  = \frac{G_F^2\,x\,s}{\pi}\Big[\,q(x) + \bar q(x)\,(1-y)^2\,\Big].
+  \label{eq:partonxsec}
+\end{equation}
+
+\begin{deducao}[Dedução 4.3 --- lendo as funções de estrutura]
+Compare \cref{eq:partonxsec} com a forma do PDG, \cref{eq:pdgform} (sem o fator
+de propagador, que é 1 em $\Qsq \ll m_W^2$). Escrevendo o \emph{ansatz}
+\begin{equation}
+  F_2 = 2x\big[q+\bar q\big], \qquad
+  xF_3 = 2x\big[q-\bar q\big], \qquad
+  2xF_1 = F_2 ,
+\end{equation}
+o colchete da \cref{eq:pdgform} fica
+\begin{align}
+  &(1-y)\,2x(q+\bar q) + y^2\,x\!\cdot\!\frac{2x(q+\bar q)}{2x}
+    + y\Big(1-\frac{y}{2}\Big)2x(q-\bar q) \nonumber\\
+  &\quad= 2x\Big\{ q\underbrace{\Big[(1-y) + \tfrac{y^2}{2} + y - \tfrac{y^2}{2}\Big]}_{=\,1}
+   + \bar q\underbrace{\Big[(1-y) + \tfrac{y^2}{2} - y + \tfrac{y^2}{2}\Big]}_{=\,(1-y)^2}\Big\}.
+\end{align}
+Multiplicando pelo prefator $G_F^2s/2\pi$ obtém-se exatamente a
+\cref{eq:partonxsec}. O \emph{ansatz} estava certo:
+\begin{equation}
+  \boxed{\;F_2(x) = 2x\sum_i \big[q_i(x) + \bar q_i(x)\big],\qquad
+          xF_3(x) = 2x\sum_i \big[q_i(x) - \bar q_i(x)\big].\;}
+\end{equation}
+Para o caso eletromagnético, o mesmo raciocínio com o acoplamento $e_q$ em vez de
+$G_F$ dá
+\begin{equation}
+  F_2^{\rm em}(x) = \sum_i e_i^2\, x\big[q_i(x) + \bar q_i(x)\big].
+  \label{eq:F2em}
+\end{equation}
+\end{deducao}
+
+\section{Escalonamento de Bjorken}
+
+Olhe para o que acabou de acontecer: as funções de estrutura ficaram funções
+\emph{só de $x$}. Nenhum $\Qsq$ aparece. Essa é a previsão de
+Bjorken~\cite{Bjorken:1968dy,Bjorken:1969ja}, e a razão física é simples: se os
+pártons são puntuais, não há escala de comprimento com que $\Qsq$ possa ser
+comparado, e portanto $\Qsq$ não pode aparecer numa quantidade adimensional.
+Escalonamento é a assinatura de constituintes puntuais, do mesmo modo que o
+espalhamento de Rutherford é a assinatura de um núcleo puntual.%
+\nota{Compare: no espalhamento elástico, o fator de forma cai rápido com $\Qsq$ porque o alvo é extenso. Aqui não cai --- porque o alvo relevante é puntual.}
+
+\section{A relação de Callan--Gross}
+
+\begin{deducao}[Dedução 4.4 --- o spin do párton está em $F_L$]
+Defina a função de estrutura longitudinal $F_L = F_2 - 2xF_1$. Ela é proporcional
+à seção de choque de absorção de um bóson virtual \emph{longitudinalmente}
+polarizado.
+
+Considere um párton sem massa de spin $\tfrac12$ absorvendo um fóton virtual.
+A helicidade de um férmion sem massa é conservada pelo vértice $\gamma^\mu$.
+Um fóton longitudinal tem helicidade $0$; absorvê-lo mudaria a projeção de spin
+do quark de $\pm\tfrac12$ para $\pm\tfrac12$ com $\Delta J_z = 0$ ao longo do
+eixo --- o que só seria compatível se o quark pudesse virar de helicidade, e ele
+não pode. Logo
+\begin{equation}
+  \sigma_L = 0 \quad\Longrightarrow\quad F_L = 0
+  \quad\Longrightarrow\quad \boxed{\;F_2(x) = 2x F_1(x)\;}
+  \label{eq:cg}
+\end{equation}
+que é a relação de Callan--Gross~\cite{Callan:1969uq}.
+
+O contraste é o que torna isso um \emph{teste}: se os pártons tivessem spin $0$,
+não haveria acoplamento a fótons transversais, e o resultado seria o oposto:
+$F_1 = 0$ e $F_L = F_2$. A medida experimental de $R = \sigma_L/\sigma_T \approx 0$
+nos anos 1970 foi a evidência direta de que os pártons são férmions de spin
+$\tfrac12$%
+\nota{Um raro caso em que uma medida \emph{nula} é a descoberta.} --- ou seja, de que são os quarks de Gell-Mann e Zweig, e não algum
+outro objeto.
+\end{deducao}
+
+\begin{cuidado}[$F_L$ não é zero de verdade]
+Em QCD, $F_L$ é pequeno mas \emph{não nulo}: um quark pode emitir um glúon e
+adquirir momento transverso, quebrando o argumento de helicidade. $F_L$ é, na
+verdade, uma medida bastante direta da densidade de glúons, e foi medido em HERA.
+Na \cref{eq:mestra} ele entra com peso $y^2$; é por isso que as análises que
+querem $F_2$ limpo cortam em $y$ baixo --- como fizemos na \cref{fig:violacao}.
+\end{cuidado}
+
+\section{Regras de soma, e uma verificação numérica}
+
+O modelo de pártons vem com vínculos que não dependem de nenhum ajuste. Se
+$u_v \equiv u - \bar u$ e $d_v \equiv d - \bar d$ são as distribuições de
+valência, contar quarks no próton exige
+\begin{equation}
+  \int_0^1 u_v(x)\,\md x = 2, \qquad \int_0^1 d_v(x)\,\md x = 1 .
+  \label{eq:contagem}
+\end{equation}
+E somar o momento de todos os constituintes tem de dar o momento do próton:
+\begin{equation}
+  \int_0^1 x\Big[\sum_i q_i(x) + \bar q_i(x) + g(x)\Big]\md x = 1 .
+  \label{eq:momento}
+\end{equation}
+
+\begin{verifique}[Confira você mesmo]
+As regras de contagem da \cref{eq:contagem} não são aproximações --- são
+identidades que qualquer conjunto de PDFs tem de satisfazer. Usando o conjunto
+HERAPDF2.0 LO~\cite{H1:2015ubc}, extraído em
+\texttt{sandbox/data/hera/herapdf20\_lo\_xf.dat}, uma integração numérica direta
+dá
+\[
+  \int_0^1 u_v\,\md x = 2{,}0008, \qquad
+  \int_0^1 d_v\,\md x = 1{,}0003 \qquad (\Qsq = 10\gev^2),
+\]
+e os mesmos números até a terceira casa em $\Qsq = 10^4\gev^2$ --- as regras de
+soma são preservadas pela evolução em $\Qsq$, como têm de ser. O desvio de
+$4\times10^{-4}$ é do integrador, não da física.
+
+Historicamente, a \cref{eq:momento} deu um susto: a soma sobre os \emph{quarks}
+dá cerca de $0{,}5$, não $1$. Metade do momento do próton é carregada por algo
+que não interage eletromagneticamente nem fracamente. Esse ``algo'' é o glúon.
+\end{verifique}
+
+\begin{figure}[t]
+  \centering
+  \fig{fig_pdfs.pdf}
+  \caption{Distribuições de pártons do próton, HERAPDF2.0 LO~\cite{H1:2015ubc},
+  em duas escalas. Note o que a evolução faz: em $\Qsq$ maior, a valência
+  encolhe e migra para $x$ pequeno, enquanto o mar e o glúon explodem. O glúon
+  está dividido por 10 para caber no gráfico.}
+  \label{fig:pdfs}
+\end{figure}
+
+% =====================================================================
+\chapter{QCD: as distribuições evoluem}
+\label{cap:qcd}
+
+\section{O escalonamento quebra --- e isso é bom}
+
+O escalonamento de Bjorken vale se os pártons forem realmente puntuais e
+realmente livres. Nenhuma das duas coisas é exatamente verdade: os quarks emitem
+glúons. E emitir um glúon quase colinear é quase grátis, o que introduz uma
+dependência --- logarítmica --- em $\Qsq$.
+
+\begin{deducao}[Dedução 5.1 --- de onde vem o logaritmo]
+Considere um quark de momento $p$ emitindo um glúon e ficando com fração $z$.
+A integral sobre o momento transverso $k_T$ do glúon emitido tem a forma
+\begin{equation}
+  \int \frac{\md^2 k_T}{k_T^2}\;\sim\;\pi\int^{\Qsq}_{\mu^2}\frac{\md k_T^2}{k_T^2}
+  \;=\;\pi\,\ln\frac{\Qsq}{\mu^2}.
+\end{equation}
+O integrando $1/k_T^2$ vem do propagador do quark quase real depois da emissão. O
+limite superior é o próprio $\Qsq$: a sonda não resolve emissões mais duras que
+ela mesma. O limite inferior $\mu^2$ é onde a perturbação deixa de valer.
+
+O resultado é que a densidade efetiva de quarks vista por uma sonda de
+virtualidade $\Qsq$ \emph{depende de $\Qsq$}, e depende logaritmicamente. Não é
+uma quebra violenta do escalonamento; é uma deriva lenta. Foi exatamente uma
+deriva lenta que se observou.%
+\nota{Que a quebra seja logarítmica, e não uma potência, é o que torna QCD testável com os dados de HERA em quatro décadas de $\Qsq$.}
+\end{deducao}
+
+\section{As equações DGLAP}
+
+Organizar esses logaritmos em todas as ordens leva às equações de
+Dokshitzer--Gribov--Lipatov--Altarelli--Parisi~\cite{Gribov:1972ri,Altarelli:1977zs,Dokshitzer:1977sg}:
+\begin{equation}
+  \frac{\partial}{\partial \ln \Qsq}
+  \begin{pmatrix} q_i(x,\Qsq)\\[2pt] g(x,\Qsq)\end{pmatrix}
+  = \frac{\alpha_s(\Qsq)}{2\pi}\int_x^1\frac{\md z}{z}
+  \begin{pmatrix} P_{qq}(z) & P_{qg}(z)\\ P_{gq}(z) & P_{gg}(z)\end{pmatrix}
+  \begin{pmatrix} q_i(x/z,\Qsq)\\[2pt] g(x/z,\Qsq)\end{pmatrix}.
+  \label{eq:dglap}
+\end{equation}
+
+Leia a equação em voz alta e ela vira física: \emph{a taxa de variação da
+densidade de pártons com $\ln\Qsq$ é dada pela probabilidade de que um párton de
+fração maior $x/z$ tenha emitido algo e virado um párton de fração $x$}. As
+funções de \emph{splitting} $P_{ab}(z)$ são as probabilidades desses processos
+elementares; a mais simples é
+\begin{equation}
+  P_{qq}(z) = C_F\left[\frac{1+z^2}{(1-z)_+} + \frac{3}{2}\delta(1-z)\right],
+  \qquad C_F = \frac{4}{3},
+\end{equation}
+onde a prescrição-$+$ e o termo com $\delta$ implementam o cancelamento entre
+emissões reais e correções virtuais.
+
+\begin{cuidado}[O que DGLAP faz e o que não faz]
+DGLAP \emph{não} prevê as PDFs. Ele prevê como elas mudam com $\Qsq$. As PDFs a
+uma escala inicial têm de ser extraídas de dados --- é isso que um ``ajuste
+global'' faz, e é isso que o HERAPDF2.0 é. Essa distinção importa para o
+HADROS3: quando extrapolamos para $x$ pequeníssimo (\cref{cap:cc}), estamos
+extrapolando a \emph{condição inicial}, não a evolução. É a parte que a teoria
+não controla.
+\end{cuidado}
+
+\section{A violação de escala, nos dados}
+
+\begin{figure}[p]
+  \centering
+  \fig{fig_violacao_escala.pdf}
+  \caption{A previsão de DGLAP contra a natureza. Cada série é um $x$ fixo,
+  deslocada verticalmente por $2^{i}$ para não se sobrepor. Dados combinados de
+  H1 e ZEUS, corrente neutra $e^+p$, $\sqrt{s}=318\gev$, restritos a $y<0{,}6$
+  para que $\sigma_r \simeq F_2$~\cite{H1:2015ubc}. Em $x$ pequeno a seção de
+  choque \emph{cresce} com $\Qsq$; em torno de $x\approx0{,}13$ ela é plana
+  (escalonamento exato!); em $x$ grande ela \emph{decresce}. É exatamente o
+  padrão que a \cref{eq:dglap} prevê: aumentar $\Qsq$ resolve emissões, o que
+  desloca pártons de $x$ grande para $x$ pequeno.}
+  \label{fig:violacao}
+\end{figure}
+
+A \cref{fig:violacao} é, na nossa opinião, a figura mais bonita da física de
+partículas. Ela mostra três comportamentos qualitativamente distintos num único
+gráfico --- crescente, plano, decrescente --- e todos os três saem da mesma
+equação, sem ajuste livre no padrão. O ponto de cruzamento, onde o escalonamento
+é exato, não é escolhido: é onde o fluxo de pártons para dentro e para fora do
+intervalo se cancela.
+
+\section{Liberdade assintótica}
+
+O que torna tudo isso calculável é a liberdade
+assintótica~\cite{Gross:1973id,Politzer:1973fx}: a constante de acoplamento forte
+decresce com a escala,
+\begin{equation}
+  \alpha_s(\Qsq) \simeq \frac{1}{b_0 \ln(\Qsq/\Lambda_{\rm QCD}^2)},
+  \qquad b_0 = \frac{33-2n_f}{12\pi}.
+\end{equation}
+É por isso que a hipótese ``pártons livres'' do \cref{cap:partons} funciona: em
+$\Qsq$ grande, os pártons realmente são quase livres.%
+\nota{$\Lambda_{\rm QCD}\approx 0{,}2$\,GeV é a escala em que $\alpha_s$ explode --- e, não por acaso, $\hbar c/\Lambda_{\rm QCD}\approx 1$\,fm.} E é por isso que a
+correção é logarítmica e não catastrófica.
+
+\section{Teste: o modelo funciona?}
+
+\begin{figure}[t]
+  \centering
+  \fig{fig_f2_modelo_partons.pdf}
+  \caption{A \cref{eq:F2em} avaliada com as PDFs HERAPDF2.0 LO, contra a seção de
+  choque reduzida medida em $\Qsq\simeq100\gev^2$~\cite{H1:2015ubc}. A curva
+  tracejada mostra o mesmo cálculo omitindo charm e bottom: em $x$ pequeno, os
+  quarks pesados respondem por quase $30\%$ de $F_2$. Não é um ajuste --- os
+  pontos e a curva vêm da mesma publicação, mas a curva é a fórmula do modelo de
+  pártons com as PDFs postas dentro.}
+  \label{fig:f2partons}
+\end{figure}
+
+\begin{cuidado}[Honestidade sobre a \cref{fig:f2partons}]
+A comparação acima não é rigorosa, e vale dizer por quê. Primeiro, o que está
+plotado como dado é $\sigma_r$, não $F_2$: eles diferem pelos termos de $F_L$ e
+$xF_3$, pequenos mas não nulos nessa cinemática. Segundo, $F_2$ foi calculado a
+\emph{leading order}, enquanto as PDFs foram ajustadas com uma definição
+consistente de esquema. A concordância de poucos por cento que se vê é boa
+demais para ser levada a sério em três casas, e ruim demais para ser publicada.
+Ela serve para o que serve aqui: mostrar que a estrutura da \cref{eq:F2em} é a
+certa.
+\end{cuidado}
+
+\section{$x$ pequeno: onde tudo fica difícil}
+
+Em $x \to 0$ a densidade de glúons cresce muito rápido. DGLAP soma logaritmos de
+$\Qsq$; em $x$ pequeno também há logaritmos de $1/x$, e somá-los leva à equação
+BFKL~\cite{Balitsky:1978ic}. Mas nenhuma equação linear pode valer para sempre:
+se a densidade de glúons cresce sem limite, em algum momento eles começam a se
+recombinar, e o crescimento \emph{satura}. Essa é a física do Condensado de Vidro
+de Cor, descrita por equações não lineares como
+Balitsky--Kovchegov~\cite{Balitsky:1995ub,Kovchegov:1999yj}.
+
+Os dois modelos que o HADROS3 tabela vivem aqui:
+
+\begin{description}[style=nextline,leftmargin=0pt,font=\sffamily\bfseries\color{acento}]
+\item[GBW (Golec-Biernat--Wüsthoff)] Um modelo de dipolo de cor com saturação
+  explícita~\cite{Golec-Biernat:1998zce,Golec-Biernat:1999qor}. O fóton virtual
+  flutua num par $q\bar q$ (um ``dipolo'') de tamanho transverso $r$, que espalha
+  no próton com uma seção de choque que satura quando $r$ excede
+  $1/Q_s(x)$, a escala de saturação.
+\item[IIM (Iancu--Itakura--Munier)] Um refinamento que interpola corretamente
+  entre o regime de cor transparente e o saturado, ancorado nas soluções
+  assintóticas de BK~\cite{Iancu:2003ge}.
+\end{description}
+
+% =====================================================================
+\chapter{Corrente carregada e neutrinos de energia ultra-alta}
+\label{cap:cc}
+
+\section{A massa do $W$ muda tudo}
+
+No caso eletromagnético o propagador do fóton dá $1/(\Qsq)^{2}$ na seção de choque, e
+a integral $\int \md \Qsq/(\Qsq)^{2}$ é dominada pelo menor $\Qsq$ possível --- por
+isso o espalhamento é predominantemente ``mole''. Para a corrente carregada o
+propagador é massivo:
+\begin{equation}
+  \frac{1}{(\Qsq)^{2}} \;\longrightarrow\;
+  \frac{1}{(\Qsq + m_W^2)^2}
+  \;=\;\frac{1}{m_W^4}\left(\frac{m_W^2}{m_W^2+\Qsq}\right)^{\!2}.
+\end{equation}
+
+\begin{figure}[t]
+  \centering
+  \fig{fig_propagador.pdf}
+  \caption{O fator de propagador. Para $\Qsq \ll m_W^2$ ele é constante --- a
+  interação é efetivamente pontual, e recupera-se a teoria de Fermi. Para
+  $\Qsq \gg m_W^2$ ele cai como $1/(\Qsq)^{2}$ e sufoca a seção de choque. A
+  transição em $\Qsq = m_W^2$ é o que impede $\sigma_{\nu N}$ de crescer
+  linearmente para sempre.}
+  \label{fig:propagador}
+\end{figure}
+
+A consequência é dupla e vale enunciar com clareza:
+
+\begin{enumerate}[leftmargin=*]
+\item \textbf{Em baixa energia} ($s \ll m_W^2$), o fator é $\approx1$, a interação
+  é pontual, e $\sigma \propto s \propto E_\nu$: a seção de choque cresce
+  \emph{linearmente} com a energia. É o regime medido em aceleradores,
+  $\sigma/E = 0{,}677\times10^{-38}\cm^2/\gev$ para $\nu$ em alvo
+  isoescalar~\cite{Formaggio:2012cpf}.
+\item \textbf{Em alta energia} ($s \gg m_W^2$), o propagador impõe
+  $\Qsq \lesssim m_W^2$ efetivamente. Junto com $\Qsq = xys$, isso força
+  \begin{equation}
+    x \;\lesssim\; \frac{m_W^2}{y\,s} \;\sim\; \frac{m_W^2}{2M E_\nu}.
+    \label{eq:xtipico}
+  \end{equation}
+  A seção de choque passa a ser controlada pelas PDFs em $x$ cada vez menor, e o
+  crescimento desacelera para $\sigma \propto E^{0{,}36}$.%
+\nota{O expoente $0{,}36$ não é fundamental: ele reflete o crescimento das PDFs em $x$ pequeno, e muda se o modelo de saturação mudar.}
+\end{enumerate}
+
+\section{Estrutura de sabor}
+
+A corrente carregada não é cega ao sabor. Um $\nu_\ell$ transforma um quark do
+tipo \emph{down} num do tipo \emph{up} (ou um antiquark \emph{up} num
+\emph{down}), com peso dado pelos elementos da matriz CKM:
+\begin{equation}
+  F_2^{\rm CC}(x,\Qsq) = 2x\sum_{i,j}\big|V_{q_iq_j}\big|^2\,f_{q_i}(x,\Qsq),
+  \qquad q_i\in\{d,s,b\}\ \text{e antiquarks do tipo \emph{up}} .
+\end{equation}
+Duas consequências práticas: (i) $\nu$ e $\bar\nu$ têm seções de choque
+diferentes, com razão $\approx\!2$ em baixa energia, convergindo para 1 em UHE
+(porque o mar domina e $q\approx\bar q$); (ii) o canal $s\to c$ é uma fonte
+importante de charm, o que tem consequências para a fenomenologia de neutrinos
+atmosféricos.
+
+\section{Do keV ao ZeV}
+
+\begin{figure}[t]
+  \centering
+  \fig{fig_sigma_energia.pdf}
+  \caption{A seção de choque $\nu N$ de corrente carregada em treze ordens de
+  grandeza de energia. O segmento grosso é o regime linear \emph{medido} em
+  aceleradores~\cite{Formaggio:2012cpf}; a linha tracejada é a parametrização de
+  Gandhi \emph{et al.}~\cite{Gandhi:1998ri}, na faixa em que os autores a
+  declararam válida; as duas curvas cheias são as tabelas GBW e IIM embarcadas no
+  HADROS3.}
+  \label{fig:sigmaE}
+\end{figure}
+
+\begin{cuidado}[Uma discrepância real, ainda não explicada]
+Compare, na \cref{fig:sigmaE}, as tabelas do HADROS3 com a referência de
+Gandhi \emph{et al.} A tabela GBW fica acima dela por um fator que vai de $\sim7$
+em $10^4\gev$ a $\sim90$ em $10^6\gev$; a IIM, por fatores entre $\sim1$ e
+$\sim13$. Cálculos modernos com PDFs
+ajustadas~\cite{Cooper-Sarkar:2011jtt,Connolly:2011vc,Bertone:2018dse} concordam
+entre si dentro de dezenas de por cento nessa faixa, e concordam com a medida do
+IceCube~\cite{IceCube:2017roe}. Fatores de dezenas estão fora disso.
+
+A conversão de unidades nas tabelas está correta (conferimos: a coluna em
+$\gev^{-2}$ vezes $3{,}894\times10^{-28}\cm^2\gev^{2}$ reproduz a coluna em
+$\cm^2$). Logo a diferença está no conteúdo, não na unidade. As hipóteses
+plausíveis --- normalização por núcleo em vez de por núcleon, soma de CC${}+{}$NC,
+ou um problema na geração das tabelas --- ainda não foram testadas. Como
+$\tau \propto \sigma$, um fator 90 aqui é um fator 90 na profundidade óptica.
+Esta é uma pendência aberta do HADROS3, não um resultado.
+\end{cuidado}
+
+\section{Por que isto é uma extrapolação}
+
+A \cref{eq:xtipico} e a \cref{fig:plano} contam juntas a história incômoda da
+área. Um neutrino de $10^{9}\gev$ sonda $x \sim 3\times10^{-6}$; o menor $x$ jamais
+medido em DIS foi $\sim5\times10^{-6}$, e apenas em $\Qsq$ muito baixo, longe de
+$m_W^2$. Ou seja: \textbf{a seção de choque de neutrinos UHE não é medida, é
+extrapolada}, e o que se extrapola é justamente a região em que a teoria linear
+deixa de valer.
+
+É por isso que existem modelos de saturação, e é por isso que faz diferença qual
+deles se usa. As previsões modernas diferem entre si por dezenas de por cento até
+$10^{12}\gev$~\cite{Cooper-Sarkar:2011jtt,Connolly:2011vc,Bertone:2018dse}; abaixo
+disso, o IceCube já mediu a seção de choque em torno de
+$10^{4}$--$10^{6}\gev$ usando a absorção pela própria
+Terra~\cite{IceCube:2017roe} --- exatamente o cálculo de profundidade óptica do
+próximo parágrafo, usado ao contrário. O Electron-Ion Collider deve reduzir parte
+dessa incerteza medindo $x$ pequeno com precisão~\cite{Accardi:2012qut,AbdulKhalek:2021gbh}.
+
+\section{Fechando o círculo: a profundidade óptica}
+
+Tudo o que fizemos até aqui produz um único número por energia,
+$\sigma_{\nu N}(E)$. É esse número que entra no HADROS3, através da profundidade
+óptica:
+\begin{equation}
+  \tau(E) = \int n_b(\ell)\;\sigma_{\nu N}(E)\;\md\ell
+          = \frac{\sigma_{\nu N}(E)}{m_b}\int \rho\,\md\ell,
+  \qquad P_{\rm int} = 1 - e^{-\tau}.
+  \label{eq:tau}
+\end{equation}
+
+\begin{figure}[t]
+  \centering
+  \fig{fig_profundidade_optica.pdf}
+  \caption{A \cref{eq:tau} para três colunas de matéria, usando a tabela GBW.
+  A Terra fica opaca em torno de algumas dezenas de TeV --- e é exatamente essa
+  opacidade que o IceCube usou para medir $\sigma_{\nu N}$~\cite{IceCube:2017roe}.
+  O toro do HADROS3, com a configuração padrão, é opaco por nove ordens de
+  grandeza no plano equatorial.}
+  \label{fig:tau}
+\end{figure}
+
+A separação da \cref{eq:tau} é limpa e vale memorizar: \textbf{toda a física de
+partículas está em $\sigma$; toda a astrofísica e geometria estão na coluna
+$X=\int\rho\,\md\ell$}. Elas só se encontram no produto. O notebook
+\texttt{01\_profundidade\_optica\_dis.ipynb} do sandbox constrói essa integral
+com todo o cuidado --- discretização, convergência, e o que a Relatividade Geral
+acrescenta quando o meio está girando perto de um buraco negro.
+
+% =====================================================================
+\chapter{Para onde ir depois}
+
+\section{Um roteiro de leitura}
+
+\begin{description}[style=nextline,leftmargin=0pt,font=\sffamily\bfseries\color{acento}]
+\item[Para consolidar o básico] Halzen \& Martin~\cite{Halzen:1984mc}, capítulos
+  8--9, é o tratamento clássico e ainda o mais legível. Thomson~\cite{Thomson:2013zua}
+  é mais moderno e mais gentil. Close~\cite{Close:1979bt} é antigo mas
+  insuperável na intuição do modelo de pártons.
+\item[Para a QCD de verdade] Ellis, Stirling \& Webber~\cite{Ellis:1996mzs} é o
+  padrão da área. Para a estrutura formal (fatoração, esquemas, o que
+  \emph{significa} uma PDF), Collins~\cite{Collins:2011zzd}.
+\item[Para DIS especificamente] Devenish \& Cooper-Sarkar~\cite{Devenish:2004pb}
+  é o livro dedicado ao assunto, escrito por gente do HERA;
+  Roberts~\cite{Roberts:1990ww} cobre a teoria com mais detalhe técnico.
+\item[Para teoria de campos por baixo] Peskin \& Schroeder~\cite{Peskin:1995ev},
+  capítulo 17, faz o DIS dentro do formalismo completo; Schwartz~\cite{Schwartz:2014sze}
+  é a alternativa mais moderna.
+\item[Para os dados] O \emph{Review of Particle Physics}~\cite{ParticleDataGroup:2024cfk}
+  tem uma revisão de funções de estrutura curta e confiável, atualizada a cada
+  dois anos. E leia o artigo da combinação de HERA~\cite{H1:2015ubc}: são os
+  dados que usamos aqui.
+\item[Para neutrinos UHE] Gandhi \emph{et al.}~\cite{Gandhi:1998ri} é o ponto de
+  partida histórico; Cooper-Sarkar \emph{et al.}~\cite{Cooper-Sarkar:2011jtt},
+  Connolly \emph{et al.}~\cite{Connolly:2011vc} e Bertone
+  \emph{et al.}~\cite{Bertone:2018dse} são as referências modernas.
+  Formaggio \& Zeller~\cite{Formaggio:2012cpf} compila tudo o que foi medido.
+\end{description}
+
+\section{Exercícios}
+
+\begin{enumerate}[leftmargin=*,itemsep=5pt]
+\item Mostre que $q\cdot k = \Qsq/2$ e $q\cdot k' = -\Qsq/2$ no limite de massas
+  leptônicas nulas, completando a verificação de $q_\mu L^{\mu\nu}=0$ da
+  \cref{eq:Lem}.
+
+\item Refaça a \cref{eq:W2x} \emph{sem} desprezar a massa do núcleon nem a do
+  lépton. Em que região do plano $(x,\Qsq)$ as correções de massa passam de
+  $1\%$? Compare com a cobertura dos dados na \cref{fig:plano}.
+
+\item Complete a Dedução 3.3: escreva explicitamente as condições
+  $q_\mu W^{\mu\nu}=0$ para a \cref{eq:Wgeral} e obtenha $W_4$, $W_5$, $W_6$ em
+  termos de $W_1$ e $W_2$.
+
+\item Deduza a distribuição em $y$ do processo $\bar\nu q$ e do $\bar\nu\bar q$,
+  e explique por que $\sigma_{\bar\nu N}/\sigma_{\nu N} \to 1$ quando o mar
+  domina.
+
+\item A partir das PDFs em \texttt{sandbox/data/hera/herapdf20\_lo\_xf.dat},
+  calcule a fração do momento do próton carregada pelos quarks e a carregada
+  pelo glúon, em $\Qsq = 10\gev^2$ e $10^4\gev^2$. Confirme que a soma dá 1 e
+  que a partilha muda com a escala.
+
+\item Estime, com a \cref{eq:xtipico}, o $x$ típico sondado por um neutrino de
+  $6{,}3\,$PeV --- a energia da ressonância de Glashow. Você acha que uma
+  extrapolação de PDF até lá é confiável? Justifique com a \cref{fig:plano}.
+
+\item \textbf{(Aberto.)} Investigue a discrepância documentada na
+  \cref{fig:sigmaE}: as tabelas do HADROS3 são por núcleon ou por núcleo? Somam
+  CC${}+{}$NC? Comece por \texttt{cpp/apps/hadros3\_dis\_sampler.cpp} e pela
+  geração das tabelas em \texttt{data/sigma/}. A resposta não está nesta
+  apostila.
+\end{enumerate}
+
+% =====================================================================
+\cleardoublepage
+\phantomsection
+\addcontentsline{toc}{chapter}{Referências}
+\printbibliography[title={Referências}]
+
+\end{document}

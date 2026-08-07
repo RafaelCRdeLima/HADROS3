@@ -1,0 +1,13 @@
+# auxiliares do LaTeX — o dis.pdf em si é versionado de propósito,
+# para que os alunos não precisem de uma instalação de TeX para ler.
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.run.xml
+*.toc
+*.synctex.gz

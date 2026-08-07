@@ -3,3 +3,8 @@
 numpy>=1.24
 matplotlib>=3.7
 jupyterlab>=4.0
+
+# Para RECOMPILAR as apostilas (não é preciso apenas para lê-las: o PDF está
+# versionado). Fora do pip: uma distribuição TeX Live com latexmk e biber, mais
+# os pacotes newpx, tcolorbox, titlesec, biblatex e pgf.
+#   Debian/Ubuntu:  sudo apt install texlive-full latexmk biber

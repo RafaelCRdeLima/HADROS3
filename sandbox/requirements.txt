@@ -1,0 +1,5 @@
+# HADROS Sandbox — dependências mínimas de propósito.
+# Se um notebook precisar de mais que isto, provavelmente ele não é "simples".
+numpy>=1.24
+matplotlib>=3.7
+jupyterlab>=4.0
